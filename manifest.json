@@ -1,0 +1,9 @@
+{
+	"id": "graph-insight",
+	"name": "Graph Insight",
+	"version": "0.1.0",
+	"minAppVersion": "1.5.0",
+	"description": "Advanced graph view: usage-aware node encoding, PageRank, clusters, semantic edges, timeline.",
+	"author": "nickeo23",
+	"isDesktopOnly": false
+}

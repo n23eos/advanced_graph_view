@@ -1,0 +1,37 @@
+{
+	"name": "graph-insight",
+	"version": "0.1.0",
+	"description": "Advanced graph view plugin for Obsidian",
+	"main": "main.js",
+	"scripts": {
+		"dev": "node esbuild.config.mjs",
+		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"lint": "eslint src/"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "MIT",
+	"devDependencies": {
+		"@types/d3-force": "^3.0.10",
+		"@typescript-eslint/eslint-plugin": "^8.64.0",
+		"@typescript-eslint/parser": "^8.64.0",
+		"builtin-modules": "^5.3.0",
+		"esbuild": "^0.28.1",
+		"eslint": "^10.7.0",
+		"obsidian": "^1.13.1",
+		"tslib": "^2.8.1",
+		"typescript": "^6.0.3",
+		"vitest": "^4.1.10"
+	},
+	"dependencies": {
+		"@huggingface/transformers": "^4.2.0",
+		"d3-force": "^3.0.0",
+		"d3-force-3d": "^3.0.6",
+		"graphology": "^0.26.0",
+		"graphology-communities-louvain": "^2.0.2",
+		"graphology-metrics": "^2.4.0",
+		"pixi.js": "^8.19.0"
+	}
+}

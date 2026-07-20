@@ -1,0 +1,9 @@
+node_modules/
+main.js
+*.map
+.DS_Store
+
+# Local working plan and built bench bundles
+.plan.md
+bench/bench.js
+bench/diag.js

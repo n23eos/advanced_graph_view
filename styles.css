@@ -1,0 +1,573 @@
+/* Graph Insight styles */
+.graph-insight-container {
+	width: 100%;
+	height: 100%;
+	overflow: hidden;
+	position: relative;
+}
+
+.graph-insight-tooltip {
+	position: absolute;
+	z-index: 10;
+	pointer-events: none;
+	background: var(--background-secondary);
+	color: var(--text-normal);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	box-shadow: var(--shadow-s);
+	padding: 4px 8px;
+	font-size: var(--font-ui-small);
+	max-width: 260px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.graph-insight-panel {
+	position: absolute;
+	top: 12px;
+	left: 12px;
+	z-index: 10;
+	min-width: 220px;
+	background: color-mix(in srgb, var(--background-secondary) 85%, transparent);
+	backdrop-filter: blur(8px);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	box-shadow: var(--shadow-s);
+	font-size: var(--font-ui-small);
+	color: var(--text-normal);
+}
+
+.graph-insight-panel-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 6px 10px;
+	cursor: pointer;
+	font-weight: 600;
+	user-select: none;
+}
+
+.graph-insight-panel-toggle {
+	color: var(--text-muted);
+}
+
+.graph-insight-panel-body {
+	padding: 4px 10px 10px;
+}
+
+.graph-insight-panel-body.is-hidden {
+	display: none;
+}
+
+.graph-insight-panel-section-title {
+	margin: 8px 0 4px;
+	font-size: var(--font-ui-smaller);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--text-muted);
+}
+
+.graph-insight-panel-row {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 8px;
+	margin: 4px 0;
+}
+
+.graph-insight-panel-row select {
+	max-width: 140px;
+}
+
+.graph-insight-legend {
+	position: absolute;
+	right: 12px;
+	bottom: 12px;
+	z-index: 10;
+	max-width: 220px;
+	padding: 8px 10px;
+	background: color-mix(in srgb, var(--background-secondary) 85%, transparent);
+	backdrop-filter: blur(8px);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	box-shadow: var(--shadow-s);
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+.graph-insight-legend-title {
+	font-weight: 600;
+	color: var(--text-normal);
+	margin-bottom: 4px;
+}
+
+.graph-insight-legend-bar {
+	height: 8px;
+	border-radius: 4px;
+	margin: 4px 0 2px;
+}
+
+.graph-insight-legend-range {
+	display: flex;
+	justify-content: space-between;
+}
+
+.graph-insight-legend-category {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 2px 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.graph-insight-legend-swatch {
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	flex-shrink: 0;
+}
+
+.graph-insight-legend-more {
+	margin-top: 2px;
+	font-style: italic;
+}
+
+.graph-insight-tooltip-title {
+	font-weight: 600;
+}
+
+.graph-insight-tooltip-meta {
+	margin-top: 2px;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+
+.graph-insight-panel-checkbox {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	cursor: pointer;
+}
+
+.graph-insight-panel-count {
+	color: var(--text-muted);
+	font-variant-numeric: tabular-nums;
+}
+
+.graph-insight-panel-hint {
+	color: var(--text-muted);
+	font-style: italic;
+	font-size: var(--font-ui-smaller);
+}
+
+.graph-insight-cluster-list {
+	max-height: 180px;
+	overflow-y: auto;
+	margin-top: 4px;
+}
+
+.graph-insight-cluster-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 2px 0;
+	cursor: pointer;
+	border-radius: var(--radius-s);
+}
+
+.graph-insight-cluster-row:hover {
+	background: var(--background-modifier-hover);
+}
+
+.graph-insight-cluster-row.is-cluster-hidden {
+	opacity: 0.45;
+}
+
+.graph-insight-cluster-eye {
+	cursor: pointer;
+	color: var(--text-muted);
+}
+
+.graph-insight-cluster-name {
+	flex: 1;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.graph-insight-searchbar {
+	position: absolute;
+	top: 12px;
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 11;
+	display: flex;
+	gap: 6px;
+	align-items: center;
+	padding: 6px 8px;
+	background: color-mix(in srgb, var(--background-secondary) 85%, transparent);
+	backdrop-filter: blur(8px);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	box-shadow: var(--shadow-s);
+}
+
+.graph-insight-searchbar input[type="text"] {
+	width: 320px;
+	font-size: var(--font-ui-small);
+}
+
+.graph-insight-searchbar-btn {
+	padding: 2px 8px;
+	cursor: pointer;
+}
+
+.graph-insight-focusbar {
+	position: absolute;
+	top: 56px;
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 11;
+	display: flex;
+	gap: 10px;
+	align-items: center;
+	padding: 4px 12px;
+	background: color-mix(in srgb, var(--background-secondary) 85%, transparent);
+	backdrop-filter: blur(8px);
+	border: 1px solid var(--interactive-accent);
+	border-radius: var(--radius-m);
+	font-size: var(--font-ui-small);
+	color: var(--text-normal);
+}
+
+.graph-insight-timeline {
+	position: absolute;
+	bottom: 12px;
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 11;
+	display: flex;
+	gap: 10px;
+	align-items: center;
+	padding: 6px 12px;
+	background: color-mix(in srgb, var(--background-secondary) 85%, transparent);
+	backdrop-filter: blur(8px);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	box-shadow: var(--shadow-s);
+}
+
+.graph-insight-timeline-slider {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	width: 260px;
+}
+
+.graph-insight-timeline-spark {
+	width: 260px;
+	height: 22px;
+	display: block;
+}
+
+.graph-insight-timeline-slider input[type="range"] {
+	width: 100%;
+	margin: 0;
+}
+
+.graph-insight-timeline-label {
+	min-width: 58px;
+	font-variant-numeric: tabular-nums;
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+}
+
+.graph-insight-insights {
+	padding: 8px 12px;
+	overflow-y: auto;
+}
+
+.graph-insight-insights h5 {
+	margin: 14px 0 6px;
+}
+
+.graph-insight-insights-totals {
+	display: flex;
+	gap: 14px;
+	flex-wrap: wrap;
+	margin-bottom: 8px;
+}
+
+.graph-insight-insights-total {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+.graph-insight-insights-total-value {
+	font-size: var(--font-ui-large);
+	font-weight: 700;
+	color: var(--text-normal);
+}
+
+.graph-insight-insights-spark {
+	width: 100%;
+	height: 32px;
+}
+
+.graph-insight-insights-row {
+	display: flex;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 2px 0;
+	font-size: var(--font-ui-small);
+}
+
+.graph-insight-insights-label {
+	cursor: pointer;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.graph-insight-insights-label:hover {
+	color: var(--interactive-accent);
+}
+
+.graph-insight-searchbar-input {
+	position: relative;
+}
+
+.graph-insight-suggest {
+	position: absolute;
+	top: 100%;
+	left: 0;
+	right: 0;
+	margin-top: 4px;
+	z-index: 12;
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	box-shadow: var(--shadow-s);
+	max-height: 260px;
+	overflow-y: auto;
+}
+
+.graph-insight-suggest-row {
+	padding: 4px 10px;
+	cursor: pointer;
+	font-size: var(--font-ui-small);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.graph-insight-suggest-row:hover,
+.graph-insight-suggest-row.is-active {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+/* Panel polish: tighter rows, full-width thin sliders, section separators */
+.graph-insight-panel {
+	max-height: calc(100% - 24px);
+	overflow-y: auto;
+	min-width: 240px;
+}
+
+.graph-insight-panel-section {
+	padding-bottom: 8px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.graph-insight-panel-section:last-child {
+	border-bottom: none;
+	padding-bottom: 0;
+}
+
+.graph-insight-panel-body input[type="range"] {
+	width: 100%;
+	height: 14px;
+	margin: 0 0 6px;
+}
+
+.graph-insight-panel-row {
+	margin: 6px 0 2px;
+	font-size: var(--font-ui-smaller);
+}
+
+.graph-insight-panel-row select {
+	max-width: 150px;
+	font-size: var(--font-ui-smaller);
+	height: auto;
+	padding: 2px 18px 2px 6px;
+}
+
+.graph-insight-panel-body button {
+	width: 100%;
+	margin-top: 6px;
+	font-size: var(--font-ui-smaller);
+	padding: 4px 8px;
+	cursor: pointer;
+}
+
+.graph-insight-panel-row .graph-insight-searchbar-btn {
+	width: auto;
+	margin-top: 0;
+}
+
+.graph-insight-camera {
+	position: absolute;
+	right: 12px;
+	bottom: 12px;
+	z-index: 11;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 6px 10px;
+	background: color-mix(in srgb, var(--background-secondary) 85%, transparent);
+	backdrop-filter: blur(8px);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	box-shadow: var(--shadow-s);
+	font-size: var(--font-ui-smaller);
+}
+
+.graph-insight-camera-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.graph-insight-camera-row.is-hidden {
+	display: none;
+}
+
+.graph-insight-camera-label {
+	color: var(--text-muted);
+}
+
+.graph-insight-camera input[type="range"] {
+	width: 110px;
+	margin: 0;
+}
+
+/* Legend moves up so the camera widget owns the corner */
+.graph-insight-legend {
+	bottom: 84px;
+}
+
+/* Eye toggle hides every floating UI element except the camera widget */
+.graph-insight-ui-hidden .graph-insight-panel,
+.graph-insight-ui-hidden .graph-insight-searchbar,
+.graph-insight-ui-hidden .graph-insight-legend,
+.graph-insight-ui-hidden .graph-insight-timeline,
+.graph-insight-ui-hidden .graph-insight-focusbar,
+.graph-insight-ui-hidden .graph-insight-camera > div:not(:first-child),
+.graph-insight-ui-hidden .graph-insight-camera .graph-insight-panel-checkbox {
+	display: none;
+}
+
+.graph-insight-camera-eye {
+	width: auto !important;
+	margin: 0 !important;
+	padding: 2px 6px;
+	line-height: 1;
+	background: transparent;
+	border: none;
+	box-shadow: none;
+	cursor: pointer;
+	font-size: 14px;
+}
+
+.graph-insight-camera-eye.is-ui-hidden {
+	opacity: 0.5;
+}
+
+.graph-insight-camera-fit {
+	margin-top: 2px;
+}
+
+.graph-insight-panel-section-title {
+	cursor: pointer;
+	user-select: none;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.graph-insight-panel-chevron {
+	color: var(--text-faint);
+	font-size: 9px;
+}
+
+.graph-insight-panel-section-body.is-hidden {
+	display: none;
+}
+
+.graph-insight-container canvas {
+	display: block;
+	width: 100%;
+	height: 100%;
+}
+
+.graph-insight-clusters {
+	position: absolute;
+	top: 64px;
+	right: 12px;
+	z-index: 10;
+	min-width: 180px;
+	max-width: 240px;
+	max-height: 50%;
+	display: flex;
+	flex-direction: column;
+	background: color-mix(in srgb, var(--background-secondary) 85%, transparent);
+	backdrop-filter: blur(8px);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	box-shadow: var(--shadow-s);
+	font-size: var(--font-ui-small);
+}
+
+.graph-insight-clusters .graph-insight-cluster-list {
+	overflow-y: auto;
+	padding: 0 10px 8px;
+	max-height: none;
+}
+
+.graph-insight-ui-hidden .graph-insight-clusters {
+	display: none;
+}
+
+/* The actual fix: collapsed cluster list had no matching CSS rule */
+.graph-insight-clusters .graph-insight-cluster-list.is-hidden {
+	display: none;
+}
+
+.graph-insight-colorpanel-body {
+	padding: 0 10px 10px;
+}
+
+.graph-insight-colorpanel-body.is-hidden {
+	display: none;
+}
+
+.graph-insight-colorpanel-pickers {
+	display: flex;
+	gap: 6px;
+}
+
+.graph-insight-colorpanel-pickers input[type="color"] {
+	width: 34px;
+	height: 22px;
+	padding: 0;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	background: transparent;
+	cursor: pointer;
+}
