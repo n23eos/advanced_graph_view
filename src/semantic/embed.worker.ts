@@ -97,8 +97,7 @@ function computeSimilar(row: number, k: number): void {
 	});
 }
 
-workerScope.onmessage = async (event) => {
-	const message = event.data;
+async function handleMessage(message: EmbedRequest): Promise<void> {
 	try {
 		switch (message.type) {
 			case "init":
@@ -122,4 +121,8 @@ workerScope.onmessage = async (event) => {
 	} catch (error) {
 		workerScope.postMessage({ type: "error", message: String(error) });
 	}
+}
+
+workerScope.onmessage = (event) => {
+	void handleMessage(event.data);
 };

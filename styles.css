@@ -485,9 +485,9 @@
 	display: none;
 }
 
-.graph-insight-camera-eye {
-	width: auto !important;
-	margin: 0 !important;
+.graph-insight-camera .graph-insight-camera-eye {
+	width: auto;
+	margin: 0;
 	padding: 2px 6px;
 	line-height: 1;
 	background: transparent;
@@ -529,16 +529,8 @@
 }
 
 .graph-insight-clusters {
-	position: absolute;
-	top: 64px;
-	right: 12px;
+	/* Cluster list was replaced by coloring + the cluster: search operator. */
 	display: none;
-	z-index: 10;
-	min-width: 180px;
-	max-width: 240px;
-	max-height: 50%;
-	display: flex;
-	flex-direction: column;
 	background: color-mix(in srgb, var(--background-secondary) 85%, transparent);
 	backdrop-filter: blur(8px);
 	border: 1px solid var(--background-modifier-border);

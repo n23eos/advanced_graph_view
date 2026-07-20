@@ -74,7 +74,8 @@ export interface ViewPresetRow {
 
 export interface PanelCallbacks {
 	onPresetApply(index: number): void;
-	onPresetSave(name: string): void;
+	/** Host opens its own naming dialog (window.prompt is not allowed). */
+	onPresetSaveRequest(): void;
 	onPresetDelete(index: number): void;
 	onChange(state: PanelState): void;
 	onReheat(): void;
@@ -147,10 +148,7 @@ export class ControlPanel {
 		});
 		const presetButtons = presets.createDiv({ cls: "graph-insight-panel-row" });
 		const saveButton = presetButtons.createEl("button", { text: "Сохранить текущий" });
-		saveButton.addEventListener("click", () => {
-			const name = window.prompt("Название пресета вида:", "Мой вид");
-			if (name?.trim()) this.callbacks.onPresetSave(name.trim());
-		});
+		saveButton.addEventListener("click", () => this.callbacks.onPresetSaveRequest());
 		const deleteButton = presetButtons.createEl("button", { text: "Удалить" });
 		deleteButton.addEventListener("click", () => {
 			const index = Number(this.presetSelect!.value);

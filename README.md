@@ -17,6 +17,18 @@ An advanced replacement for Obsidian's Graph View, built for large vaults (5,000
 - **Insights dashboard** — totals, top notes by opens and PageRank, cooling hubs (important but stale), link candidates, 90-day activity.
 - **Export** — current view as PNG, graph data as JSON or GEXF (Gephi).
 
+## Permissions and behavior
+
+The plugin review surfaces the capabilities a plugin uses. Here is what this one does and why:
+
+| Capability | Why it is needed |
+|---|---|
+| Vault enumeration | The graph *is* the list of notes and links — every node comes from `getMarkdownFiles()` and `metadataCache`. Nothing leaves your machine. |
+| Vault read | Note bodies are read only for the optional semantic index and for `content:` search, via `cachedRead`. |
+| Vault write | Only when you click "Create link" on a semantic edge. That is the sole code path that modifies a note. |
+| Clipboard | Write-only, and only from the lasso menu item "Copy list of paths". The clipboard is never read. |
+| Dynamic code execution | Comes from the bundled `transformers.js` / ONNX runtime used for local embeddings, and from the Web Workers, which are instantiated from inlined source. No user content is ever evaluated as code. |
+
 ## Privacy & network
 
 - **No telemetry. No analytics. Everything stays on your machine.**

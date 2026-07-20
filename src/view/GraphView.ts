@@ -18,6 +18,7 @@ import { SearchBar } from "../ui/SearchBar";
 import { FilterChips, type FilterSelection } from "../ui/FilterChips";
 import { SemanticConsentModal } from "../ui/ConsentModal";
 import { OnboardingModal } from "../ui/OnboardingModal";
+import { PromptModal } from "../ui/PromptModal";
 import { TimelineBar, type TimelineMode } from "../ui/TimelineBar";
 import { CameraWidget } from "../ui/CameraWidget";
 import { ToolBar, type CursorTool } from "../ui/ToolBar";
@@ -139,7 +140,7 @@ export class GraphInsightView extends ItemView {
 		await this.renderer.init(container);
 		// The pane may not have its final size during onOpen; resize once the
 		// layout settles so the canvas fills the whole view.
-		requestAnimationFrame(() => this.renderer?.resize());
+		window.requestAnimationFrame(() => this.renderer?.resize());
 
 		this.layout = new LayoutClient(
 			(positions) => this.renderer?.updatePositions(positions),
@@ -380,10 +381,9 @@ export class GraphInsightView extends ItemView {
 	private async insertWikilink(intoPath: string, targetPath: string): Promise<void> {
 		const file = this.app.vault.getAbstractFileByPath(intoPath);
 		if (!(file instanceof TFile)) return;
-		const link = this.app.metadataCache.fileToLinktext(
-			this.app.vault.getAbstractFileByPath(targetPath) as TFile,
-			intoPath
-		);
+		const target = this.app.vault.getAbstractFileByPath(targetPath);
+		if (!(target instanceof TFile)) return;
+		const link = this.app.metadataCache.fileToLinktext(target, intoPath);
 		await this.app.vault.process(file, (content) => {
 			const relatedHeader = /^##\s+Related\s*$/m.exec(content);
 			if (relatedHeader) {
@@ -647,7 +647,9 @@ export class GraphInsightView extends ItemView {
 			this.panel?.setHiddenNodeCount(this.hiddenNodes.size);
 			this.recomputeVisual();
 		}));
-		menu.addItem((item) => item.setTitle("Копировать список путей").setIcon("copy").onClick(async () => {
+		menu.addItem((item) => item.setTitle("Копировать список путей в буфер обмена").setIcon("copy").onClick(async () => {
+			// Write-only, and only from this explicit menu action — the plugin
+			// never reads the clipboard.
 			const paths = nodeIds.map((id) => this.model!.nodes[id].path).join("\n");
 			await navigator.clipboard.writeText(paths);
 			new Notice(`Скопировано путей: ${nodeIds.length}`);
@@ -1019,7 +1021,11 @@ export class GraphInsightView extends ItemView {
 			onTrailReplay: () => this.replayTrail(),
 			onShowHiddenNodes: () => this.resetHiddenNodes(),
 			onPresetApply: (index) => void this.applyViewPreset(index),
-			onPresetSave: (name) => void this.saveViewPreset(name),
+			onPresetSaveRequest: () => {
+				new PromptModal(this.app, "Название пресета вида", "Мой вид", (name) =>
+					void this.saveViewPreset(name)
+				).open();
+			},
 			onPresetDelete: (index) => void this.deleteViewPreset(index),
 		});
 	}
@@ -1251,9 +1257,7 @@ export class GraphInsightView extends ItemView {
 
 function downloadBlob(fileName: string, blob: Blob): void {
 	const url = URL.createObjectURL(blob);
-	const anchor = document.createElement("a");
-	anchor.href = url;
-	anchor.download = fileName;
+	const anchor = createEl("a", { attr: { href: url, download: fileName } });
 	anchor.click();
 	URL.revokeObjectURL(url);
 }

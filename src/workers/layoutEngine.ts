@@ -113,7 +113,7 @@ export function createLayoutEngine(
 		freeLayout: false,
 	};
 	let running = false;
-	let timer: ReturnType<typeof setInterval> | null = null;
+	let timer: number | null = null;
 
 	// Elastic links are simply stiffer springs; the extra alphaMin keeps a
 	// residual jiggle so a stretched graph visibly snaps back.
@@ -138,7 +138,7 @@ export function createLayoutEngine(
 
 	const stopTimer = () => {
 		if (timer !== null) {
-			clearInterval(timer);
+			self.clearInterval(timer);
 			timer = null;
 		}
 	};
@@ -146,7 +146,7 @@ export function createLayoutEngine(
 	const startTimer = (intervalMs: number) => {
 		stopTimer();
 		running = true;
-		timer = setInterval(stepOnce, intervalMs);
+		timer = self.setInterval(stepOnce, intervalMs);
 	};
 
 	const stepOnce = () => {

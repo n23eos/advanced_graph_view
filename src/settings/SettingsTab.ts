@@ -22,7 +22,6 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 				slider
 					.setLimits(1, 30, 1)
 					.setValue(this.plugin.settings.openDwellSeconds)
-					.setDynamicTooltip()
 					.onChange(async (value) => {
 						this.plugin.settings = { ...this.plugin.settings, openDwellSeconds: value };
 						await this.plugin.saveData(this.plugin.settings);
@@ -43,7 +42,7 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 			.addButton((button) =>
 				button
 					.setButtonText("Очистить")
-					.setWarning()
+					.setDestructive()
 					.onClick(async () => {
 						this.plugin.usageLog = emptyLog();
 						await this.plugin.dataStore.saveUsage(this.plugin.usageLog);
@@ -82,7 +81,6 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 				slider
 					.setLimits(0.5, 0.95, 0.01)
 					.setValue(this.plugin.settings.semantics.threshold)
-					.setDynamicTooltip()
 					.onChange((value) => {
 						void this.plugin.saveSemanticSettings({ ...this.plugin.settings.semantics, threshold: value });
 					})
@@ -96,7 +94,7 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 			.addButton((button) =>
 				button
 					.setButtonText("Сбросить всё")
-					.setWarning()
+					.setDestructive()
 					.onClick(async () => {
 						this.plugin.usageLog = emptyLog();
 						await this.plugin.dataStore.saveUsage(this.plugin.usageLog);
@@ -112,9 +110,7 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 function downloadText(fileName: string, content: string): void {
 	const blob = new Blob([content], { type: "text/plain" });
 	const url = URL.createObjectURL(blob);
-	const anchor = document.createElement("a");
-	anchor.href = url;
-	anchor.download = fileName;
+	const anchor = createEl("a", { attr: { href: url, download: fileName } });
 	anchor.click();
 	URL.revokeObjectURL(url);
 }

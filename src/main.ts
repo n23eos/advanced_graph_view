@@ -119,7 +119,11 @@ export default class GraphInsightPlugin extends Plugin {
 			},
 			semantics: { ...DEFAULT_SETTINGS.semantics, ...(saved?.semantics ?? {}) },
 		};
-		this.dataStore = new PluginDataStore(this.app, this.manifest.dir ?? ".obsidian/plugins/graph-insight");
+		this.dataStore = new PluginDataStore(
+			this.app,
+			// The config folder is user-configurable — never hardcode ".obsidian".
+			this.manifest.dir ?? `${this.app.vault.configDir}/plugins/${this.manifest.id}`
+		);
 
 		const loaded = await this.dataStore.loadUsage();
 		this.usageLog = loaded ? compactLog(loaded, Date.now()) : emptyLog();
@@ -141,10 +145,10 @@ export default class GraphInsightPlugin extends Plugin {
 
 		this.addCommand({
 			id: "open-graph",
-			name: "Open Graph Insight",
-			callback: () => this.activateView(),
+			name: "Open graph view",
+			callback: () => void this.activateView(),
 		});
-		this.addRibbonIcon("git-fork", "Open Graph Insight", () => this.activateView());
+		this.addRibbonIcon("git-fork", "Open Graph Insight", () => void this.activateView());
 
 		this.addCommand({
 			id: "focus-current-note",
@@ -286,13 +290,13 @@ export default class GraphInsightPlugin extends Plugin {
 	private async activateInsights(): Promise<void> {
 		const existing = this.app.workspace.getLeavesOfType(INSIGHTS_VIEW_TYPE);
 		if (existing.length > 0) {
-			this.app.workspace.revealLeaf(existing[0]);
+			await this.app.workspace.revealLeaf(existing[0]);
 			return;
 		}
 		const leaf = this.app.workspace.getRightLeaf(false);
 		if (!leaf) return;
 		await leaf.setViewState({ type: INSIGHTS_VIEW_TYPE, active: true });
-		this.app.workspace.revealLeaf(leaf);
+		await this.app.workspace.revealLeaf(leaf);
 	}
 
 	async markOnboardingShown(): Promise<void> {
@@ -303,12 +307,12 @@ export default class GraphInsightPlugin extends Plugin {
 	private async activateView(): Promise<void> {
 		const existing = this.app.workspace.getLeavesOfType(GRAPH_INSIGHT_VIEW_TYPE);
 		if (existing.length > 0) {
-			this.app.workspace.revealLeaf(existing[0]);
+			await this.app.workspace.revealLeaf(existing[0]);
 			return;
 		}
 		const leaf = this.app.workspace.getLeaf(true);
 		await leaf.setViewState({ type: GRAPH_INSIGHT_VIEW_TYPE, active: true });
-		this.app.workspace.revealLeaf(leaf);
+		await this.app.workspace.revealLeaf(leaf);
 	}
 
 	onunload(): void {
