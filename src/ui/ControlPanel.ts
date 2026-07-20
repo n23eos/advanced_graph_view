@@ -68,7 +68,14 @@ export interface ClusterRow {
 	hidden: boolean;
 }
 
+export interface ViewPresetRow {
+	name: string;
+}
+
 export interface PanelCallbacks {
+	onPresetApply(index: number): void;
+	onPresetSave(name: string): void;
+	onPresetDelete(index: number): void;
 	onChange(state: PanelState): void;
 	onReheat(): void;
 	onClusterClick(index: number): void;
@@ -80,8 +87,8 @@ export interface PanelCallbacks {
 
 const NONE_VALUE = "__none__";
 const OVERLAY_LABELS: Record<keyof OverlayToggles, string> = {
-	orphans: "Сироты",
-	deadEnds: "Тупики",
+	orphans: "Сироты (никто не ссылается)",
+	deadEnds: "Тупики (нет исходящих)",
 	broken: "Битые ссылки",
 };
 
@@ -90,6 +97,8 @@ export class ControlPanel {
 	private body: HTMLElement;
 	private overlayCountEls = new Map<keyof OverlayToggles, HTMLElement>();
 	private semanticStatusEl: HTMLElement | null = null;
+	private presetSelect: HTMLSelectElement | null = null;
+	private viewPresets: ViewPresetRow[] = [];
 	private hiddenCountEl: HTMLElement | null = null;
 
 	constructor(
@@ -127,6 +136,30 @@ export class ControlPanel {
 		this.body.empty();
 		this.overlayCountEls.clear();
 
+		const presets = this.section("Пресеты вида");
+		const presetRow = presets.createDiv({ cls: "graph-insight-panel-row" });
+		this.presetSelect = presetRow.createEl("select", { cls: "dropdown" });
+		this.presetSelect.addEventListener("change", () => {
+			const index = Number(this.presetSelect!.value);
+			if (!Number.isNaN(index) && this.presetSelect!.value !== "") {
+				this.callbacks.onPresetApply(index);
+			}
+		});
+		const presetButtons = presets.createDiv({ cls: "graph-insight-panel-row" });
+		const saveButton = presetButtons.createEl("button", { text: "Сохранить текущий" });
+		saveButton.addEventListener("click", () => {
+			const name = window.prompt("Название пресета вида:", "Мой вид");
+			if (name?.trim()) this.callbacks.onPresetSave(name.trim());
+		});
+		const deleteButton = presetButtons.createEl("button", { text: "Удалить" });
+		deleteButton.addEventListener("click", () => {
+			const index = Number(this.presetSelect!.value);
+			if (this.presetSelect!.value !== "" && !Number.isNaN(index)) {
+				this.callbacks.onPresetDelete(index);
+			}
+		});
+		this.renderPresetOptions();
+
 		const view = this.section("Вид");
 		this.channelSelect(view, "Размер", this.state.channels.size, NUMERIC_METRIC_LABELS, (value) => {
 			this.setState({ ...this.state, channels: { ...this.state.channels, size: value as NumericMetricId | null } });
@@ -146,9 +179,56 @@ export class ControlPanel {
 
 		const presetLabels: Record<string, string> = {};
 		for (const [id, preset] of Object.entries(SCALE_PRESETS)) presetLabels[id] = preset.label;
-		this.channelSelect(view, "Шкала", this.state.colorPreset, presetLabels, (value) => {
-			this.setState({ ...this.state, colorPreset: value ?? "recency" });
-		}, false);
+		const tuning = this.state.colorTuning;
+		this.channelSelect(
+			view,
+			"Шкала",
+			tuning.useCustom ? "__custom__" : tuning.preset,
+			{ ...presetLabels, __custom__: "Свой градиент" },
+			(value) => {
+				const next =
+					value === "__custom__"
+						? { ...tuning, useCustom: true }
+						: { ...tuning, useCustom: false, preset: value ?? "recency" };
+				this.setState({ ...this.state, colorTuning: next, colorPreset: next.preset });
+			},
+			false
+		);
+
+		const colorsRow = view.createDiv({ cls: "graph-insight-panel-row" });
+		colorsRow.createSpan({ cls: "graph-insight-panel-label", text: "Мин → Макс" });
+		const pickers = colorsRow.createSpan({ cls: "graph-insight-colorpanel-pickers" });
+		const fromInput = pickers.createEl("input", { type: "color" });
+		fromInput.value = tuning.customFrom;
+		const toInput = pickers.createEl("input", { type: "color" });
+		toInput.value = tuning.customTo;
+		const onPick = () => {
+			this.setState({
+				...this.state,
+				colorTuning: {
+					...this.state.colorTuning,
+					useCustom: true,
+					customFrom: fromInput.value,
+					customTo: toInput.value,
+				},
+			});
+		};
+		fromInput.addEventListener("input", onPick);
+		toInput.addEventListener("input", onPick);
+
+		this.physicsSlider(view, "Контраст цвета", 0.3, 3, 0.05, tuning.gamma, (value) => {
+			this.setState({
+				...this.state,
+				colorTuning: { ...this.state.colorTuning, gamma: value },
+			});
+		});
+
+		if (!this.state.channels.color) {
+			view.createDiv({
+				cls: "graph-insight-panel-hint",
+				text: "Шкала и цвета применяются, когда канал «Цвет» выбран (сейчас «—»).",
+			});
+		}
 
 		this.physicsSlider(view, "Размер узлов", 0.1, 2.5, 0.05, this.state.nodeScale, (value) => {
 			this.setState({ ...this.state, nodeScale: value });
@@ -205,6 +285,10 @@ export class ControlPanel {
 		});
 
 		const layers = this.section("Слои");
+		layers.createDiv({
+			cls: "graph-insight-panel-hint",
+			text: "Включённый слой подсвечивает подходящие заметки, остальные гаснут.",
+		});
 		for (const key of Object.keys(OVERLAY_LABELS) as (keyof OverlayToggles)[]) {
 			const row = layers.createDiv({ cls: "graph-insight-panel-row" });
 			const label = row.createEl("label", { cls: "graph-insight-panel-checkbox" });
@@ -260,6 +344,10 @@ export class ControlPanel {
 		clusters.createDiv({ cls: "graph-insight-panel-hint", text: "Список кластеров — панель справа" });
 
 		const semanticSection = this.section("Семантика");
+		semanticSection.createDiv({
+			cls: "graph-insight-panel-hint",
+			text: "Пунктир = похожие по смыслу, но не связанные заметки. Клик по линии — создать ссылку.",
+		});
 		const enableRow = semanticSection.createDiv({ cls: "graph-insight-panel-row" });
 		const enableLabel = enableRow.createEl("label", { cls: "graph-insight-panel-checkbox" });
 		const enableCheckbox = enableLabel.createEl("input", { type: "checkbox" });
@@ -317,6 +405,9 @@ export class ControlPanel {
 		this.physicsSlider(physics, "Плавность", 0.1, 0.8, 0.05, this.state.physics.velocityDecay, (value) => {
 			this.setState({ ...this.state, physics: { ...this.state.physics, velocityDecay: value } });
 		});
+		this.physicsSlider(physics, "Упругость связей", 0, 1, 0.05, this.state.physics.elasticity, (value) => {
+			this.setState({ ...this.state, physics: { ...this.state.physics, elasticity: value } });
+		});
 		this.checkboxRow(physics, "Свободная раскладка", this.state.physics.freeLayout, (value) => {
 			this.setState({ ...this.state, physics: { ...this.state.physics, freeLayout: value } });
 		});
@@ -366,6 +457,24 @@ export class ControlPanel {
 		this.hiddenCountEl?.setText(String(count));
 	}
 
+	setViewPresets(rows: readonly ViewPresetRow[]): void {
+		this.viewPresets = [...rows];
+		this.renderPresetOptions();
+	}
+
+	private renderPresetOptions(): void {
+		if (!this.presetSelect) return;
+		this.presetSelect.empty();
+		const placeholder = this.presetSelect.createEl("option", {
+			text: this.viewPresets.length > 0 ? "Выбрать пресет…" : "Пресетов пока нет",
+			value: "",
+		});
+		placeholder.selected = true;
+		this.viewPresets.forEach((preset, index) => {
+			this.presetSelect!.createEl("option", { text: preset.name, value: String(index) });
+		});
+	}
+
 	setSemanticStatus(text: string): void {
 		this.semanticStatusEl?.setText(text);
 	}
@@ -378,7 +487,7 @@ export class ControlPanel {
 
 	/** Sections are accordions; everything except «Вид» starts collapsed.
 	 *  Static: the set survives panel rebuilds (updatePanelState). */
-	private static openSections = new Set<string>(["Вид"]);
+	private static openSections = new Set<string>(["Пресеты вида", "Вид"]);
 	private get openSections(): Set<string> {
 		return ControlPanel.openSections;
 	}

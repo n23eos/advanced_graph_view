@@ -1,5 +1,5 @@
 import { ItemView, Keymap, Menu, Notice, TFile, debounce, getAllTags, type WorkspaceLeaf } from "obsidian";
-import { buildAdjacency, computeDistances } from "../analysis/focus";
+import { buildAdjacency, computeDistances, shortestPath } from "../analysis/focus";
 import { nameClusters, type ClusterContent } from "../analysis/clusterNames";
 import { computeOverlayMask, countOverlayMatches } from "../analysis/overlays";
 import { buildGraphModel, type GraphModel } from "../data/GraphStore";
@@ -14,12 +14,13 @@ import { Legend } from "../ui/Legend";
 import { LayoutClient } from "../workers/LayoutClient";
 import { MetricsClient, type GraphMetrics } from "../workers/MetricsClient";
 import { contentNeedles, parseQuery, matchesQuery, type ParsedQuery } from "../query/QueryParser";
-import { ColorPanel } from "../ui/ColorPanel";
 import { SearchBar } from "../ui/SearchBar";
+import { FilterChips, type FilterSelection } from "../ui/FilterChips";
 import { SemanticConsentModal } from "../ui/ConsentModal";
 import { OnboardingModal } from "../ui/OnboardingModal";
 import { TimelineBar, type TimelineMode } from "../ui/TimelineBar";
 import { CameraWidget } from "../ui/CameraWidget";
+import { ToolBar, type CursorTool } from "../ui/ToolBar";
 import { graphToGexf, graphToJson } from "../export/exporters";
 import type GraphInsightPlugin from "../main";
 import type { SemanticSettings } from "../main";
@@ -48,12 +49,19 @@ export class GraphInsightView extends ItemView {
 	private explicitPins = new Set<number>();
 	private tooltip: HTMLElement | null = null;
 	private panel: ControlPanel | null = null;
-	private colorPanel: ColorPanel | null = null;
 	/** needle → set of matching paths, built lazily on Enter. */
 	private contentIndex = new Map<string, Set<string>>();
 	private legend: Legend | null = null;
 	private searchBar: SearchBar | null = null;
+	private filterChips: FilterChips | null = null;
+	/** Tag/folder picks from the dedicated dropdowns (OR inside, AND across). */
+	private chipFilter: FilterSelection = { tags: new Set(), folders: new Set() };
 	private focusBar: HTMLElement | null = null;
+	private toolBar: ToolBar | null = null;
+	private semanticChip: HTMLElement | null = null;
+	private cursorTool: CursorTool = "open";
+	/** First endpoint picked in «Путь» mode. */
+	private pathAnchor: number | null = null;
 
 	/** Live (soft) query while typing; matched=1, others dimmed. */
 	private softQuery: ParsedQuery | null = null;
@@ -145,9 +153,7 @@ export class GraphInsightView extends ItemView {
 		this.metricsClient = new MetricsClient((metrics) => this.handleMetricsResult(metrics));
 
 		this.panel = this.buildPanel(this.plugin.settings.panel);
-		this.colorPanel = new ColorPanel(container, this.plugin.settings.panel.colorTuning, {
-			onChange: (colorTuning) => void this.updatePanelState((state) => ({ ...state, colorTuning })),
-		});
+		this.panel.setViewPresets(this.plugin.settings.viewPresets);
 		this.registerSemanticStatus();
 		this.legend = new Legend(container);
 		this.cameraWidget = new CameraWidget(
@@ -190,6 +196,30 @@ export class GraphInsightView extends ItemView {
 			onSavePreset: (query) => void this.savePreset(query),
 		});
 		this.searchBar.setPresets(this.plugin.settings.presets);
+		this.filterChips = new FilterChips(this.searchBar.filtersHost, {
+			onChange: (selection) => {
+				this.chipFilter = selection;
+				this.recomputeVisual();
+			},
+		});
+
+		this.toolBar = new ToolBar(container, this.cursorTool, this.focusDepth, {
+			onToolChange: (tool) => {
+				this.cursorTool = tool;
+				this.pathAnchor = null;
+				if (tool !== "links" && this.focusRootId !== null) this.exitFocus();
+			},
+			onDepthChange: (depth) => {
+				this.focusDepth = depth;
+				if (this.focusRootId !== null) {
+					this.renderFocusBar();
+					this.recomputeVisual();
+				}
+			},
+		});
+
+		this.semanticChip = container.createDiv({ cls: "graph-insight-semantic-chip" });
+		this.semanticChip.hide();
 
 		this.focusBar = container.createDiv({ cls: "graph-insight-focusbar" });
 		this.focusBar.hide();
@@ -231,7 +261,17 @@ export class GraphInsightView extends ItemView {
 
 	private registerSemanticStatus(): void {
 		this.semanticUnsubscribe = this.plugin.semantics.onStatus((status) => {
-			this.panel?.setSemanticStatus(this.formatSemanticStatus(status));
+			const text = this.formatSemanticStatus(status);
+			this.panel?.setSemanticStatus(text);
+			// A visible chip: model download and indexing take minutes, and
+			// the panel section is usually collapsed.
+			if (this.semanticChip) {
+				const busy = status.state !== "off" && status.state !== "ready";
+				this.semanticChip.setText(`Семантика · ${text}`);
+				this.semanticChip.toggleClass("is-error", status.state === "error");
+				if (busy || status.state === "error") this.semanticChip.show();
+				else this.semanticChip.hide();
+			}
 			if (status.state === "ready") this.refreshSemanticEdges();
 		});
 	}
@@ -247,21 +287,28 @@ export class GraphInsightView extends ItemView {
 			}
 			case "indexing": return `Индексация: ${status.done} / ${status.total}`;
 			case "pairing": return `Поиск пар: ${status.done} / ${status.total}`;
-			case "ready": return `Готово · ${status.done} заметок в индексе`;
+			case "ready":
+				return status.done > 0
+					? `Готово · ${status.done} заметок в индексе`
+					: "Готово · индекс пуст";
 			case "error": return `Ошибка: ${status.message ?? "?"}`;
 		}
 	}
 
 	private handleSemanticSettings(settings: SemanticSettings): void {
-		const wasEnabled = this.plugin.settings.semantics.enabled;
-		if (settings.enabled && !wasEnabled) {
+		const previous = this.plugin.settings.semantics;
+		const wasEnabled = previous.enabled;
+		// Consent is asked once ever; after that enabling is a plain toggle
+		// (the model is already cached locally).
+		if (settings.enabled && !wasEnabled && !previous.consentGiven) {
 			new SemanticConsentModal(this.app, () => {
-				void this.plugin.saveSemanticSettings(settings);
+				void this.plugin.saveSemanticSettings({ ...settings, consentGiven: true });
 				void this.plugin.semantics.enable();
 			}).open();
 			return;
 		}
 		void this.plugin.saveSemanticSettings(settings);
+		if (settings.enabled && !wasEnabled) void this.plugin.semantics.enable();
 		if (!settings.enabled && wasEnabled) {
 			this.plugin.semantics.disable();
 			this.renderer?.setSemanticEdges(null);
@@ -298,6 +345,12 @@ export class GraphInsightView extends ItemView {
 			this.shownSemanticPairs.push(pair);
 		}
 		this.renderer.setSemanticEdges(drawn);
+		const total = this.plugin.semantics.getPairs().length;
+		if (total > 0) {
+			this.panel?.setSemanticStatus(
+				`Показано ${drawn.length} пунктирных связей из ${total} похожих пар`
+			);
+		}
 	}
 
 	private showSemanticEdgeMenu(pairIndex: number, event: MouseEvent): void {
@@ -365,6 +418,41 @@ export class GraphInsightView extends ItemView {
 		menu.showAtPosition({ x: event.clientX, y: event.clientY });
 	}
 
+	/** «Путь»: first click sets the anchor, second highlights the chain. */
+	private handlePathPick(nodeId: number): void {
+		if (!this.model) return;
+		if (this.pathAnchor === null || this.pathAnchor === nodeId) {
+			this.pathAnchor = nodeId;
+			new Notice(`Старт: ${this.model.nodes[nodeId].name}. Кликни вторую заметку.`);
+			return;
+		}
+		const path = shortestPath(
+			buildAdjacency(this.model),
+			this.model.nodes.length,
+			this.pathAnchor,
+			nodeId
+		);
+		this.pathAnchor = null;
+		if (path.length === 0) {
+			new Notice("Между заметками нет пути по ссылкам");
+			this.renderer?.setAlphaFactors(null);
+			this.renderer?.setHighlightMask(null);
+			return;
+		}
+		const onPath = new Set(path);
+		const factors = new Float32Array(this.model.nodes.length).fill(0.06);
+		const highlight = new Uint8Array(this.model.nodes.length);
+		for (const id of onPath) {
+			factors[id] = 1;
+			highlight[id] = 1;
+		}
+		this.renderer?.setAlphaFactors(factors);
+		this.renderer?.setHighlightMask(highlight);
+		this.renderer?.zoomToNodes(path);
+		const names = path.map((id) => this.model!.nodes[id].name);
+		new Notice(`Путь из ${path.length} заметок: ${names.join(" → ")}`, 8000);
+	}
+
 	// ── Focus mode ────────────────────────────────────────────────────
 
 	private enterFocus(nodeId: number): void {
@@ -429,6 +517,20 @@ export class GraphInsightView extends ItemView {
 				if (!matchesQuery(this.hardQuery, this.facts[i], now, contentMatcher)) ensureHidden()[i] = 1;
 			}
 		}
+		// Tag/folder dropdowns: OR within a list, AND between the two lists.
+		const { tags: pickedTags, folders: pickedFolders } = this.chipFilter;
+		if (pickedTags.size > 0 || pickedFolders.size > 0) {
+			for (let i = 0; i < count; i++) {
+				const facts = this.facts[i];
+				const tagOk =
+					pickedTags.size === 0 ||
+					facts.tags.some((tag) => pickedTags.has(tag) || [...pickedTags].some((p) => tag.startsWith(`${p}/`)));
+				const folderOk =
+					pickedFolders.size === 0 ||
+					[...pickedFolders].some((f) => facts.folder === f || facts.folder.startsWith(`${f}/`));
+				if (!tagOk || !folderOk) ensureHidden()[i] = 1;
+			}
+		}
 		if (this.hiddenClusters.size > 0 && this.metrics) {
 			for (let i = 0; i < count; i++) {
 				if (this.hiddenClusters.has(this.metrics.community[i])) ensureHidden()[i] = 1;
@@ -452,6 +554,13 @@ export class GraphInsightView extends ItemView {
 				const matched = matchesQuery(this.softQuery, this.facts[i], now, contentMatcher);
 				factors[i] = matched ? 1 : 0.12;
 				if (matched) highlight[i] = 1;
+			}
+		}
+		// Active overlays glow with the accent color, same as search hits.
+		if (this.overlayMask) {
+			highlight ??= new Uint8Array(count);
+			for (let i = 0; i < count; i++) {
+				if (this.overlayMask[i] === 1) highlight[i] = 1;
 			}
 		}
 		this.renderer.setHighlightMask(highlight);
@@ -595,7 +704,9 @@ export class GraphInsightView extends ItemView {
 		this.refreshSemanticEdges();
 		this.refreshTimelineData();
 		this.syncTimelineAndTrail(this.plugin.settings.panel);
-		this.searchBar?.setVocabulary(...collectVocabulary(this.facts));
+		const vocabulary = collectVocabulary(this.facts);
+		this.searchBar?.setVocabulary(...vocabulary);
+		this.filterChips?.setVocabulary(...vocabulary);
 		this.rebuilding = false;
 	}
 
@@ -663,9 +774,25 @@ export class GraphInsightView extends ItemView {
 		this.redrawBubbles();
 	}
 
+	/** Overlay matches (orphans / dead ends / broken links) or null. */
+	private overlayMask: Uint8Array | null = null;
+
 	private applyOverlays(state: PanelState): void {
 		if (!this.model || !this.renderer) return;
-		this.renderer.setDimMask(computeOverlayMask(this.model, state.overlays));
+		this.overlayMask = computeOverlayMask(this.model, state.overlays);
+		this.renderer.setDimMask(this.overlayMask);
+		// Matches must also LIGHT UP, not merely survive the dimming.
+		this.recomputeVisual();
+
+		if (this.overlayMask) {
+			let matched = 0;
+			for (const flag of this.overlayMask) matched += flag;
+			const names: string[] = [];
+			if (state.overlays.orphans) names.push("сироты");
+			if (state.overlays.deadEnds) names.push("тупики");
+			if (state.overlays.broken) names.push("битые ссылки");
+			new Notice(`Подсвечено ${matched} заметок: ${names.join(", ")}`);
+		}
 	}
 
 	private redrawBubbles(): void {
@@ -807,6 +934,41 @@ export class GraphInsightView extends ItemView {
 		if (!this.model) return;
 		const node = this.model.nodes[nodeId];
 		this.renderer?.setSelected(nodeId);
+
+		switch (this.cursorTool) {
+			case "links":
+				this.enterFocus(nodeId);
+				return;
+			case "path":
+				this.handlePathPick(nodeId);
+				return;
+			case "hide":
+				this.hiddenNodes.add(nodeId);
+				this.panel?.setHiddenNodeCount(this.hiddenNodes.size);
+				this.recomputeVisual();
+				return;
+			case "pin": {
+				if (this.explicitPins.has(nodeId)) {
+					this.explicitPins.delete(nodeId);
+					this.pinnedNodes.delete(nodeId);
+					this.layout?.unpin(nodeId);
+					new Notice(`Откреплена: ${node.name}`);
+				} else {
+					const positions = this.renderer?.currentPositions;
+					if (positions) {
+						this.explicitPins.add(nodeId);
+						this.layout?.pin(
+							nodeId,
+							positions[nodeId * 3], positions[nodeId * 3 + 1], positions[nodeId * 3 + 2]
+						);
+						new Notice(`Закреплена: ${node.name}`);
+					}
+				}
+				return;
+			}
+			case "open":
+				break;
+		}
 		const file = this.app.vault.getAbstractFileByPath(node.path);
 		if (!(file instanceof TFile)) return;
 		// Plain click opens in the last used pane; Cmd = new tab, Cmd+Shift = split.
@@ -856,7 +1018,42 @@ export class GraphInsightView extends ItemView {
 			onSemanticChange: (settings) => this.handleSemanticSettings(settings),
 			onTrailReplay: () => this.replayTrail(),
 			onShowHiddenNodes: () => this.resetHiddenNodes(),
+			onPresetApply: (index) => void this.applyViewPreset(index),
+			onPresetSave: (name) => void this.saveViewPreset(name),
+			onPresetDelete: (index) => void this.deleteViewPreset(index),
 		});
+	}
+
+	// ── View presets ──────────────────────────────────────────────────
+
+	private async applyViewPreset(index: number): Promise<void> {
+		const preset = this.plugin.settings.viewPresets[index];
+		if (!preset) return;
+		await this.updatePanelState(() => preset.panel);
+		new Notice(`Вид «${preset.name}» применён`);
+	}
+
+	private async saveViewPreset(name: string): Promise<void> {
+		const existing = this.plugin.settings.viewPresets;
+		const snapshot = { name, panel: this.plugin.settings.panel };
+		// Same name overwrites: saving twice must not pile up duplicates.
+		const at = existing.findIndex((p) => p.name === name);
+		const next = at >= 0
+			? existing.map((p, i) => (i === at ? snapshot : p))
+			: [...existing, snapshot];
+		await this.plugin.saveViewPresets(next);
+		this.panel?.setViewPresets(next);
+		new Notice(at >= 0 ? `Пресет «${name}» перезаписан` : `Пресет «${name}» сохранён`);
+	}
+
+	private async deleteViewPreset(index: number): Promise<void> {
+		const existing = this.plugin.settings.viewPresets;
+		const preset = existing[index];
+		if (!preset) return;
+		const next = existing.filter((_, i) => i !== index);
+		await this.plugin.saveViewPresets(next);
+		this.panel?.setViewPresets(next);
+		new Notice(`Пресет «${preset.name}» удалён`);
 	}
 
 	/** Apply every visual consequence of a panel state, in one place. */
@@ -880,6 +1077,7 @@ export class GraphInsightView extends ItemView {
 		await this.plugin.savePanelState(next);
 		this.panel?.destroy();
 		this.panel = this.buildPanel(next);
+		this.panel.setViewPresets(this.plugin.settings.viewPresets);
 		if (this.model) this.panel.setOverlayCounts(countOverlayMatches(this.model));
 		this.panel.setHiddenNodeCount(this.hiddenNodes.size);
 		this.refreshClusterPanel();
@@ -1030,6 +1228,10 @@ export class GraphInsightView extends ItemView {
 		this.metricsClient = null;
 		this.searchBar?.destroy();
 		this.searchBar = null;
+		this.toolBar?.destroy();
+		this.toolBar = null;
+		this.filterChips?.destroy();
+		this.filterChips = null;
 		this.semanticUnsubscribe?.();
 		this.semanticUnsubscribe = null;
 		if (this.trailReplayFrame !== null) window.cancelAnimationFrame(this.trailReplayFrame);
@@ -1039,8 +1241,6 @@ export class GraphInsightView extends ItemView {
 		this.cameraWidget = null;
 		this.panel?.destroy();
 		this.panel = null;
-		this.colorPanel?.destroy();
-		this.colorPanel = null;
 		this.legend?.destroy();
 		this.legend = null;
 		this.renderer?.destroy();

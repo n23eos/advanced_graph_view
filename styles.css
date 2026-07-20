@@ -161,6 +161,14 @@
 	color: var(--text-muted);
 	font-style: italic;
 	font-size: var(--font-ui-smaller);
+	/* Long explanations must wrap inside the panel, never widen it. */
+	white-space: normal;
+	overflow-wrap: anywhere;
+	line-height: 1.35;
+}
+
+.graph-insight-panel {
+	max-width: 280px;
 }
 
 .graph-insight-cluster-list {
@@ -524,6 +532,7 @@
 	position: absolute;
 	top: 64px;
 	right: 12px;
+	display: none;
 	z-index: 10;
 	min-width: 180px;
 	max-width: 240px;
@@ -574,4 +583,168 @@
 	border-radius: var(--radius-s);
 	background: transparent;
 	cursor: pointer;
+}
+
+.graph-insight-toolbar {
+	position: absolute;
+	top: 58px;
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 11;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 5px 8px;
+	background: color-mix(in srgb, var(--background-secondary) 85%, transparent);
+	backdrop-filter: blur(8px);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	box-shadow: var(--shadow-s);
+}
+
+.graph-insight-toolbar-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.graph-insight-toolbar-row.is-hidden {
+	display: none;
+}
+
+.graph-insight-toolbar-row input[type="range"] {
+	width: 120px;
+	margin: 0;
+}
+
+.graph-insight-tool {
+	padding: 3px 9px;
+	font-size: var(--font-ui-smaller);
+	cursor: pointer;
+	background: transparent;
+	border: 1px solid transparent;
+	border-radius: var(--radius-s);
+	color: var(--text-muted);
+	box-shadow: none;
+}
+
+.graph-insight-tool:hover {
+	background: var(--background-modifier-hover);
+}
+
+.graph-insight-tool.is-active {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	border-color: var(--interactive-accent);
+}
+
+.graph-insight-ui-hidden .graph-insight-toolbar {
+	display: none;
+}
+
+/* Focus bar sits below the toolbar */
+.graph-insight-focusbar {
+	top: 108px;
+}
+
+.graph-insight-semantic-chip {
+	position: absolute;
+	top: 12px;
+	right: 12px;
+	z-index: 12;
+	padding: 4px 10px;
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	border-radius: var(--radius-m);
+	font-size: var(--font-ui-smaller);
+	box-shadow: var(--shadow-s);
+	max-width: 260px;
+}
+
+.graph-insight-semantic-chip.is-error {
+	background: var(--background-modifier-error);
+	color: var(--text-normal);
+}
+
+.graph-insight-filters {
+	position: relative;
+	display: flex;
+	gap: 6px;
+}
+
+.graph-insight-filter-btn {
+	padding: 3px 10px;
+	font-size: var(--font-ui-smaller);
+	cursor: pointer;
+	background: transparent;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	color: var(--text-muted);
+	box-shadow: none;
+	white-space: nowrap;
+}
+
+.graph-insight-filter-btn:hover {
+	background: var(--background-modifier-hover);
+}
+
+.graph-insight-filter-btn.is-active {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	border-color: var(--interactive-accent);
+}
+
+.graph-insight-filter-menu {
+	position: absolute;
+	top: 100%;
+	left: 0;
+	margin-top: 6px;
+	z-index: 13;
+	min-width: 220px;
+	max-width: 300px;
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	box-shadow: var(--shadow-s);
+	padding: 6px;
+}
+
+.graph-insight-filter-menu-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 8px;
+	padding: 2px 4px 6px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.graph-insight-filter-menu-header button {
+	width: auto;
+	margin: 0;
+	padding: 2px 6px;
+}
+
+.graph-insight-filter-list {
+	max-height: 300px;
+	overflow-y: auto;
+	padding-top: 4px;
+}
+
+.graph-insight-filter-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 3px 4px;
+	font-size: var(--font-ui-small);
+	cursor: pointer;
+	border-radius: var(--radius-s);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.graph-insight-filter-row:hover {
+	background: var(--background-modifier-hover);
 }

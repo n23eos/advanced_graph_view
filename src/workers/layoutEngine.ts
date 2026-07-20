@@ -40,6 +40,9 @@ export interface PhysicsParams {
 	linkStrength: number;
 	/** Velocity damping 0.1..0.9 — higher = smoother, slower motion. */
 	velocityDecay: number;
+	/** 0 = inert, 1 = springy: links pull back with extra strength and the
+	 *  layout keeps a little residual heat so it visibly rebounds. */
+	elasticity: number;
 	/** true = no repulsion range cap and light centering: nodes spread freely
 	 *  instead of packing into round geometric clumps. */
 	freeLayout: boolean;
@@ -106,10 +109,16 @@ export function createLayoutEngine(
 		centering: CENTERING_STRENGTH,
 		linkStrength: 0.4,
 		velocityDecay: 0.4,
+		elasticity: 0.4,
 		freeLayout: false,
 	};
 	let running = false;
 	let timer: ReturnType<typeof setInterval> | null = null;
+
+	// Elastic links are simply stiffer springs; the extra alphaMin keeps a
+	// residual jiggle so a stretched graph visibly snaps back.
+	const effectiveLinkStrength = () =>
+		Math.min(2, params.linkStrength * (1 + params.elasticity * 1.5));
 
 	const effectiveCentering = () => {
 		const scaled = scaledCentering(params.centering, nodes.length);
@@ -217,7 +226,7 @@ export function createLayoutEngine(
 				forceLink(links)
 					.id((d) => (d as SimNode).id)
 					.distance(params.linkDistance)
-					.strength(params.linkStrength)
+					.strength(effectiveLinkStrength())
 			)
 			.force("x", forceX(0).strength(effectiveCentering()))
 			.force("y", forceY(0).strength(effectiveCentering()))
@@ -246,7 +255,7 @@ export function createLayoutEngine(
 							.distanceMax(params.freeLayout ? Infinity : CHARGE_MAX_DISTANCE);
 						(simulation.force("link") as ReturnType<typeof forceLink>)
 							.distance(params.linkDistance)
-							.strength(params.linkStrength);
+							.strength(effectiveLinkStrength());
 						simulation.velocityDecay(params.velocityDecay);
 						(simulation.force("x") as ReturnType<typeof forceX>).strength(effectiveCentering());
 						(simulation.force("y") as ReturnType<typeof forceY>).strength(effectiveCentering());
@@ -276,7 +285,7 @@ export function createLayoutEngine(
 							Math.min(MAX_DRAG_DAMPING, params.velocityDecay + DRAG_EXTRA_DAMPING)
 						);
 						(simulation.force("link") as ReturnType<typeof forceLink>).strength(
-							Math.min(MAX_DRAG_LINK_STRENGTH, params.linkStrength * DRAG_LINK_BOOST)
+							Math.min(MAX_DRAG_LINK_STRENGTH, effectiveLinkStrength() * DRAG_LINK_BOOST)
 						);
 						startTimer(DRAG_INTERVAL_MS);
 					}
@@ -286,7 +295,13 @@ export function createLayoutEngine(
 						simulation.alphaTarget(0);
 						simulation.velocityDecay(params.velocityDecay);
 						(simulation.force("link") as ReturnType<typeof forceLink>)
-							.strength(params.linkStrength);
+							.strength(effectiveLinkStrength());
+						// Elastic layouts rebound after the drag instead of
+						// freezing wherever the pointer left them.
+						if (params.elasticity > 0) {
+							simulation.alpha(Math.max(simulation.alpha(), 0.15 + params.elasticity * 0.35));
+							if (!running) startTimer(FRAME_INTERVAL_MS);
+						}
 						if (running) startTimer(FRAME_INTERVAL_MS);
 					}
 					break;

@@ -21,10 +21,19 @@ export interface SemanticSettings {
 	enabled: boolean;
 	threshold: number;
 	showEdges: boolean;
+	/** Consent for the one-time model download — asked once, ever. */
+	consentGiven: boolean;
+}
+
+export interface ViewPreset {
+	name: string;
+	/** Full panel state snapshot: channels, colors, physics, 3D, layers. */
+	panel: PanelState;
 }
 
 interface GraphInsightSettings {
 	panel: PanelState;
+	viewPresets: ViewPreset[];
 	presets: SearchPreset[];
 	semantics: SemanticSettings;
 	onboardingShown: boolean;
@@ -43,7 +52,7 @@ const DEFAULT_SETTINGS: GraphInsightSettings = {
 		showTrail: false,
 		physics: {
 			repel: 30, linkDistance: 25, centering: 0.09,
-			linkStrength: 0.15, velocityDecay: 0.55, freeLayout: false,
+			linkStrength: 0.15, velocityDecay: 0.55, elasticity: 0.4, freeLayout: false,
 		},
 		labels: { fontSize: 11, zoomThreshold: 0.9, maxCount: 100, scaleWithZoom: true },
 		edges: { show: true, width: 1, opacity: 0.25 },
@@ -53,7 +62,8 @@ const DEFAULT_SETTINGS: GraphInsightSettings = {
 	},
 	openDwellSeconds: 5,
 	presets: [],
-	semantics: { enabled: false, threshold: 0.75, showEdges: true },
+	viewPresets: [],
+	semantics: { enabled: false, threshold: 0.75, showEdges: true, consentGiven: false },
 	onboardingShown: false,
 };
 
@@ -255,6 +265,11 @@ export default class GraphInsightPlugin extends Plugin {
 
 	async savePresets(presets: SearchPreset[]): Promise<void> {
 		this.settings = { ...this.settings, presets };
+		await this.saveData(this.settings);
+	}
+
+	async saveViewPresets(viewPresets: ViewPreset[]): Promise<void> {
+		this.settings = { ...this.settings, viewPresets };
 		await this.saveData(this.settings);
 	}
 

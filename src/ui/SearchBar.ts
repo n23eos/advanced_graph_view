@@ -35,9 +35,12 @@ export class SearchBar {
 	private folders: string[] = [];
 	private activeSuggestion = -1;
 	private suggestions: Suggestion[] = [];
+	/** Mount point for the standalone tag/folder dropdowns. */
+	readonly filtersHost: HTMLElement;
 
 	constructor(host: HTMLElement, private readonly callbacks: SearchCallbacks) {
 		this.root = host.createDiv({ cls: "graph-insight-searchbar" });
+		this.filtersHost = this.root.createDiv({ cls: "graph-insight-searchbar-filters" });
 
 		const inputWrap = this.root.createDiv({ cls: "graph-insight-searchbar-input" });
 		this.input = inputWrap.createEl("input", {

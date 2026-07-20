@@ -58,14 +58,19 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 			.setDesc("Модель all-MiniLM-L6-v2 (~25 МБ), скачивается однократно, работает офлайн.")
 			.addToggle((toggle) =>
 				toggle.setValue(this.plugin.settings.semantics.enabled).onChange((value) => {
-					if (value && !this.plugin.settings.semantics.enabled) {
+					if (value && !this.plugin.settings.semantics.enabled && !this.plugin.settings.semantics.consentGiven) {
 						new SemanticConsentModal(this.app, () => {
-							void this.plugin.saveSemanticSettings({ ...this.plugin.settings.semantics, enabled: true });
+							void this.plugin.saveSemanticSettings({
+								...this.plugin.settings.semantics,
+								enabled: true,
+								consentGiven: true,
+							});
 							void this.plugin.semantics.enable();
 						}).open();
 						toggle.setValue(false);
 						return;
 					}
+					if (value) void this.plugin.semantics.enable();
 					void this.plugin.saveSemanticSettings({ ...this.plugin.settings.semantics, enabled: value });
 					if (!value) this.plugin.semantics.disable();
 				})

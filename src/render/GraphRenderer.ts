@@ -29,6 +29,8 @@ const NEW_LABELS_PER_FRAME = 4;
 const DIM_ALPHA = 0.12;
 /** Hover emphasis: sprite grows, neighbors stay lit, the rest recedes. */
 const HOVER_SIZE_BOOST = 1.9;
+/** Search/overlay matches grow a little so they read at a glance. */
+const HIGHLIGHT_SIZE_BOOST = 1.45;
 const HOVER_NEIGHBOR_ALPHA = 0.9;
 const HOVER_REST_ALPHA = 0.25;
 const CULL_MIN_INTERVAL_MS = 30;
@@ -310,6 +312,7 @@ export class GraphRenderer {
 			this.camera.enabled ? this.depthOverride : null
 		);
 		this.syncEdgeVisibility();
+		this.redrawHulls();
 		if (this.camera.enabled) this.applyNodeAlpha(); // refresh depth fog
 		this.positionsDirty = true;
 		this.edgesDirty = true;
@@ -461,6 +464,7 @@ export class GraphRenderer {
 	setHighlightMask(mask: Uint8Array | null): void {
 		this.highlightMask = mask;
 		this.applyNodeTints();
+		this.applyHoverSize();
 	}
 
 	setAlphaFactors(factors: Float32Array | null): void {
@@ -502,7 +506,12 @@ export class GraphRenderer {
 		if (!this.radii) return;
 		for (let i = 0; i < this.sprites.length; i++) {
 			const depth = this.camera.enabled && this.depthScales ? this.depthScales[i] : 1;
-			const boost = i === this.hoveredId ? HOVER_SIZE_BOOST : 1;
+			const boost =
+				i === this.hoveredId
+					? HOVER_SIZE_BOOST
+					: this.highlightMask !== null && this.highlightMask[i] === 1
+						? HIGHLIGHT_SIZE_BOOST
+						: 1;
 			this.sprites[i].setSize(this.radii[i] * 2 * depth * boost);
 		}
 		if (this.hoveredId !== null) {
@@ -557,18 +566,33 @@ export class GraphRenderer {
 	 * Draw cluster bubbles: convex hull per node group with a soft fill.
 	 * Called on layout settle / toggle, not per frame.
 	 */
+	private hullGroups: readonly { nodeIds: readonly number[]; color: number }[] | null = null;
+
 	drawClusterHulls(groups: readonly { nodeIds: readonly number[]; color: number }[] | null): void {
+		this.hullGroups = groups;
+		this.redrawHulls();
+	}
+
+	/** Hulls live in projected space, so they must be rebuilt on every
+	 *  camera move — otherwise the bubbles stay behind in 3D. */
+	private redrawHulls(): void {
+		const groups = this.hullGroups;
 		const g = this.hullGraphics;
 		g.clear();
 		if (!groups || !this.positions) return;
 		for (const group of groups) {
 			if (group.nodeIds.length < 2) continue;
-			const points: Point[] = group.nodeIds.map((id) => ({
+			const visible = group.nodeIds.filter(
+				(id) => !(this.depthScales !== null && this.depthScales[id] === 0)
+			);
+			if (visible.length < 3) continue;
+			const points: Point[] = visible.map((id) => ({
 				x: this.positions![id * 2],
 				y: this.positions![id * 2 + 1],
 			}));
 			const hull = padHull(convexHull(points), HULL_PADDING);
 			if (hull.length < 3) continue;
+			if (hull.some((p) => !Number.isFinite(p.x) || !Number.isFinite(p.y))) continue;
 			g.moveTo(hull[0].x, hull[0].y);
 			for (let i = 1; i < hull.length; i++) g.lineTo(hull[i].x, hull[i].y);
 			g.closePath();
@@ -691,7 +715,12 @@ export class GraphRenderer {
 				sprite.position.set(this.positions[i * 2], this.positions[i * 2 + 1]);
 				if (threeD) {
 					const depth = this.depthScales![i];
-					const boost = i === this.hoveredId ? HOVER_SIZE_BOOST : 1;
+					const boost =
+						i === this.hoveredId
+							? HOVER_SIZE_BOOST
+							: this.highlightMask !== null && this.highlightMask[i] === 1
+								? HIGHLIGHT_SIZE_BOOST
+								: 1;
 					sprite.setSize(this.radii![i] * 2 * depth * boost);
 					sprite.zIndex = i === this.hoveredId ? Number.MAX_SAFE_INTEGER : depth;
 				}
