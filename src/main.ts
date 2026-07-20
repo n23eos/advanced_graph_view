@@ -54,7 +54,7 @@ const DEFAULT_SETTINGS: GraphInsightSettings = {
 			repel: 30, linkDistance: 25, centering: 0.09,
 			linkStrength: 0.15, velocityDecay: 0.55, elasticity: 0.4, freeLayout: false,
 		},
-		labels: { fontSize: 11, zoomThreshold: 0.9, maxCount: 100, scaleWithZoom: true },
+		labels: { show: true, fontSize: 11, zoomThreshold: 0.9, maxCount: 100, scaleWithZoom: true },
 		edges: { show: true, width: 1, opacity: 0.25 },
 		nodeScale: 1,
 		view3d: { enabled: false, depthSource: "physics", focal: 900 },

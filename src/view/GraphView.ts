@@ -695,7 +695,7 @@ export class GraphInsightView extends ItemView {
 		this.applyPhysics(this.plugin.settings.panel);
 		const panelState = this.plugin.settings.panel;
 		this.renderer.setLabelOptions(
-			panelState.labels.fontSize, panelState.labels.zoomThreshold,
+			panelState.labels.show, panelState.labels.fontSize, panelState.labels.zoomThreshold,
 			panelState.labels.maxCount, panelState.labels.scaleWithZoom
 		);
 		this.renderer.setEdgeStyle(panelState.edges.show, panelState.edges.width, panelState.edges.opacity);
@@ -1068,7 +1068,7 @@ export class GraphInsightView extends ItemView {
 		this.syncTimelineAndTrail(state);
 		this.applyPhysics(state);
 		this.renderer?.setLabelOptions(
-			state.labels.fontSize, state.labels.zoomThreshold,
+			state.labels.show, state.labels.fontSize, state.labels.zoomThreshold,
 			state.labels.maxCount, state.labels.scaleWithZoom
 		);
 		this.renderer?.setEdgeStyle(state.edges.show, state.edges.width, state.edges.opacity);

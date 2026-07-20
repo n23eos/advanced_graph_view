@@ -165,6 +165,8 @@ export class GraphRenderer {
 	private colors: ThemeColors | null = null;
 	private labelFontSize = DEFAULT_LABEL_FONT_SIZE;
 	private labelZoomThreshold = DEFAULT_LABEL_ZOOM_THRESHOLD;
+	/** Master label switch from the panel. */
+	private labelsVisible = true;
 	private labelMaxCount = LABEL_COUNT_LIMIT;
 	/** true: labels live in world scale and tiny ones hide (scamin). */
 	private labelScaleWithZoom = true;
@@ -784,7 +786,13 @@ export class GraphRenderer {
 
 		// Labels go to the most important (largest) nodes first, not to
 		// whichever happens to come first in file order.
-		const showLabels = scale >= this.labelZoomThreshold;
+		//
+		// In 3D the world is never scaled — the camera flies instead — so the
+		// flat zoom stays pinned at 1 and any threshold above 1 would wipe out
+		// every label. There the threshold applies per node against its
+		// perspective depth: raising it keeps labels on nearer nodes only.
+		const depthGated = this.camera.enabled && this.depthScales !== null;
+		const showLabels = this.labelsVisible && (depthGated || scale >= this.labelZoomThreshold);
 		const readable = !this.labelScaleWithZoom || this.labelFontSize * scale >= MIN_LABEL_SCREEN_PX;
 		let labelBudget = showLabels && readable ? this.labelMaxCount : 0;
 		let creationBudget = NEW_LABELS_PER_FRAME;
@@ -803,7 +811,8 @@ export class GraphRenderer {
 				if (labelBudget <= 0) break;
 				const hidden =
 					(this.hiddenMask !== null && this.hiddenMask[i] === 1) ||
-					(this.depthScales !== null && this.depthScales[i] === 0);
+					(this.depthScales !== null && this.depthScales[i] === 0) ||
+					(depthGated && this.depthScales![i] < this.labelZoomThreshold);
 				// No node-size gate: priority order already favors important
 				// nodes, and a small «Размер узлов» must not kill every label.
 				if (hidden || !isOnScreen(i)) continue;
@@ -843,8 +852,15 @@ export class GraphRenderer {
 	}
 
 	/** Change label rendering options; existing label cache is rebuilt lazily. */
-	setLabelOptions(fontSize: number, zoomThreshold: number, maxCount: number, scaleWithZoom: boolean): void {
+	setLabelOptions(
+		show: boolean,
+		fontSize: number,
+		zoomThreshold: number,
+		maxCount: number,
+		scaleWithZoom: boolean
+	): void {
 		const changed = fontSize !== this.labelFontSize;
+		this.labelsVisible = show;
 		this.labelFontSize = fontSize;
 		this.labelZoomThreshold = zoomThreshold;
 		this.labelMaxCount = maxCount;

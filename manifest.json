@@ -1,7 +1,7 @@
 {
 	"id": "graph-insight",
 	"name": "Graph Insight",
-	"version": "0.1.4",
+	"version": "0.1.5",
 	"minAppVersion": "1.13.0",
 	"description": "Advanced graph view with 3D visualization, clusters, PageRank and semantic links.",
 	"author": "n23eos",

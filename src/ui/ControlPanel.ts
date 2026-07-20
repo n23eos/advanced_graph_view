@@ -38,6 +38,8 @@ export interface View3DOptions {
 }
 
 export interface LabelOptions {
+	/** Master switch: off hides every label regardless of the other options. */
+	show: boolean;
 	fontSize: number;
 	/** Zoom level at which labels start to appear. */
 	zoomThreshold: number;
@@ -186,6 +188,9 @@ export class ControlPanel {
 		});
 
 		const textSection = this.section("Labels");
+		this.checkboxRow(textSection, "Show labels", this.state.labels.show, (value) => {
+			this.setState({ ...this.state, labels: { ...this.state.labels, show: value } });
+		});
 		this.physicsSlider(textSection, "Label size", 6, 18, 0.5, this.state.labels.fontSize, (value) => {
 			this.setState({ ...this.state, labels: { ...this.state.labels, fontSize: value } });
 		});
