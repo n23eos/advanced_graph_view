@@ -25,8 +25,8 @@ export class FilterChips {
 
 	constructor(host: HTMLElement, private readonly callbacks: FilterChipsCallbacks) {
 		this.root = host.createDiv({ cls: "graph-insight-filters" });
-		this.tagButton = this.makeButton("Теги");
-		this.folderButton = this.makeButton("Папки");
+		this.tagButton = this.makeButton("Tags");
+		this.folderButton = this.makeButton("Folders");
 		this.tagButton.addEventListener("click", () => this.toggleMenu("tags"));
 		this.folderButton.addEventListener("click", () => this.toggleMenu("folders"));
 
@@ -81,8 +81,8 @@ export class FilterChips {
 		const selected = kind === "tags" ? this.selection.tags : this.selection.folders;
 
 		const header = this.menu.createDiv({ cls: "graph-insight-filter-menu-header" });
-		header.createSpan({ text: kind === "tags" ? "Теги вайба" : "Папки вайба" });
-		const clear = header.createEl("button", { text: "Сбросить", cls: "graph-insight-searchbar-btn" });
+		header.createSpan({ text: kind === "tags" ? "Vault tags" : "Vault folders" });
+		const clear = header.createEl("button", { text: "Clear", cls: "graph-insight-searchbar-btn" });
 		clear.addEventListener("click", () => {
 			selected.clear();
 			this.emit();
@@ -90,7 +90,7 @@ export class FilterChips {
 		});
 
 		if (values.length === 0) {
-			this.menu.createDiv({ cls: "graph-insight-panel-hint", text: "Ничего не найдено" });
+			this.menu.createDiv({ cls: "graph-insight-panel-hint", text: "Nothing found" });
 			return;
 		}
 
@@ -119,8 +119,8 @@ export class FilterChips {
 	private refreshLabels(): void {
 		const tagCount = this.selection.tags.size;
 		const folderCount = this.selection.folders.size;
-		this.tagButton.setText(tagCount > 0 ? `Теги · ${tagCount}` : "Теги");
-		this.folderButton.setText(folderCount > 0 ? `Папки · ${folderCount}` : "Папки");
+		this.tagButton.setText(tagCount > 0 ? `Tags · ${tagCount}` : "Tags");
+		this.folderButton.setText(folderCount > 0 ? `Folders · ${folderCount}` : "Folders");
 		this.tagButton.toggleClass("is-active", tagCount > 0);
 		this.folderButton.toggleClass("is-active", folderCount > 0);
 	}

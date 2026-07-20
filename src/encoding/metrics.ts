@@ -41,23 +41,23 @@ export type CategoricalMetricId = "folder" | "tag" | "cluster";
 export type MetricId = NumericMetricId | CategoricalMetricId;
 
 export const NUMERIC_METRIC_LABELS: Record<NumericMetricId, string> = {
-	"opens-total": "Открытия (всё время)",
-	"opens-90": "Открытия (90 дней)",
-	"opens-30": "Открытия (30 дней)",
-	"opens-7": "Открытия (7 дней)",
-	"recency-edit": "Свежесть правки",
-	"age-created": "Возраст заметки",
-	"links-in": "Входящие ссылки",
-	"links-out": "Исходящие ссылки",
-	"links-total": "Все связи",
-	"file-size": "Размер файла",
+	"opens-total": "Opens (all time)",
+	"opens-90": "Opens (90 days)",
+	"opens-30": "Opens (30 days)",
+	"opens-7": "Opens (7 days)",
+	"recency-edit": "Edit recency",
+	"age-created": "Note age",
+	"links-in": "Inbound links",
+	"links-out": "Outbound links",
+	"links-total": "All links",
+	"file-size": "File size",
 	"pagerank": "PageRank",
 };
 
 export const CATEGORICAL_METRIC_LABELS: Record<CategoricalMetricId, string> = {
-	folder: "Папка",
-	tag: "Тег",
-	cluster: "Кластер",
+	folder: "Folder",
+	tag: "Tag",
+	cluster: "Cluster",
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;

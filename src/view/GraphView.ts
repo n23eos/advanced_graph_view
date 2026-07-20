@@ -268,7 +268,7 @@ export class GraphInsightView extends ItemView {
 			// the panel section is usually collapsed.
 			if (this.semanticChip) {
 				const busy = status.state !== "off" && status.state !== "ready";
-				this.semanticChip.setText(`Семантика · ${text}`);
+				this.semanticChip.setText(`Semantics · ${text}`);
 				this.semanticChip.toggleClass("is-error", status.state === "error");
 				if (busy || status.state === "error") this.semanticChip.show();
 				else this.semanticChip.hide();
@@ -279,20 +279,20 @@ export class GraphInsightView extends ItemView {
 
 	private formatSemanticStatus(status: SemanticStatus): string {
 		switch (status.state) {
-			case "off": return "Выключено";
+			case "off": return "Off";
 			case "loading-model": {
 				const mb = (n: number) => (n / 1024 / 1024).toFixed(0);
 				return status.total > 0
-					? `Загрузка модели: ${mb(status.done)} / ${mb(status.total)} МБ`
-					: "Загрузка модели…";
+					? `Downloading model: ${mb(status.done)} / ${mb(status.total)} MB`
+					: "Downloading model…";
 			}
-			case "indexing": return `Индексация: ${status.done} / ${status.total}`;
-			case "pairing": return `Поиск пар: ${status.done} / ${status.total}`;
+			case "indexing": return `Indexing: ${status.done} / ${status.total}`;
+			case "pairing": return `Finding pairs: ${status.done} / ${status.total}`;
 			case "ready":
 				return status.done > 0
-					? `Готово · ${status.done} заметок в индексе`
-					: "Готово · индекс пуст";
-			case "error": return `Ошибка: ${status.message ?? "?"}`;
+					? `Ready · ${status.done} notes indexed`
+					: "Ready · index is empty";
+			case "error": return `Error: ${status.message ?? "?"}`;
 		}
 	}
 
@@ -349,7 +349,7 @@ export class GraphInsightView extends ItemView {
 		const total = this.plugin.semantics.getPairs().length;
 		if (total > 0) {
 			this.panel?.setSemanticStatus(
-				`Показано ${drawn.length} пунктирных связей из ${total} похожих пар`
+				`Showing ${drawn.length} dashed links out of ${total} similar pairs`
 			);
 		}
 	}
@@ -361,18 +361,18 @@ export class GraphInsightView extends ItemView {
 		const nameB = basename(pair.pathB);
 		const menu = new Menu();
 		menu.addItem((item) =>
-			item.setTitle(`Близость ${(pair.similarity * 100).toFixed(0)}%: ${nameA} ↔ ${nameB}`).setDisabled(true)
+			item.setTitle(`Similarity ${(pair.similarity * 100).toFixed(0)}%: ${nameA} ↔ ${nameB}`).setDisabled(true)
 		);
 		menu.addSeparator();
-		menu.addItem((item) => item.setTitle(`Создать ссылку в «${nameA}»`).setIcon("link").onClick(
+		menu.addItem((item) => item.setTitle(`Create link in "${nameA}"`).setIcon("link").onClick(
 			() => void this.insertWikilink(pair.pathA, pair.pathB)
 		));
-		menu.addItem((item) => item.setTitle(`Создать ссылку в «${nameB}»`).setIcon("link").onClick(
+		menu.addItem((item) => item.setTitle(`Create link in "${nameB}"`).setIcon("link").onClick(
 			() => void this.insertWikilink(pair.pathB, pair.pathA)
 		));
 		menu.addSeparator();
-		menu.addItem((item) => item.setTitle(`Открыть «${nameA}»`).onClick(() => this.openPath(pair.pathA)));
-		menu.addItem((item) => item.setTitle(`Открыть «${nameB}»`).onClick(() => this.openPath(pair.pathB)));
+		menu.addItem((item) => item.setTitle(`Open "${nameA}"`).onClick(() => this.openPath(pair.pathA)));
+		menu.addItem((item) => item.setTitle(`Open "${nameB}"`).onClick(() => this.openPath(pair.pathB)));
 		menu.showAtMouseEvent(event);
 	}
 
@@ -392,7 +392,7 @@ export class GraphInsightView extends ItemView {
 			}
 			return `${content.trimEnd()}\n\n[[${link}]]\n`;
 		});
-		new Notice(`Ссылка [[${link}]] добавлена в ${basename(intoPath)}`);
+		new Notice(`Link [[${link}]] added to ${basename(intoPath)}`);
 	}
 
 	private openPath(path: string): void {
@@ -406,7 +406,7 @@ export class GraphInsightView extends ItemView {
 		const { paths, sims } = await this.plugin.semantics.similar(path, 10);
 		const menu = new Menu();
 		if (paths.length === 0) {
-			menu.addItem((item) => item.setTitle("Индекс ещё не готов").setDisabled(true));
+			menu.addItem((item) => item.setTitle("Index is not ready yet").setDisabled(true));
 		}
 		paths.forEach((similarPath, i) => {
 			menu.addItem((item) =>
@@ -423,7 +423,7 @@ export class GraphInsightView extends ItemView {
 		if (!this.model) return;
 		if (this.pathAnchor === null || this.pathAnchor === nodeId) {
 			this.pathAnchor = nodeId;
-			new Notice(`Старт: ${this.model.nodes[nodeId].name}. Кликни вторую заметку.`);
+			new Notice(`Start: ${this.model.nodes[nodeId].name}. Click the second note.`);
 			return;
 		}
 		const path = shortestPath(
@@ -434,7 +434,7 @@ export class GraphInsightView extends ItemView {
 		);
 		this.pathAnchor = null;
 		if (path.length === 0) {
-			new Notice("Между заметками нет пути по ссылкам");
+			new Notice("No link path between these notes");
 			this.renderer?.setAlphaFactors(null);
 			this.renderer?.setHighlightMask(null);
 			return;
@@ -450,7 +450,7 @@ export class GraphInsightView extends ItemView {
 		this.renderer?.setHighlightMask(highlight);
 		this.renderer?.zoomToNodes(path);
 		const names = path.map((id) => this.model!.nodes[id].name);
-		new Notice(`Путь из ${path.length} заметок: ${names.join(" → ")}`, 8000);
+		new Notice(`Path of ${path.length} notes: ${names.join(" → ")}`, 8000);
 	}
 
 	// ── Focus mode ────────────────────────────────────────────────────
@@ -474,7 +474,7 @@ export class GraphInsightView extends ItemView {
 		this.focusBar.empty();
 		this.focusBar.show();
 		this.focusBar.createSpan({
-			text: `Focus: ${this.model.nodes[this.focusRootId].name} · глубина ${this.focusDepth} · ${visible} узлов`,
+			text: `Focus: ${this.model.nodes[this.focusRootId].name} · depth ${this.focusDepth} · ${visible} nodes`,
 		});
 		const slider = this.focusBar.createEl("input", { type: "range" });
 		slider.min = "1";
@@ -602,22 +602,22 @@ export class GraphInsightView extends ItemView {
 		if (!this.model) return;
 		const node = this.model.nodes[nodeId];
 		const menu = new Menu();
-		menu.addItem((item) => item.setTitle("Открыть").setIcon("file-text").onClick(() => this.openNode(nodeId, false)));
-		menu.addItem((item) => item.setTitle("Открыть в новой вкладке").setIcon("file-plus").onClick(() => this.openNode(nodeId, true)));
-		menu.addItem((item) => item.setTitle("Focus-режим").setIcon("target").onClick(() => this.enterFocus(nodeId)));
+		menu.addItem((item) => item.setTitle("Open").setIcon("file-text").onClick(() => this.openNode(nodeId, false)));
+		menu.addItem((item) => item.setTitle("Open in new tab").setIcon("file-plus").onClick(() => this.openNode(nodeId, true)));
+		menu.addItem((item) => item.setTitle("Focus mode").setIcon("target").onClick(() => this.enterFocus(nodeId)));
 		if (this.plugin.settings.semantics.enabled) {
-			menu.addItem((item) => item.setTitle("Показать похожие").setIcon("search").onClick(
+			menu.addItem((item) => item.setTitle("Show similar").setIcon("search").onClick(
 				() => void this.showSimilarMenu(nodeId, event)
 			));
 		}
 		menu.addSeparator();
-		menu.addItem((item) => item.setTitle("Скрыть узел").setIcon("eye-off").onClick(() => {
+		menu.addItem((item) => item.setTitle("Hide node").setIcon("eye-off").onClick(() => {
 			this.hiddenNodes.add(nodeId);
 			this.panel?.setHiddenNodeCount(this.hiddenNodes.size);
 			this.recomputeVisual();
 		}));
 		const pinned = this.explicitPins.has(nodeId) || this.pinnedNodes.has(nodeId);
-		menu.addItem((item) => item.setTitle(pinned ? "Открепить" : "Закрепить позицию").setIcon("pin").onClick(() => {
+		menu.addItem((item) => item.setTitle(pinned ? "Unpin" : "Pin position").setIcon("pin").onClick(() => {
 			if (pinned) {
 				this.pinnedNodes.delete(nodeId);
 				this.explicitPins.delete(nodeId);
@@ -633,26 +633,26 @@ export class GraphInsightView extends ItemView {
 				}
 			}
 		}));
-		menu.addItem((item) => item.setTitle(`Путь: ${node.path}`).setDisabled(true));
+		menu.addItem((item) => item.setTitle(`Path: ${node.path}`).setDisabled(true));
 		menu.showAtMouseEvent(event);
 	}
 
 	private showLassoMenu(nodeIds: number[], event: PointerEvent): void {
 		if (!this.model) return;
 		const menu = new Menu();
-		menu.addItem((item) => item.setTitle(`Выбрано: ${nodeIds.length} заметок`).setDisabled(true));
+		menu.addItem((item) => item.setTitle(`Selected: ${nodeIds.length} notes`).setDisabled(true));
 		menu.addSeparator();
-		menu.addItem((item) => item.setTitle("Скрыть выбранные").setIcon("eye-off").onClick(() => {
+		menu.addItem((item) => item.setTitle("Hide selected").setIcon("eye-off").onClick(() => {
 			for (const id of nodeIds) this.hiddenNodes.add(id);
 			this.panel?.setHiddenNodeCount(this.hiddenNodes.size);
 			this.recomputeVisual();
 		}));
-		menu.addItem((item) => item.setTitle("Копировать список путей в буфер обмена").setIcon("copy").onClick(async () => {
+		menu.addItem((item) => item.setTitle("Copy paths to clipboard").setIcon("copy").onClick(async () => {
 			// Write-only, and only from this explicit menu action — the plugin
 			// never reads the clipboard.
 			const paths = nodeIds.map((id) => this.model!.nodes[id].path).join("\n");
 			await navigator.clipboard.writeText(paths);
-			new Notice(`Скопировано путей: ${nodeIds.length}`);
+			new Notice(`Copied ${nodeIds.length} paths`);
 		}));
 		menu.showAtMouseEvent(event);
 	}
@@ -669,7 +669,7 @@ export class GraphInsightView extends ItemView {
 		const name = query.length > 24 ? `${query.slice(0, 24)}…` : query;
 		await this.plugin.savePresets([...this.plugin.settings.presets, { name, query }]);
 		this.searchBar?.setPresets(this.plugin.settings.presets);
-		new Notice("Пресет сохранён");
+		new Notice("Filter preset saved");
 	}
 
 	private async rebuildGraph(): Promise<void> {
@@ -790,10 +790,10 @@ export class GraphInsightView extends ItemView {
 			let matched = 0;
 			for (const flag of this.overlayMask) matched += flag;
 			const names: string[] = [];
-			if (state.overlays.orphans) names.push("сироты");
-			if (state.overlays.deadEnds) names.push("тупики");
-			if (state.overlays.broken) names.push("битые ссылки");
-			new Notice(`Подсвечено ${matched} заметок: ${names.join(", ")}`);
+			if (state.overlays.orphans) names.push("orphans");
+			if (state.overlays.deadEnds) names.push("dead ends");
+			if (state.overlays.broken) names.push("broken links");
+			new Notice(`Highlighted ${matched} notes: ${names.join(", ")}`);
 		}
 	}
 
@@ -922,9 +922,9 @@ export class GraphInsightView extends ItemView {
 		this.tooltip.createDiv({ cls: "graph-insight-tooltip-title", text: node.name });
 		if (facts) {
 			const meta = this.tooltip.createDiv({ cls: "graph-insight-tooltip-meta" });
-			meta.createDiv({ text: `Открытий: ${facts.opensTotal} (30 дн: ${facts.opens30})` });
-			meta.createDiv({ text: `Ссылки: ← ${facts.inCount} · → ${facts.outCount}` });
-			meta.createDiv({ text: `Правка: ${new Date(facts.mtime).toLocaleDateString()}` });
+			meta.createDiv({ text: `Opens: ${facts.opensTotal} (30d: ${facts.opens30})` });
+			meta.createDiv({ text: `Links: ← ${facts.inCount} · → ${facts.outCount}` });
+			meta.createDiv({ text: `Edited: ${new Date(facts.mtime).toLocaleDateString()}` });
 		}
 		const rect = this.contentEl.getBoundingClientRect();
 		this.tooltip.style.left = `${clientX - rect.left + 12}px`;
@@ -954,7 +954,7 @@ export class GraphInsightView extends ItemView {
 					this.explicitPins.delete(nodeId);
 					this.pinnedNodes.delete(nodeId);
 					this.layout?.unpin(nodeId);
-					new Notice(`Откреплена: ${node.name}`);
+					new Notice(`Unpinned: ${node.name}`);
 				} else {
 					const positions = this.renderer?.currentPositions;
 					if (positions) {
@@ -963,7 +963,7 @@ export class GraphInsightView extends ItemView {
 							nodeId,
 							positions[nodeId * 3], positions[nodeId * 3 + 1], positions[nodeId * 3 + 2]
 						);
-						new Notice(`Закреплена: ${node.name}`);
+						new Notice(`Pinned: ${node.name}`);
 					}
 				}
 				return;
@@ -990,7 +990,7 @@ export class GraphInsightView extends ItemView {
 	async exportPngFile(): Promise<void> {
 		const blob = await this.renderer?.exportPng();
 		if (!blob) {
-			new Notice("Не удалось создать PNG");
+			new Notice("Could not create the PNG");
 			return;
 		}
 		downloadBlob("graph-insight.png", blob);
@@ -1022,7 +1022,7 @@ export class GraphInsightView extends ItemView {
 			onShowHiddenNodes: () => this.resetHiddenNodes(),
 			onPresetApply: (index) => void this.applyViewPreset(index),
 			onPresetSaveRequest: () => {
-				new PromptModal(this.app, "Название пресета вида", "Мой вид", (name) =>
+				new PromptModal(this.app, "View preset name", "My view", (name) =>
 					void this.saveViewPreset(name)
 				).open();
 			},
@@ -1036,7 +1036,7 @@ export class GraphInsightView extends ItemView {
 		const preset = this.plugin.settings.viewPresets[index];
 		if (!preset) return;
 		await this.updatePanelState(() => preset.panel);
-		new Notice(`Вид «${preset.name}» применён`);
+		new Notice(`View "${preset.name}" applied`);
 	}
 
 	private async saveViewPreset(name: string): Promise<void> {
@@ -1049,7 +1049,7 @@ export class GraphInsightView extends ItemView {
 			: [...existing, snapshot];
 		await this.plugin.saveViewPresets(next);
 		this.panel?.setViewPresets(next);
-		new Notice(at >= 0 ? `Пресет «${name}» перезаписан` : `Пресет «${name}» сохранён`);
+		new Notice(at >= 0 ? `Preset "${name}" overwritten` : `Preset "${name}" saved`);
 	}
 
 	private async deleteViewPreset(index: number): Promise<void> {
@@ -1059,7 +1059,7 @@ export class GraphInsightView extends ItemView {
 		const next = existing.filter((_, i) => i !== index);
 		await this.plugin.saveViewPresets(next);
 		this.panel?.setViewPresets(next);
-		new Notice(`Пресет «${preset.name}» удалён`);
+		new Notice(`Preset "${preset.name}" deleted`);
 	}
 
 	/** Apply every visual consequence of a panel state, in one place. */

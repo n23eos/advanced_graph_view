@@ -7,19 +7,19 @@ export class OnboardingModal extends Modal {
 	}
 
 	onOpen(): void {
-		this.titleEl.setText("Graph Insight — что здесь нового");
+		this.titleEl.setText("Graph Insight — what is different");
 		const steps: [string, string][] = [
 			[
-				"1 · Узлы кодируют метрики",
-				"Размер = PageRank (реальная важность), цвет = свежесть правки. Панель слева меняет назначение каналов: открытия, связи, возраст, папки, теги, кластеры.",
+				"1 · Nodes encode metrics",
+				"Size = PageRank (actual importance), color = edit recency. The panel on the left reassigns the channels: opens, links, age, folders, tags, clusters.",
 			],
 			[
-				"2 · Слои и фильтры",
-				"Слои подсвечивают сирот, тупики и битые ссылки. Поиск сверху понимает path:, tag:, opened:>10, edited:<30d. Даблклик по узлу — focus-режим, Shift+drag — lasso.",
+				"2 · Layers and filters",
+				"Layers highlight orphans, dead ends and broken links. The search bar understands path:, tag:, opened:>10, edited:<30d. Double-click a node for focus mode, Shift+drag for lasso.",
 			],
 			[
-				"3 · Семантические рёбра",
-				"Включи семантику в панели — пунктирные рёбра покажут заметки, которые похожи по смыслу, но НЕ связаны ссылкой. Клик по ребру — создать ссылку в один клик.",
+				"3 · Semantic edges",
+				"Enable semantics in the panel — dashed edges reveal notes that are similar in meaning but NOT linked. Click an edge to create the link.",
 			],
 		];
 		for (const [title, body] of steps) {
@@ -27,7 +27,7 @@ export class OnboardingModal extends Modal {
 			this.contentEl.createEl("p", { text: body });
 		}
 		const buttons = this.contentEl.createDiv({ cls: "modal-button-container" });
-		const done = buttons.createEl("button", { text: "Понятно, не показывать", cls: "mod-cta" });
+		const done = buttons.createEl("button", { text: "Got it, do not show again", cls: "mod-cta" });
 		done.addEventListener("click", () => {
 			this.onDismissForever();
 			this.close();

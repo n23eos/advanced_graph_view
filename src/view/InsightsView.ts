@@ -55,7 +55,7 @@ export class InsightsView extends ItemView {
 		el.empty();
 		el.addClass("graph-insight-insights");
 		el.createEl("h4", { text: "Graph Insights" });
-		el.createDiv({ cls: "graph-insight-panel-hint", text: "Считаю метрики…" });
+		el.createDiv({ cls: "graph-insight-panel-hint", text: "Computing metrics…" });
 	}
 
 	private render(metrics: GraphMetrics): void {
@@ -77,10 +77,10 @@ export class InsightsView extends ItemView {
 			row.createSpan({ cls: "graph-insight-insights-total-value", text: String(value) });
 			row.createSpan({ text: label });
 		};
-		totalRow("заметок", model.nodes.length);
-		totalRow("связей", model.edges.length);
-		totalRow("сирот", counts.orphans);
-		totalRow("битых", counts.broken);
+		totalRow("notes", model.nodes.length);
+		totalRow("links", model.edges.length);
+		totalRow("orphans", counts.orphans);
+		totalRow("broken", counts.broken);
 
 		this.renderSparkline(el);
 
@@ -90,7 +90,7 @@ export class InsightsView extends ItemView {
 			.filter((x) => x.opens > 0)
 			.sort((a, b) => b.opens - a.opens)
 			.slice(0, TOP_COUNT);
-		this.renderList(el, "Топ по открытиям (30 дней)", byOpens.map((x) => ({
+		this.renderList(el, "Top by opens (30 days)", byOpens.map((x) => ({
 			path: x.node.path,
 			label: x.node.name,
 			value: String(x.opens),
@@ -101,7 +101,7 @@ export class InsightsView extends ItemView {
 			.map((node) => ({ node, rank: metrics.pagerank[node.id] }))
 			.sort((a, b) => b.rank - a.rank)
 			.slice(0, TOP_COUNT);
-		this.renderList(el, "Топ по PageRank", byRank.map((x) => ({
+		this.renderList(el, "Top by PageRank", byRank.map((x) => ({
 			path: x.node.path,
 			label: x.node.name,
 			value: (x.rank * 1000).toFixed(1),
@@ -121,10 +121,10 @@ export class InsightsView extends ItemView {
 				return file ? now - file.stat.mtime > COOLING_DAYS * DAY_MS : false;
 			})
 			.slice(0, TOP_COUNT);
-		this.renderList(el, `Остывающие хабы (без правок ${COOLING_DAYS}+ дней)`, cooling.map((x) => ({
+		this.renderList(el, `Cooling hubs (untouched ${COOLING_DAYS}+ days)`, cooling.map((x) => ({
 			path: x.node.path,
 			label: x.node.name,
-			value: `${Math.floor((now - (files.get(x.node.path)?.stat.mtime ?? now)) / DAY_MS)} дн`,
+			value: `${Math.floor((now - (files.get(x.node.path)?.stat.mtime ?? now)) / DAY_MS)}d`,
 		})));
 
 		// Semantic link candidates
@@ -143,7 +143,7 @@ export class InsightsView extends ItemView {
 			.slice(0, TOP_COUNT);
 		if (candidates.length > 0) {
 			const section = el.createDiv();
-			section.createEl("h5", { text: "Кандидаты на связывание" });
+			section.createEl("h5", { text: "Link candidates" });
 			for (const pair of candidates) {
 				const row = section.createDiv({ cls: "graph-insight-insights-row" });
 				const label = row.createSpan({

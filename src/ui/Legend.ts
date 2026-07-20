@@ -46,7 +46,7 @@ export class Legend {
 
 	private renderGradient(metric: MetricId, presetId: string, customStops: number[] | null): void {
 		const preset = customStops
-			? { label: "Свой градиент", stops: customStops }
+			? { label: "Custom gradient", stops: customStops }
 			: SCALE_PRESETS[presetId] ?? SCALE_PRESETS["recency"];
 		this.root.createDiv({
 			cls: "graph-insight-legend-title",
@@ -55,8 +55,8 @@ export class Legend {
 		const bar = this.root.createDiv({ cls: "graph-insight-legend-bar" });
 		bar.style.background = `linear-gradient(to right, ${preset.stops.map(toHex).join(", ")})`;
 		const range = this.root.createDiv({ cls: "graph-insight-legend-range" });
-		range.createSpan({ text: "мин" });
-		range.createSpan({ text: "макс" });
+		range.createSpan({ text: "min" });
+		range.createSpan({ text: "max" });
 	}
 
 	private renderCategories(metric: MetricId, categories: string[]): void {
@@ -82,7 +82,7 @@ export class Legend {
 		}
 		const rest = counts.size - top.length;
 		if (rest > 0) {
-			this.root.createDiv({ cls: "graph-insight-legend-more", text: `и ещё ${rest}…` });
+			this.root.createDiv({ cls: "graph-insight-legend-more", text: `and ${rest} more…` });
 		}
 	}
 

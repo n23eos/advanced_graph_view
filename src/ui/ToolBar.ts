@@ -11,11 +11,11 @@ export interface ToolBarCallbacks {
 }
 
 const TOOLS: { id: CursorTool; icon: string; label: string; hint: string }[] = [
-	{ id: "open", icon: "📄", label: "Открыть", hint: "Клик открывает заметку" },
-	{ id: "links", icon: "🕸", label: "Связи", hint: "Клик показывает окружение на N шагов" },
-	{ id: "path", icon: "↔", label: "Путь", hint: "Клик по двум заметкам — кратчайшая цепочка между ними" },
-	{ id: "hide", icon: "🚫", label: "Скрыть", hint: "Клик убирает заметку с графа" },
-	{ id: "pin", icon: "📌", label: "Закрепить", hint: "Клик закрепляет/освобождает заметку" },
+	{ id: "open", icon: "📄", label: "Open", hint: "Click opens the note" },
+	{ id: "links", icon: "🕸", label: "Links", hint: "Click reveals the neighborhood N steps out" },
+	{ id: "path", icon: "↔", label: "Path", hint: "Click two notes to trace the shortest chain between them" },
+	{ id: "hide", icon: "🚫", label: "Hide", hint: "Click removes the note from the graph" },
+	{ id: "pin", icon: "📌", label: "Pin", hint: "Click pins or releases the note" },
 ];
 
 export class ToolBar {
@@ -44,7 +44,7 @@ export class ToolBar {
 		}
 
 		this.depthRow = this.root.createDiv({ cls: "graph-insight-toolbar-row" });
-		this.depthRow.createSpan({ cls: "graph-insight-panel-label", text: "Шагов" });
+		this.depthRow.createSpan({ cls: "graph-insight-panel-label", text: "Steps" });
 		const slider = this.depthRow.createEl("input", { type: "range" });
 		slider.min = "1";
 		slider.max = "6";

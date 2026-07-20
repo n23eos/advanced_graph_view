@@ -1,8 +1,8 @@
 {
 	"id": "graph-insight",
 	"name": "Graph Insight",
-	"version": "0.1.2",
-	"minAppVersion": "1.7.2",
+	"version": "0.1.3",
+	"minAppVersion": "1.13.0",
 	"description": "Advanced graph view with 3D visualization, clusters, PageRank and semantic links.",
 	"author": "n23eos",
 	"authorUrl": "https://github.com/n23eos",

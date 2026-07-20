@@ -7,23 +7,23 @@ export class SemanticConsentModal extends Modal {
 	}
 
 	onOpen(): void {
-		this.titleEl.setText("Включить семантику?");
+		this.titleEl.setText("Enable semantics?");
 		this.contentEl.createEl("p", {
 			text:
-				"Будет однократно скачана модель эмбеддингов all-MiniLM-L6-v2 (~25 МБ) " +
-				"с huggingface.co. После загрузки всё работает полностью офлайн, " +
-				"текст заметок никуда не отправляется.",
+				"The all-MiniLM-L6-v2 embedding model (~25 MB) will be downloaded once " +
+				"from huggingface.co. After that everything runs fully offline — your " +
+				"note text is never sent anywhere.",
 		});
 		this.contentEl.createEl("p", {
-			text: "Затем начнётся индексация вайба — прогресс виден в панели.",
+			text: "Indexing starts right after; progress is shown in the panel.",
 		});
 		const buttons = this.contentEl.createDiv({ cls: "modal-button-container" });
-		const accept = buttons.createEl("button", { text: "Скачать и включить", cls: "mod-cta" });
+		const accept = buttons.createEl("button", { text: "Download and enable", cls: "mod-cta" });
 		accept.addEventListener("click", () => {
 			this.close();
 			this.onAccept();
 		});
-		const cancel = buttons.createEl("button", { text: "Отмена" });
+		const cancel = buttons.createEl("button", { text: "Cancel" });
 		cancel.addEventListener("click", () => this.close());
 	}
 

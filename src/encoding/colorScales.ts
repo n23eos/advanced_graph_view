@@ -10,10 +10,10 @@ export interface ScalePreset {
 
 /** Value 0 → first stop (cold/low), value 1 → last stop (hot/high). */
 export const SCALE_PRESETS: Record<string, ScalePreset> = {
-	// Spec default: остывший серо-синий → тёплый янтарный.
-	recency: { label: "Янтарь → сталь", stops: [0x4a5568, 0x718096, 0xd69e2e, 0xf6ad55] },
-	heat: { label: "Огонь", stops: [0x2c5282, 0x805ad5, 0xe53e3e, 0xf6e05e] },
-	mono: { label: "Моно", stops: [0x4a5568, 0xe2e8f0] },
+	// Default: cooled slate blue → warm amber.
+	recency: { label: "Amber → steel", stops: [0x4a5568, 0x718096, 0xd69e2e, 0xf6ad55] },
+	heat: { label: "Fire", stops: [0x2c5282, 0x805ad5, 0xe53e3e, 0xf6e05e] },
+	mono: { label: "Mono", stops: [0x4a5568, 0xe2e8f0] },
 };
 
 /** 12 hues spread for categorical coloring (folders, tags, clusters later). */

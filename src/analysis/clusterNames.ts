@@ -68,6 +68,6 @@ export function nameClusters(clusters: readonly ClusterContent[]): string[] {
 		const parts: string[] = [];
 		if (topTag) parts.push(`#${topTag}`);
 		parts.push(...terms);
-		return parts.length > 0 ? parts.join(" · ") : `Кластер ${index + 1}`;
+		return parts.length > 0 ? parts.join(" · ") : `Cluster ${index + 1}`;
 	});
 }

@@ -45,7 +45,7 @@ export class SearchBar {
 		const inputWrap = this.root.createDiv({ cls: "graph-insight-searchbar-input" });
 		this.input = inputWrap.createEl("input", {
 			type: "text",
-			placeholder: "Поиск: слово, path: tag: content: opened:>10 -минус…",
+			placeholder: "Search: word, path: tag: content: opened:>10 -exclude…",
 		});
 		this.suggestBox = inputWrap.createDiv({ cls: "graph-insight-suggest" });
 		this.suggestBox.hide();
@@ -98,13 +98,13 @@ export class SearchBar {
 		});
 
 		const saveButton = this.root.createEl("button", { text: "★", cls: "graph-insight-searchbar-btn" });
-		saveButton.setAttribute("aria-label", "Сохранить фильтр как пресет");
+		saveButton.setAttribute("aria-label", "Save filter as preset");
 		saveButton.addEventListener("click", () => {
 			if (this.input.value.trim()) this.callbacks.onSavePreset(this.input.value.trim());
 		});
 
 		const clearButton = this.root.createEl("button", { text: "✕", cls: "graph-insight-searchbar-btn" });
-		clearButton.setAttribute("aria-label", "Сбросить фильтр");
+		clearButton.setAttribute("aria-label", "Clear filter");
 		clearButton.addEventListener("click", () => this.clear());
 	}
 
@@ -128,27 +128,27 @@ export class SearchBar {
 
 	private rebuildPresetSelect(): void {
 		this.presetSelect.empty();
-		const placeholder = this.presetSelect.createEl("option", { text: "Фильтры…", value: "" });
+		const placeholder = this.presetSelect.createEl("option", { text: "Filters…", value: "" });
 		placeholder.disabled = true;
 		placeholder.selected = true;
 
 		if (this.presets.length > 0) {
 			const group = this.presetSelect.createEl("optgroup");
-			group.label = "Пресеты";
+			group.label = "Presets";
 			for (const preset of this.presets) {
 				group.createEl("option", { text: preset.name, value: preset.query });
 			}
 		}
 		if (this.tags.length > 0) {
 			const group = this.presetSelect.createEl("optgroup");
-			group.label = "Теги";
+			group.label = "Tags";
 			for (const tag of this.tags) {
 				group.createEl("option", { text: `#${tag}`, value: `tag:${tag}` });
 			}
 		}
 		if (this.folders.length > 0) {
 			const group = this.presetSelect.createEl("optgroup");
-			group.label = "Папки";
+			group.label = "Folders";
 			for (const folder of this.folders) {
 				group.createEl("option", { text: folder, value: `path:"${folder}"` });
 			}

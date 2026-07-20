@@ -88,9 +88,9 @@ export interface PanelCallbacks {
 
 const NONE_VALUE = "__none__";
 const OVERLAY_LABELS: Record<keyof OverlayToggles, string> = {
-	orphans: "Сироты (никто не ссылается)",
-	deadEnds: "Тупики (нет исходящих)",
-	broken: "Битые ссылки",
+	orphans: "Orphans (nothing links here)",
+	deadEnds: "Dead ends (no outgoing links)",
+	broken: "Broken links",
 };
 
 export class ControlPanel {
@@ -137,7 +137,7 @@ export class ControlPanel {
 		this.body.empty();
 		this.overlayCountEls.clear();
 
-		const presets = this.section("Пресеты вида");
+		const presets = this.section("View presets");
 		const presetRow = presets.createDiv({ cls: "graph-insight-panel-row" });
 		this.presetSelect = presetRow.createEl("select", { cls: "dropdown" });
 		this.presetSelect.addEventListener("change", () => {
@@ -147,9 +147,9 @@ export class ControlPanel {
 			}
 		});
 		const presetButtons = presets.createDiv({ cls: "graph-insight-panel-row" });
-		const saveButton = presetButtons.createEl("button", { text: "Сохранить текущий" });
+		const saveButton = presetButtons.createEl("button", { text: "Save current" });
 		saveButton.addEventListener("click", () => this.callbacks.onPresetSaveRequest());
-		const deleteButton = presetButtons.createEl("button", { text: "Удалить" });
+		const deleteButton = presetButtons.createEl("button", { text: "Delete" });
 		deleteButton.addEventListener("click", () => {
 			const index = Number(this.presetSelect!.value);
 			if (this.presetSelect!.value !== "" && !Number.isNaN(index)) {
@@ -158,20 +158,20 @@ export class ControlPanel {
 		});
 		this.renderPresetOptions();
 
-		const view = this.section("Вид");
-		this.channelSelect(view, "Размер", this.state.channels.size, NUMERIC_METRIC_LABELS, (value) => {
+		const view = this.section("Appearance");
+		this.channelSelect(view, "Size", this.state.channels.size, NUMERIC_METRIC_LABELS, (value) => {
 			this.setState({ ...this.state, channels: { ...this.state.channels, size: value as NumericMetricId | null } });
 		});
 		this.channelSelect(
 			view,
-			"Цвет",
+			"Color",
 			this.state.channels.color,
 			{ ...NUMERIC_METRIC_LABELS, ...CATEGORICAL_METRIC_LABELS },
 			(value) => {
 				this.setState({ ...this.state, channels: { ...this.state.channels, color: value as MetricId | null } });
 			}
 		);
-		this.channelSelect(view, "Свечение", this.state.channels.glow, NUMERIC_METRIC_LABELS, (value) => {
+		this.channelSelect(view, "Glow", this.state.channels.glow, NUMERIC_METRIC_LABELS, (value) => {
 			this.setState({ ...this.state, channels: { ...this.state.channels, glow: value as NumericMetricId | null } });
 		});
 
@@ -180,9 +180,9 @@ export class ControlPanel {
 		const tuning = this.state.colorTuning;
 		this.channelSelect(
 			view,
-			"Шкала",
+			"Scale",
 			tuning.useCustom ? "__custom__" : tuning.preset,
-			{ ...presetLabels, __custom__: "Свой градиент" },
+			{ ...presetLabels, __custom__: "Custom gradient" },
 			(value) => {
 				const next =
 					value === "__custom__"
@@ -194,7 +194,7 @@ export class ControlPanel {
 		);
 
 		const colorsRow = view.createDiv({ cls: "graph-insight-panel-row" });
-		colorsRow.createSpan({ cls: "graph-insight-panel-label", text: "Мин → Макс" });
+		colorsRow.createSpan({ cls: "graph-insight-panel-label", text: "Min → Max" });
 		const pickers = colorsRow.createSpan({ cls: "graph-insight-colorpanel-pickers" });
 		const fromInput = pickers.createEl("input", { type: "color" });
 		fromInput.value = tuning.customFrom;
@@ -214,7 +214,7 @@ export class ControlPanel {
 		fromInput.addEventListener("input", onPick);
 		toInput.addEventListener("input", onPick);
 
-		this.physicsSlider(view, "Контраст цвета", 0.3, 3, 0.05, tuning.gamma, (value) => {
+		this.physicsSlider(view, "Color contrast", 0.3, 3, 0.05, tuning.gamma, (value) => {
 			this.setState({
 				...this.state,
 				colorTuning: { ...this.state.colorTuning, gamma: value },
@@ -224,48 +224,48 @@ export class ControlPanel {
 		if (!this.state.channels.color) {
 			view.createDiv({
 				cls: "graph-insight-panel-hint",
-				text: "Шкала и цвета применяются, когда канал «Цвет» выбран (сейчас «—»).",
+				text: "Scale and colors apply once the Color channel is set (currently \u201c\u2014\u201d).",
 			});
 		}
 
-		this.physicsSlider(view, "Размер узлов", 0.1, 2.5, 0.05, this.state.nodeScale, (value) => {
+		this.physicsSlider(view, "Node size", 0.1, 2.5, 0.05, this.state.nodeScale, (value) => {
 			this.setState({ ...this.state, nodeScale: value });
 		});
 
-		const textSection = this.section("Текст");
-		this.physicsSlider(textSection, "Размер подписей", 6, 18, 0.5, this.state.labels.fontSize, (value) => {
+		const textSection = this.section("Labels");
+		this.physicsSlider(textSection, "Label size", 6, 18, 0.5, this.state.labels.fontSize, (value) => {
 			this.setState({ ...this.state, labels: { ...this.state.labels, fontSize: value } });
 		});
-		this.physicsSlider(textSection, "Подписи при зуме от", 0.1, 2, 0.01, this.state.labels.zoomThreshold, (value) => {
+		this.physicsSlider(textSection, "Show labels from zoom", 0.1, 2, 0.01, this.state.labels.zoomThreshold, (value) => {
 			this.setState({ ...this.state, labels: { ...this.state.labels, zoomThreshold: value } });
 		});
-		this.physicsSlider(textSection, "Макс. подписей", 5, 400, 5, this.state.labels.maxCount, (value) => {
+		this.physicsSlider(textSection, "Max labels", 5, 400, 5, this.state.labels.maxCount, (value) => {
 			this.setState({ ...this.state, labels: { ...this.state.labels, maxCount: value } });
 		});
-		this.checkboxRow(textSection, "Текст мельчает с зумом", this.state.labels.scaleWithZoom, (value) => {
+		this.checkboxRow(textSection, "Labels shrink with zoom", this.state.labels.scaleWithZoom, (value) => {
 			this.setState({ ...this.state, labels: { ...this.state.labels, scaleWithZoom: value } });
 		});
 
-		const edgeSection = this.section("Связи");
-		this.checkboxRow(edgeSection, "Показывать связи", this.state.edges.show, (value) => {
+		const edgeSection = this.section("Links");
+		this.checkboxRow(edgeSection, "Show links", this.state.edges.show, (value) => {
 			this.setState({ ...this.state, edges: { ...this.state.edges, show: value } });
 		});
-		this.physicsSlider(edgeSection, "Толщина", 0.3, 8, 0.1, this.state.edges.width, (value) => {
+		this.physicsSlider(edgeSection, "Thickness", 0.3, 8, 0.1, this.state.edges.width, (value) => {
 			this.setState({ ...this.state, edges: { ...this.state.edges, width: value } });
 		});
-		this.physicsSlider(edgeSection, "Прозрачность", 0.05, 1, 0.05, this.state.edges.opacity, (value) => {
+		this.physicsSlider(edgeSection, "Opacity", 0.05, 1, 0.05, this.state.edges.opacity, (value) => {
 			this.setState({ ...this.state, edges: { ...this.state.edges, opacity: value } });
 		});
 
 		const threeD = this.section("3D");
-		this.checkboxRow(threeD, "Объёмный режим", this.state.view3d.enabled, (value) => {
+		this.checkboxRow(threeD, "3D mode", this.state.view3d.enabled, (value) => {
 			this.setState({ ...this.state, view3d: { ...this.state.view3d, enabled: value } });
 		});
 		this.channelSelect(
 			threeD,
-			"Глубина",
+			"Depth",
 			this.state.view3d.depthSource,
-			{ physics: "Физика (сфера)", cluster: "Кластер (этажи)", age: "Возраст" },
+			{ physics: "Physics (sphere)", cluster: "Cluster (layers)", age: "Age" },
 			(value) => {
 				this.setState({
 					...this.state,
@@ -274,18 +274,18 @@ export class ControlPanel {
 			},
 			false
 		);
-		this.physicsSlider(threeD, "Перспектива", 300, 2500, 50, this.state.view3d.focal, (value) => {
+		this.physicsSlider(threeD, "Perspective", 300, 2500, 50, this.state.view3d.focal, (value) => {
 			this.setState({ ...this.state, view3d: { ...this.state.view3d, focal: value } });
 		});
 		threeD.createDiv({
 			cls: "graph-insight-panel-hint",
-			text: "Вращение: тянуть пустое место. Alt+drag — пан.",
+			text: "Drag empty space to rotate. Alt+drag to pan.",
 		});
 
-		const layers = this.section("Слои");
+		const layers = this.section("Layers");
 		layers.createDiv({
 			cls: "graph-insight-panel-hint",
-			text: "Включённый слой подсвечивает подходящие заметки, остальные гаснут.",
+			text: "An active layer highlights matching notes and dims the rest.",
 		});
 		for (const key of Object.keys(OVERLAY_LABELS) as (keyof OverlayToggles)[]) {
 			const row = layers.createDiv({ cls: "graph-insight-panel-row" });
@@ -304,16 +304,16 @@ export class ControlPanel {
 		}
 
 		const hiddenRow = layers.createDiv({ cls: "graph-insight-panel-row" });
-		hiddenRow.createSpan({ cls: "graph-insight-panel-label", text: "Скрытые узлы" });
+		hiddenRow.createSpan({ cls: "graph-insight-panel-label", text: "Hidden nodes" });
 		this.hiddenCountEl = hiddenRow.createSpan({ cls: "graph-insight-panel-count", text: "0" });
-		const showHidden = hiddenRow.createEl("button", { text: "Показать", cls: "graph-insight-searchbar-btn" });
+		const showHidden = hiddenRow.createEl("button", { text: "Show all", cls: "graph-insight-searchbar-btn" });
 		showHidden.addEventListener("click", () => this.callbacks.onShowHiddenNodes());
 
 		const timelineRow = layers.createDiv({ cls: "graph-insight-panel-row" });
 		const timelineLabel = timelineRow.createEl("label", { cls: "graph-insight-panel-checkbox" });
 		const timelineCheckbox = timelineLabel.createEl("input", { type: "checkbox" });
 		timelineCheckbox.checked = this.state.showTimeline;
-		timelineLabel.createSpan({ text: "Таймлайн" });
+		timelineLabel.createSpan({ text: "Timeline" });
 		timelineCheckbox.addEventListener("change", () => {
 			this.setState({ ...this.state, showTimeline: timelineCheckbox.checked });
 		});
@@ -322,35 +322,35 @@ export class ControlPanel {
 		const trailLabel = trailRow.createEl("label", { cls: "graph-insight-panel-checkbox" });
 		const trailCheckbox = trailLabel.createEl("input", { type: "checkbox" });
 		trailCheckbox.checked = this.state.showTrail;
-		trailLabel.createSpan({ text: "Трейл сессии" });
+		trailLabel.createSpan({ text: "Session trail" });
 		const replay = trailRow.createEl("button", { text: "⟲", cls: "graph-insight-searchbar-btn" });
-		replay.setAttribute("aria-label", "Проиграть трейл заново");
+		replay.setAttribute("aria-label", "Replay the session trail");
 		replay.addEventListener("click", () => this.callbacks.onTrailReplay());
 		trailCheckbox.addEventListener("change", () => {
 			this.setState({ ...this.state, showTrail: trailCheckbox.checked });
 		});
 
-		const clusters = this.section("Кластеры");
+		const clusters = this.section("Clusters");
 		const bubbleRow = clusters.createDiv({ cls: "graph-insight-panel-row" });
 		const bubbleLabel = bubbleRow.createEl("label", { cls: "graph-insight-panel-checkbox" });
 		const bubbleCheckbox = bubbleLabel.createEl("input", { type: "checkbox" });
 		bubbleCheckbox.checked = this.state.showBubbles;
-		bubbleLabel.createSpan({ text: "Пузыри кластеров" });
+		bubbleLabel.createSpan({ text: "Cluster bubbles" });
 		bubbleCheckbox.addEventListener("change", () => {
 			this.setState({ ...this.state, showBubbles: bubbleCheckbox.checked });
 		});
-		clusters.createDiv({ cls: "graph-insight-panel-hint", text: "Список кластеров — панель справа" });
+		clusters.createDiv({ cls: "graph-insight-panel-hint", text: "Color nodes by Cluster to see groups" });
 
-		const semanticSection = this.section("Семантика");
+		const semanticSection = this.section("Semantics");
 		semanticSection.createDiv({
 			cls: "graph-insight-panel-hint",
-			text: "Пунктир = похожие по смыслу, но не связанные заметки. Клик по линии — создать ссылку.",
+			text: "Dashed lines connect notes that are similar in meaning but not linked. Click a line to create the link.",
 		});
 		const enableRow = semanticSection.createDiv({ cls: "graph-insight-panel-row" });
 		const enableLabel = enableRow.createEl("label", { cls: "graph-insight-panel-checkbox" });
 		const enableCheckbox = enableLabel.createEl("input", { type: "checkbox" });
 		enableCheckbox.checked = this.semantic.enabled;
-		enableLabel.createSpan({ text: "Включить" });
+		enableLabel.createSpan({ text: "Enable" });
 		enableCheckbox.addEventListener("change", () => {
 			this.semantic = { ...this.semantic, enabled: enableCheckbox.checked };
 			this.callbacks.onSemanticChange(this.semantic);
@@ -360,14 +360,14 @@ export class ControlPanel {
 		const edgesLabel = edgesRow.createEl("label", { cls: "graph-insight-panel-checkbox" });
 		const edgesCheckbox = edgesLabel.createEl("input", { type: "checkbox" });
 		edgesCheckbox.checked = this.semantic.showEdges;
-		edgesLabel.createSpan({ text: "Семантические рёбра" });
+		edgesLabel.createSpan({ text: "Semantic edges" });
 		edgesCheckbox.addEventListener("change", () => {
 			this.semantic = { ...this.semantic, showEdges: edgesCheckbox.checked };
 			this.callbacks.onSemanticChange(this.semantic);
 		});
 
 		const thresholdRow = semanticSection.createDiv({ cls: "graph-insight-panel-row" });
-		thresholdRow.createSpan({ cls: "graph-insight-panel-label", text: "Порог" });
+		thresholdRow.createSpan({ cls: "graph-insight-panel-label", text: "Threshold" });
 		const thresholdValue = thresholdRow.createSpan({
 			cls: "graph-insight-panel-count",
 			text: this.semantic.threshold.toFixed(2),
@@ -387,29 +387,29 @@ export class ControlPanel {
 			text: "",
 		});
 
-		const physics = this.section("Физика");
-		this.physicsSlider(physics, "Разлёт узлов (отталкивание)", 1, 300, 1, this.state.physics.repel, (value) => {
+		const physics = this.section("Physics");
+		this.physicsSlider(physics, "Node spread (repulsion)", 1, 300, 1, this.state.physics.repel, (value) => {
 			this.setState({ ...this.state, physics: { ...this.state.physics, repel: value } });
 		});
-		this.physicsSlider(physics, "Длина связей", 5, 300, 5, this.state.physics.linkDistance, (value) => {
+		this.physicsSlider(physics, "Link length", 5, 300, 5, this.state.physics.linkDistance, (value) => {
 			this.setState({ ...this.state, physics: { ...this.state.physics, linkDistance: value } });
 		});
-		this.physicsSlider(physics, "Притяжение к центру", 0, 0.5, 0.005, this.state.physics.centering, (value) => {
+		this.physicsSlider(physics, "Pull to center", 0, 0.5, 0.005, this.state.physics.centering, (value) => {
 			this.setState({ ...this.state, physics: { ...this.state.physics, centering: value } });
 		});
-		this.physicsSlider(physics, "Сила связей", 0.05, 2, 0.05, this.state.physics.linkStrength, (value) => {
+		this.physicsSlider(physics, "Link strength", 0.05, 2, 0.05, this.state.physics.linkStrength, (value) => {
 			this.setState({ ...this.state, physics: { ...this.state.physics, linkStrength: value } });
 		});
-		this.physicsSlider(physics, "Плавность", 0.1, 0.8, 0.05, this.state.physics.velocityDecay, (value) => {
+		this.physicsSlider(physics, "Smoothness", 0.1, 0.8, 0.05, this.state.physics.velocityDecay, (value) => {
 			this.setState({ ...this.state, physics: { ...this.state.physics, velocityDecay: value } });
 		});
-		this.physicsSlider(physics, "Упругость связей", 0, 1, 0.05, this.state.physics.elasticity, (value) => {
+		this.physicsSlider(physics, "Link elasticity", 0, 1, 0.05, this.state.physics.elasticity, (value) => {
 			this.setState({ ...this.state, physics: { ...this.state.physics, elasticity: value } });
 		});
-		this.checkboxRow(physics, "Свободная раскладка", this.state.physics.freeLayout, (value) => {
+		this.checkboxRow(physics, "Free layout", this.state.physics.freeLayout, (value) => {
 			this.setState({ ...this.state, physics: { ...this.state.physics, freeLayout: value } });
 		});
-		const button = physics.createEl("button", { text: "Собрать облако заново" });
+		const button = physics.createEl("button", { text: "Re-form the cloud" });
 		button.addEventListener("click", () => this.callbacks.onReheat());
 	}
 
@@ -464,7 +464,7 @@ export class ControlPanel {
 		if (!this.presetSelect) return;
 		this.presetSelect.empty();
 		const placeholder = this.presetSelect.createEl("option", {
-			text: this.viewPresets.length > 0 ? "Выбрать пресет…" : "Пресетов пока нет",
+			text: this.viewPresets.length > 0 ? "Choose a preset…" : "No presets yet",
 			value: "",
 		});
 		placeholder.selected = true;
@@ -485,7 +485,7 @@ export class ControlPanel {
 
 	/** Sections are accordions; everything except «Вид» starts collapsed.
 	 *  Static: the set survives panel rebuilds (updatePanelState). */
-	private static openSections = new Set<string>(["Пресеты вида", "Вид"]);
+	private static openSections = new Set<string>(["View presets", "Appearance"]);
 	private get openSections(): Set<string> {
 		return ControlPanel.openSections;
 	}

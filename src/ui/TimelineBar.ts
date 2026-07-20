@@ -47,8 +47,8 @@ export class TimelineBar {
 		this.labelEl = this.root.createSpan({ cls: "graph-insight-timeline-label" });
 
 		const modeSelect = this.root.createEl("select", { cls: "dropdown" });
-		modeSelect.createEl("option", { text: "Создание", value: "created" });
-		modeSelect.createEl("option", { text: "Изменение", value: "modified" });
+		modeSelect.createEl("option", { text: "Created", value: "created" });
+		modeSelect.createEl("option", { text: "Modified", value: "modified" });
 		modeSelect.addEventListener("change", () => {
 			this.mode = modeSelect.value as TimelineMode;
 			this.callbacks.onModeChange(this.mode);

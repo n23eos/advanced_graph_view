@@ -27,9 +27,9 @@ export class PromptModal extends Modal {
 
 		new Setting(this.contentEl)
 			.addButton((button) =>
-				button.setButtonText("Сохранить").setCta().onClick(() => this.submit())
+				button.setButtonText("Save").setCta().onClick(() => this.submit())
 			)
-			.addButton((button) => button.setButtonText("Отмена").onClick(() => this.close()));
+			.addButton((button) => button.setButtonText("Cancel").onClick(() => this.close()));
 	}
 
 	private submit(): void {
