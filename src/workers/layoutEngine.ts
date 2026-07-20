@@ -50,7 +50,7 @@ export type EngineInMessage =
 	| { type: "params"; params: PhysicsParams }
 	| { type: "step" }
 	| { type: "stop" }
-	| { type: "reheat" }
+	| { type: "reheat"; alpha?: number }
 	| { type: "drag-start" }
 	| { type: "drag-end" }
 	| { type: "pin"; id: number; x: number; y: number; z?: number }
@@ -75,9 +75,13 @@ const FRAME_INTERVAL_MS = 33;
 // noise makes the neighborhood visibly vibrate; with strong damping the
 // pull propagates as a smooth cascade that fades with graph distance.
 const DRAG_INTERVAL_MS = 16;
-const DRAG_ALPHA_TARGET = 0.08;
-const DRAG_EXTRA_DAMPING = 0.25;
-const MAX_DRAG_DAMPING = 0.8;
+const DRAG_ALPHA_TARGET = 0.18;
+const DRAG_EXTRA_DAMPING = 0.15;
+const MAX_DRAG_DAMPING = 0.75;
+/** Links stiffen while dragging so neighbors follow the pointer harder;
+ *  the cascade still fades with graph distance. */
+const DRAG_LINK_BOOST = 2.2;
+const MAX_DRAG_LINK_STRENGTH = 1.5;
 // Tuned for compactness: bounded-range repulsion + noticeable centering,
 // otherwise sparse vaults explode into a huge sparse cloud.
 const CENTERING_STRENGTH = 0.04;
@@ -260,7 +264,7 @@ export function createLayoutEngine(
 					break;
 				case "reheat":
 					if (simulation) {
-						simulation.alpha(0.5);
+						simulation.alpha(message.alpha ?? 0.5);
 						if (!running) startTimer(FRAME_INTERVAL_MS);
 					}
 					break;
@@ -271,6 +275,9 @@ export function createLayoutEngine(
 						simulation.velocityDecay(
 							Math.min(MAX_DRAG_DAMPING, params.velocityDecay + DRAG_EXTRA_DAMPING)
 						);
+						(simulation.force("link") as ReturnType<typeof forceLink>).strength(
+							Math.min(MAX_DRAG_LINK_STRENGTH, params.linkStrength * DRAG_LINK_BOOST)
+						);
 						startTimer(DRAG_INTERVAL_MS);
 					}
 					break;
@@ -278,6 +285,8 @@ export function createLayoutEngine(
 					if (simulation) {
 						simulation.alphaTarget(0);
 						simulation.velocityDecay(params.velocityDecay);
+						(simulation.force("link") as ReturnType<typeof forceLink>)
+							.strength(params.linkStrength);
 						if (running) startTimer(FRAME_INTERVAL_MS);
 					}
 					break;

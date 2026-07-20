@@ -70,8 +70,9 @@ export class LayoutClient {
 		this.worker?.postMessage({ type: "drag-end" } satisfies EngineInMessage);
 	}
 
-	reheat(): void {
-		this.worker?.postMessage({ type: "reheat" } satisfies EngineInMessage);
+	/** alpha 1 = full re-layout, 0.5 = nudge. */
+	reheat(alpha?: number): void {
+		this.worker?.postMessage({ type: "reheat", alpha } satisfies EngineInMessage);
 	}
 
 	stop(): void {

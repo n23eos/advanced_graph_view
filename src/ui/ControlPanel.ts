@@ -320,7 +320,7 @@ export class ControlPanel {
 		this.checkboxRow(physics, "Свободная раскладка", this.state.physics.freeLayout, (value) => {
 			this.setState({ ...this.state, physics: { ...this.state.physics, freeLayout: value } });
 		});
-		const button = physics.createEl("button", { text: "Перезапустить симуляцию" });
+		const button = physics.createEl("button", { text: "Собрать облако заново" });
 		button.addEventListener("click", () => this.callbacks.onReheat());
 	}
 

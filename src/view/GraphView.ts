@@ -42,7 +42,10 @@ export class GraphInsightView extends ItemView {
 	private clusterOrder: number[] = [];
 	private hiddenClusters = new Set<number>();
 	private hiddenNodes = new Set<number>();
+	/** Temporary pins left behind by dragging (released on regroup). */
 	private pinnedNodes = new Set<number>();
+	/** Explicit «Закрепить позицию» pins — survive regrouping. */
+	private explicitPins = new Set<number>();
 	private tooltip: HTMLElement | null = null;
 	private panel: ControlPanel | null = null;
 	private colorPanel: ColorPanel | null = null;
@@ -504,15 +507,16 @@ export class GraphInsightView extends ItemView {
 			this.panel?.setHiddenNodeCount(this.hiddenNodes.size);
 			this.recomputeVisual();
 		}));
-		const pinned = this.pinnedNodes.has(nodeId);
+		const pinned = this.explicitPins.has(nodeId) || this.pinnedNodes.has(nodeId);
 		menu.addItem((item) => item.setTitle(pinned ? "Открепить" : "Закрепить позицию").setIcon("pin").onClick(() => {
 			if (pinned) {
 				this.pinnedNodes.delete(nodeId);
+				this.explicitPins.delete(nodeId);
 				this.layout?.unpin(nodeId);
 			} else {
 				const positions = this.renderer?.currentPositions;
 				if (positions) {
-					this.pinnedNodes.add(nodeId);
+					this.explicitPins.add(nodeId);
 					this.layout?.pin(
 						nodeId,
 						positions[nodeId * 3], positions[nodeId * 3 + 1], positions[nodeId * 3 + 2]
@@ -846,7 +850,7 @@ export class GraphInsightView extends ItemView {
 				void this.plugin.savePanelState(next);
 				this.applyAllPanelState(next);
 			},
-			onReheat: () => this.layout?.reheat(),
+			onReheat: () => this.regroup(),
 			onClusterClick: (index) => this.zoomToCluster(index),
 			onClusterToggle: (index) => this.toggleCluster(index),
 			onSemanticChange: (settings) => this.handleSemanticSettings(settings),
@@ -933,13 +937,35 @@ export class GraphInsightView extends ItemView {
 
 	private lastPhysics = "";
 
+	private lastFreeLayout: boolean | null = null;
+
 	/** Push slider values into the layout worker; reheat so they take hold. */
 	private applyPhysics(state: PanelState): void {
 		const key = JSON.stringify(state.physics);
 		if (key === this.lastPhysics) return;
 		this.lastPhysics = key;
 		this.layout?.setParams(state.physics);
+
+		// Toggling «Свободно» re-forms the whole layout: drop the temporary
+		// pins left by dragging (explicit pins stay) and run the simulation
+		// at full strength so everything flies back into a cloud.
+		const freeChanged =
+			this.lastFreeLayout !== null && this.lastFreeLayout !== state.physics.freeLayout;
+		this.lastFreeLayout = state.physics.freeLayout;
+		if (freeChanged) {
+			this.regroup();
+			return;
+		}
 		this.layout?.reheat();
+	}
+
+	/** Release drag pins and re-run the layout from scratch. */
+	private regroup(): void {
+		for (const id of this.pinnedNodes) {
+			if (!this.explicitPins.has(id)) this.layout?.unpin(id);
+		}
+		this.pinnedNodes.clear();
+		this.layout?.reheat(1);
 	}
 
 	private resetHiddenNodes(): void {

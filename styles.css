@@ -457,9 +457,13 @@
 	margin: 0;
 }
 
-/* Legend moves up so the camera widget owns the corner */
+/* Legend sits above the camera widget, which owns the bottom-right corner.
+   Widget height grew (eye row + X/Y sliders + fit button), so the legend
+   needs a matching offset and its own scroll for long category lists. */
 .graph-insight-legend {
-	bottom: 84px;
+	bottom: 172px;
+	max-height: calc(100% - 200px);
+	overflow-y: auto;
 }
 
 /* Eye toggle hides every floating UI element except the camera widget */
