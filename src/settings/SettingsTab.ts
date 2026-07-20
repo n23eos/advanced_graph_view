@@ -161,7 +161,7 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 			hashes: [],
 		});
 		await this.plugin.dataStore.writeBinaryFile("embeddings.bin", new ArrayBuffer(0));
-		new Notice("Graph Insight data reset");
+		new Notice("Advanced Graph View data reset");
 	}
 }
 

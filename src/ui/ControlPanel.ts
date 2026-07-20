@@ -106,7 +106,7 @@ export class ControlPanel {
 		this.root = host.createDiv({ cls: "graph-insight-panel" });
 
 		const header = this.root.createDiv({ cls: "graph-insight-panel-header" });
-		header.createSpan({ text: "Graph Insight" });
+		header.createSpan({ text: "Advanced Graph View" });
 		const toggle = header.createSpan({ cls: "graph-insight-panel-toggle", text: state.collapsed ? "+" : "–" });
 		header.addEventListener("click", () => {
 			this.setState({ ...this.state, collapsed: !this.state.collapsed });

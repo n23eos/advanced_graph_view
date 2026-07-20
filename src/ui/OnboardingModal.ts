@@ -7,7 +7,7 @@ export class OnboardingModal extends Modal {
 	}
 
 	onOpen(): void {
-		this.titleEl.setText("Graph Insight — what is different");
+		this.titleEl.setText("Advanced Graph View — what is different");
 		const steps: [string, string][] = [
 			[
 				"1 · Nodes encode metrics",

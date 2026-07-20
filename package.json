@@ -1,6 +1,6 @@
 {
 	"name": "graph-insight",
-	"version": "0.1.5",
+	"version": "0.1.6",
 	"description": "Advanced graph view plugin for Obsidian",
 	"main": "main.js",
 	"scripts": {

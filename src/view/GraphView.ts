@@ -94,7 +94,7 @@ export class GraphInsightView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return "Graph Insight";
+		return "Advanced Graph View";
 	}
 
 	getIcon(): string {

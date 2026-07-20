@@ -146,7 +146,7 @@ export default class GraphInsightPlugin extends Plugin {
 			name: "Open graph view",
 			callback: () => void this.activateView(),
 		});
-		this.addRibbonIcon("git-fork", "Open Graph Insight", () => void this.activateView());
+		this.addRibbonIcon("git-fork", "Open Advanced Graph View", () => void this.activateView());
 
 		this.addCommand({
 			id: "focus-current-note",
