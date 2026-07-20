@@ -9,7 +9,7 @@ import {
 	type MetricId,
 	type NumericMetricId,
 } from "../encoding/metrics";
-import { SCALE_PRESETS } from "../encoding/colorScales";
+import { DEFAULT_PRESET_ID, SCALE_PRESETS } from "../encoding/colorScales";
 import type { OverlayCounts, OverlayToggles } from "../analysis/overlays";
 import type { SemanticSettings } from "../main";
 import type { PhysicsParams } from "../workers/layoutEngine";
@@ -28,15 +28,6 @@ export interface PanelState {
 	/** Multiplier on node circle radius. */
 	nodeScale: number;
 	view3d: View3DOptions;
-	colorTuning: ColorTuningState;
-}
-
-export interface ColorTuningState {
-	preset: string;
-	useCustom: boolean;
-	customFrom: string;
-	customTo: string;
-	gamma: number;
 }
 
 export interface View3DOptions {
@@ -84,6 +75,8 @@ export interface PanelCallbacks {
 	onSemanticChange(settings: SemanticSettings): void;
 	onTrailReplay(): void;
 	onShowHiddenNodes(): void;
+	/** Clear every selection, highlight, focus, filter and hidden node. */
+	onResetViewState(): void;
 }
 
 const NONE_VALUE = "__none__";
@@ -177,54 +170,14 @@ export class ControlPanel {
 
 		const presetLabels: Record<string, string> = {};
 		for (const [id, preset] of Object.entries(SCALE_PRESETS)) presetLabels[id] = preset.label;
-		const tuning = this.state.colorTuning;
-		this.channelSelect(
-			view,
-			"Scale",
-			tuning.useCustom ? "__custom__" : tuning.preset,
-			{ ...presetLabels, __custom__: "Custom gradient" },
-			(value) => {
-				const next =
-					value === "__custom__"
-						? { ...tuning, useCustom: true }
-						: { ...tuning, useCustom: false, preset: value ?? "recency" };
-				this.setState({ ...this.state, colorTuning: next, colorPreset: next.preset });
-			},
-			false
-		);
-
-		const colorsRow = view.createDiv({ cls: "graph-insight-panel-row" });
-		colorsRow.createSpan({ cls: "graph-insight-panel-label", text: "Min → Max" });
-		const pickers = colorsRow.createSpan({ cls: "graph-insight-colorpanel-pickers" });
-		const fromInput = pickers.createEl("input", { type: "color" });
-		fromInput.value = tuning.customFrom;
-		const toInput = pickers.createEl("input", { type: "color" });
-		toInput.value = tuning.customTo;
-		const onPick = () => {
-			this.setState({
-				...this.state,
-				colorTuning: {
-					...this.state.colorTuning,
-					useCustom: true,
-					customFrom: fromInput.value,
-					customTo: toInput.value,
-				},
-			});
-		};
-		fromInput.addEventListener("input", onPick);
-		toInput.addEventListener("input", onPick);
-
-		this.physicsSlider(view, "Color contrast", 0.3, 3, 0.05, tuning.gamma, (value) => {
-			this.setState({
-				...this.state,
-				colorTuning: { ...this.state.colorTuning, gamma: value },
-			});
-		});
+		this.channelSelect(view, "Color scheme", this.state.colorPreset, presetLabels, (value) => {
+			this.setState({ ...this.state, colorPreset: value ?? DEFAULT_PRESET_ID });
+		}, false);
 
 		if (!this.state.channels.color) {
 			view.createDiv({
 				cls: "graph-insight-panel-hint",
-				text: "Scale and colors apply once the Color channel is set (currently \u201c\u2014\u201d).",
+				text: "Pick a metric for the Color channel to colorize nodes.",
 			});
 		}
 
@@ -250,10 +203,10 @@ export class ControlPanel {
 		this.checkboxRow(edgeSection, "Show links", this.state.edges.show, (value) => {
 			this.setState({ ...this.state, edges: { ...this.state.edges, show: value } });
 		});
-		this.physicsSlider(edgeSection, "Thickness", 0.3, 8, 0.1, this.state.edges.width, (value) => {
+		this.physicsSlider(edgeSection, "Thickness", 0.05, 8, 0.05, this.state.edges.width, (value) => {
 			this.setState({ ...this.state, edges: { ...this.state.edges, width: value } });
 		});
-		this.physicsSlider(edgeSection, "Opacity", 0.05, 1, 0.05, this.state.edges.opacity, (value) => {
+		this.physicsSlider(edgeSection, "Opacity", 0.02, 1, 0.01, this.state.edges.opacity, (value) => {
 			this.setState({ ...this.state, edges: { ...this.state.edges, opacity: value } });
 		});
 
@@ -308,6 +261,9 @@ export class ControlPanel {
 		this.hiddenCountEl = hiddenRow.createSpan({ cls: "graph-insight-panel-count", text: "0" });
 		const showHidden = hiddenRow.createEl("button", { text: "Show all", cls: "graph-insight-searchbar-btn" });
 		showHidden.addEventListener("click", () => this.callbacks.onShowHiddenNodes());
+
+		const resetButton = layers.createEl("button", { text: "Reset highlights and hidden" });
+		resetButton.addEventListener("click", () => this.callbacks.onResetViewState());
 
 		const timelineRow = layers.createDiv({ cls: "graph-insight-panel-row" });
 		const timelineLabel = timelineRow.createEl("label", { cls: "graph-insight-panel-checkbox" });

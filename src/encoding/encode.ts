@@ -2,7 +2,7 @@
  * Turns per-node facts + channel assignments into concrete render inputs:
  * radius, tint, glow alpha for every node.
  */
-import { categoryColor, sampleGradient, SCALE_PRESETS } from "./colorScales";
+import { categoryColor, resolvePreset, sampleGradient } from "./colorScales";
 import {
 	computeMetric,
 	isCategoricalMetric,
@@ -43,19 +43,11 @@ function numericColumn(nodes: readonly NodeFacts[], metric: NumericMetricId, now
 	return normalizeValues(raw, { log: LOG_METRICS.has(metric) });
 }
 
-export interface ColorTuning {
-	/** Gamma on the normalized color value: >1 boosts contrast at the top. */
-	gamma: number;
-	/** Two-stop custom gradient overriding the preset, or null. */
-	customStops: number[] | null;
-}
-
 export function buildEncoding(
 	nodes: readonly NodeFacts[],
 	channels: ChannelAssignment,
 	colorPreset: string,
-	now: number,
-	tuning?: ColorTuning
+	now: number
 ): NodeEncoding {
 	const count = nodes.length;
 	const sizes = new Float32Array(count).fill(DEFAULT_RADIUS);
@@ -71,19 +63,17 @@ export function buildEncoding(
 	}
 
 	if (channels.color) {
+		const preset = resolvePreset(colorPreset);
 		if (isCategoricalMetric(channels.color)) {
 			categories = nodes.map((f) => String(computeMetric(channels.color!, f, now)));
 			for (let i = 0; i < count; i++) {
-				tints[i] = categories[i] ? categoryColor(categories[i]) : -1;
+				tints[i] = categories[i] ? categoryColor(categories[i], preset.categories) : -1;
 			}
 		} else {
-			const stops =
-				tuning?.customStops ?? (SCALE_PRESETS[colorPreset] ?? SCALE_PRESETS["recency"]).stops;
-			const gamma = tuning?.gamma ?? 1;
+			const stops = preset.stops;
 			const values = numericColumn(nodes, channels.color, now);
 			for (let i = 0; i < count; i++) {
-				const value = gamma === 1 ? values[i] : Math.pow(values[i], gamma);
-				tints[i] = sampleGradient(stops, value);
+				tints[i] = sampleGradient(stops, values[i]);
 			}
 		}
 	}

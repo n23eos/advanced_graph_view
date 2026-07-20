@@ -1,5 +1,12 @@
 import { describe, expect, test } from "vitest";
-import { categoryColor, CATEGORY_PALETTE, sampleGradient, SCALE_PRESETS } from "./colorScales";
+import {
+	categoryColor,
+	CATEGORY_PALETTE,
+	DEFAULT_PRESET_ID,
+	resolvePreset,
+	sampleGradient,
+	SCALE_PRESETS,
+} from "./colorScales";
 
 describe("sampleGradient", () => {
 	test("returns first stop at 0 and last stop at 1", () => {
@@ -35,5 +42,38 @@ describe("categoryColor", () => {
 
 	test("colors come from the palette", () => {
 		expect(CATEGORY_PALETTE).toContain(categoryColor("anything"));
+	});
+
+	test("uses the scheme palette when one is passed", () => {
+		// Arrange
+		const palette = SCALE_PRESETS["galaxy"].categories;
+
+		// Act
+		const color = categoryColor("projects", palette);
+
+		// Assert
+		expect(palette).toContain(color);
+	});
+});
+
+describe("SCALE_PRESETS", () => {
+	test("every scheme carries a gradient and a categorical palette", () => {
+		for (const [id, preset] of Object.entries(SCALE_PRESETS)) {
+			expect(preset.stops.length, id).toBeGreaterThanOrEqual(2);
+			expect(preset.categories.length, id).toBeGreaterThanOrEqual(6);
+		}
+	});
+
+	test("glow schemes force a dark backdrop so additive blending reads", () => {
+		for (const [id, preset] of Object.entries(SCALE_PRESETS)) {
+			if (!preset.glow) continue;
+			expect(preset.backdrop, id).toBeDefined();
+		}
+	});
+});
+
+describe("resolvePreset", () => {
+	test("falls back to the default scheme for unknown ids", () => {
+		expect(resolvePreset("nope")).toBe(SCALE_PRESETS[DEFAULT_PRESET_ID]);
 	});
 });

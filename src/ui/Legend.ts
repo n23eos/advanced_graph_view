@@ -2,7 +2,7 @@
  * Legend chip in the bottom-right corner: gradient bar for numeric color
  * channels, category swatches for folder/tag coloring.
  */
-import { categoryColor, SCALE_PRESETS } from "../encoding/colorScales";
+import { categoryColor, resolvePreset } from "../encoding/colorScales";
 import {
 	CATEGORICAL_METRIC_LABELS,
 	NUMERIC_METRIC_LABELS,
@@ -24,12 +24,7 @@ export class Legend {
 		this.root.hide();
 	}
 
-	update(
-		colorMetric: MetricId | null,
-		presetId: string,
-		categories: string[] | null,
-		customStops?: number[] | null
-	): void {
+	update(colorMetric: MetricId | null, presetId: string, categories: string[] | null): void {
 		this.root.empty();
 		if (!colorMetric) {
 			this.root.hide();
@@ -38,16 +33,14 @@ export class Legend {
 		this.root.show();
 
 		if (isCategoricalMetric(colorMetric) && categories) {
-			this.renderCategories(colorMetric, categories);
+			this.renderCategories(colorMetric, categories, presetId);
 		} else {
-			this.renderGradient(colorMetric, presetId, customStops ?? null);
+			this.renderGradient(colorMetric, presetId);
 		}
 	}
 
-	private renderGradient(metric: MetricId, presetId: string, customStops: number[] | null): void {
-		const preset = customStops
-			? { label: "Custom gradient", stops: customStops }
-			: SCALE_PRESETS[presetId] ?? SCALE_PRESETS["recency"];
+	private renderGradient(metric: MetricId, presetId: string): void {
+		const preset = resolvePreset(presetId);
 		this.root.createDiv({
 			cls: "graph-insight-legend-title",
 			text: NUMERIC_METRIC_LABELS[metric as keyof typeof NUMERIC_METRIC_LABELS] ?? metric,
@@ -59,7 +52,8 @@ export class Legend {
 		range.createSpan({ text: "max" });
 	}
 
-	private renderCategories(metric: MetricId, categories: string[]): void {
+	private renderCategories(metric: MetricId, categories: string[], presetId: string): void {
+		const palette = resolvePreset(presetId).categories;
 		this.root.createDiv({
 			cls: "graph-insight-legend-title",
 			text: CATEGORICAL_METRIC_LABELS[metric as keyof typeof CATEGORICAL_METRIC_LABELS] ?? metric,
@@ -77,7 +71,7 @@ export class Legend {
 		for (const [category] of top) {
 			const row = this.root.createDiv({ cls: "graph-insight-legend-category" });
 			const swatch = row.createSpan({ cls: "graph-insight-legend-swatch" });
-			swatch.style.background = toHex(categoryColor(category));
+			swatch.style.background = toHex(categoryColor(category, palette));
 			row.createSpan({ text: category });
 		}
 		const rest = counts.size - top.length;

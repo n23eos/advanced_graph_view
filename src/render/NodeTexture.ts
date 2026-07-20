@@ -11,12 +11,35 @@ const GLOW_LAYERS = 6;
 const GLOW_SPREAD = 0.3;
 
 export function createNodeTexture(renderer: Renderer): Texture {
+	return buildTexture(renderer, GLOW_SPREAD, GLOW_LAYERS, 0.045, 0.02);
+}
+
+/**
+ * Star variant for the glow schemes: a small bright core inside a wide, soft
+ * halo. Drawn with additive blending it makes dense regions bloom.
+ */
+const STAR_GLOW_SPREAD = 0.6;
+const STAR_GLOW_LAYERS = 10;
+/** Star cores are smaller inside the quad — sprites grow to compensate. */
+export const STAR_SIZE_FACTOR = 1.8;
+
+export function createStarTexture(renderer: Renderer): Texture {
+	return buildTexture(renderer, STAR_GLOW_SPREAD, STAR_GLOW_LAYERS, 0.09, 0.012);
+}
+
+function buildTexture(
+	renderer: Renderer,
+	spread: number,
+	layers: number,
+	falloff: number,
+	floor: number
+): Texture {
 	const g = new Graphics();
-	const coreRadius = NODE_TEXTURE_RADIUS * (1 - GLOW_SPREAD);
-	for (let i = GLOW_LAYERS; i >= 1; i--) {
-		const t = i / GLOW_LAYERS;
+	const coreRadius = NODE_TEXTURE_RADIUS * (1 - spread);
+	for (let i = layers; i >= 1; i--) {
+		const t = i / layers;
 		g.circle(NODE_TEXTURE_RADIUS, NODE_TEXTURE_RADIUS, coreRadius + (NODE_TEXTURE_RADIUS - coreRadius) * t);
-		g.fill({ color: 0xffffff, alpha: 0.045 * (1 - t) + 0.02 });
+		g.fill({ color: 0xffffff, alpha: falloff * (1 - t) + floor });
 	}
 	g.circle(NODE_TEXTURE_RADIUS, NODE_TEXTURE_RADIUS, coreRadius);
 	g.fill({ color: 0xffffff, alpha: 1 });

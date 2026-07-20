@@ -58,7 +58,6 @@ const DEFAULT_SETTINGS: GraphInsightSettings = {
 		edges: { show: true, width: 1, opacity: 0.25 },
 		nodeScale: 1,
 		view3d: { enabled: false, depthSource: "physics", focal: 900 },
-		colorTuning: { preset: "recency", useCustom: false, customFrom: "#4a5568", customTo: "#f6ad55", gamma: 1 },
 	},
 	openDwellSeconds: 5,
 	presets: [],
@@ -97,7 +96,6 @@ export default class GraphInsightPlugin extends Plugin {
 				labels: { ...DEFAULT_SETTINGS.panel.labels, ...(saved?.panel?.labels ?? {}) },
 				edges: { ...DEFAULT_SETTINGS.panel.edges, ...(saved?.panel?.edges ?? {}) },
 				view3d: { ...DEFAULT_SETTINGS.panel.view3d, ...(saved?.panel?.view3d ?? {}) },
-				colorTuning: { ...DEFAULT_SETTINGS.panel.colorTuning, ...(saved?.panel?.colorTuning ?? {}) },
 			},
 		};
 		// Softer-links migration: users still on the old stiff defaults get

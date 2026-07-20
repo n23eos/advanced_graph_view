@@ -10,7 +10,7 @@ import { convexHull, type Point } from "../analysis/hull";
 import { distanceToSegment, pointInPolygon } from "../analysis/geometry";
 import type { GraphModel } from "../data/GraphStore";
 import { EdgeMesh } from "./EdgeMesh";
-import { createNodeTexture } from "./NodeTexture";
+import { createNodeTexture, createStarTexture, STAR_SIZE_FACTOR } from "./NodeTexture";
 import { Camera3D } from "./projection";
 import { Viewport } from "./Viewport";
 
@@ -156,6 +156,11 @@ export class GraphRenderer {
 	private sprites: Sprite[] = [];
 	private labels = new Map<number, Text>();
 	private nodeTexture: Texture | null = null;
+	/** Wide-halo variant used by the glow ("galaxy") color schemes. */
+	private starTexture: Texture | null = null;
+	private glowMode = false;
+	/** Sprite size multiplier compensating the star texture's smaller core. */
+	private spriteScale = 1;
 	private viewport: Viewport | null = null;
 	private colors: ThemeColors | null = null;
 	private labelFontSize = DEFAULT_LABEL_FONT_SIZE;
@@ -207,6 +212,7 @@ export class GraphRenderer {
 			getComputedStyle(document.body).getPropertyValue("--background-primary").trim() || "#1e1e1e"
 		);
 		this.nodeTexture = createNodeTexture(app.renderer);
+		this.starTexture = createStarTexture(app.renderer);
 		this.world.addChild(this.hullGraphics, this.semanticGraphics, this.nodeLayer, this.labelLayer, this.trailGraphics);
 		app.stage.addChild(this.world);
 		this.world.position.set(host.clientWidth / 2, host.clientHeight / 2);
@@ -275,10 +281,11 @@ export class GraphRenderer {
 			);
 			this.radii[node.id] = radius;
 
-			const sprite = new Sprite(this.nodeTexture);
+			const sprite = new Sprite(this.glowMode ? this.starTexture! : this.nodeTexture);
 			sprite.anchor.set(0.5);
 			sprite.tint = this.colors.node;
-			sprite.setSize(radius * 2);
+			if (this.glowMode) sprite.blendMode = "add";
+			sprite.setSize(radius * 2 * this.spriteScale);
 			this.sprites.push(sprite);
 			this.nodeLayer.addChild(sprite);
 		}
@@ -442,7 +449,7 @@ export class GraphRenderer {
 		this.encodedGlow = glow;
 		for (let i = 0; i < this.sprites.length; i++) {
 			this.radii[i] = sizes[i];
-			this.sprites[i].setSize(sizes[i] * 2);
+			this.sprites[i].setSize(sizes[i] * 2 * this.spriteScale);
 		}
 		this.applyNodeTints();
 		this.applyNodeAlpha();
@@ -512,7 +519,7 @@ export class GraphRenderer {
 					: this.highlightMask !== null && this.highlightMask[i] === 1
 						? HIGHLIGHT_SIZE_BOOST
 						: 1;
-			this.sprites[i].setSize(this.radii[i] * 2 * depth * boost);
+			this.sprites[i].setSize(this.radii[i] * 2 * depth * boost * this.spriteScale);
 		}
 		if (this.hoveredId !== null) {
 			// zIndex only matters when the layer is sorted (3D mode).
@@ -721,7 +728,7 @@ export class GraphRenderer {
 							: this.highlightMask !== null && this.highlightMask[i] === 1
 								? HIGHLIGHT_SIZE_BOOST
 								: 1;
-					sprite.setSize(this.radii![i] * 2 * depth * boost);
+					sprite.setSize(this.radii![i] * 2 * depth * boost * this.spriteScale);
 					sprite.zIndex = i === this.hoveredId ? Number.MAX_SAFE_INTEGER : depth;
 				}
 			}
@@ -856,6 +863,30 @@ export class GraphRenderer {
 		this.edgeMesh?.setVisible(show);
 		this.edgeMesh?.setAlpha(opacity);
 		this.edgeMesh?.setWidth(width);
+	}
+
+	/**
+	 * Glow schemes swap the node texture and switch to additive blending, so
+	 * overlapping nodes bloom like stars. Idempotent: repeated calls with the
+	 * same style do nothing, keeping panel changes free of visual resets.
+	 */
+	setVisualStyle(glow: boolean, backdrop: number | null): void {
+		if (this.app) {
+			this.app.renderer.background.alpha = backdrop === null ? 0 : 1;
+			if (backdrop !== null) this.app.renderer.background.color = backdrop;
+		}
+		if (glow === this.glowMode) return;
+		this.glowMode = glow;
+		this.spriteScale = glow ? STAR_SIZE_FACTOR : 1;
+
+		const texture = glow ? this.starTexture : this.nodeTexture;
+		if (!texture) return;
+		for (const sprite of this.sprites) {
+			sprite.texture = texture;
+			sprite.blendMode = glow ? "add" : "normal";
+		}
+		this.applyHoverSize(); // re-applies every sprite size with the new scale
+		this.cullDirty = true;
 	}
 
 	private ensureLabel(nodeId: number, x: number, y: number): void {

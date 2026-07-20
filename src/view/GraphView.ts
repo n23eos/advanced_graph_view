@@ -6,7 +6,7 @@ import { buildGraphModel, type GraphModel } from "../data/GraphStore";
 import { countRecentOpens } from "../data/UsageTracker";
 import type { PositionMap } from "../data/persistence";
 import { buildEncoding, type NodeEncoding } from "../encoding/encode";
-import { categoryColor } from "../encoding/colorScales";
+import { categoryColor, resolvePreset } from "../encoding/colorScales";
 import type { NodeFacts } from "../encoding/metrics";
 import { GraphRenderer } from "../render/GraphRenderer";
 import { ControlPanel, type PanelState } from "../ui/ControlPanel";
@@ -778,15 +778,22 @@ export class GraphInsightView extends ItemView {
 
 	/** Overlay matches (orphans / dead ends / broken links) or null. */
 	private overlayMask: Uint8Array | null = null;
+	private lastOverlayKey = "";
 
 	private applyOverlays(state: PanelState): void {
 		if (!this.model || !this.renderer) return;
+		const key = JSON.stringify(state.overlays);
+		const changed = key !== this.lastOverlayKey;
+		this.lastOverlayKey = key;
+
 		this.overlayMask = computeOverlayMask(this.model, state.overlays);
 		this.renderer.setDimMask(this.overlayMask);
 		// Matches must also LIGHT UP, not merely survive the dimming.
 		this.recomputeVisual();
 
-		if (this.overlayMask) {
+		// Only report when the user actually flips a layer — every unrelated
+		// panel change also runs through here.
+		if (changed && this.overlayMask) {
 			let matched = 0;
 			for (const flag of this.overlayMask) matched += flag;
 			const names: string[] = [];
@@ -803,11 +810,13 @@ export class GraphInsightView extends ItemView {
 			this.renderer.drawClusterHulls(null);
 			return;
 		}
+		// Bubbles follow the active scheme so hulls match their node colors.
+		const palette = resolvePreset(this.plugin.settings.panel.colorPreset).categories;
 		const groups = this.clusterOrder
 			.filter((communityId) => !this.hiddenClusters.has(communityId))
 			.map((communityId) => ({
 				nodeIds: this.clusterNodeIds(communityId),
-				color: categoryColor(this.clusterNames[communityId] ?? String(communityId)),
+				color: categoryColor(this.clusterNames[communityId] ?? String(communityId), palette),
 			}));
 		this.renderer.drawClusterHulls(groups);
 	}
@@ -874,26 +883,14 @@ export class GraphInsightView extends ItemView {
 
 	private applyEncoding(state: PanelState): void {
 		if (!this.renderer || this.facts.length === 0) return;
-		const tuning = state.colorTuning;
-		const customStops = tuning.useCustom
-			? [parseInt(tuning.customFrom.slice(1), 16), parseInt(tuning.customTo.slice(1), 16)]
-			: null;
-		this.encoding = buildEncoding(
-			this.facts,
-			state.channels,
-			tuning.useCustom ? state.colorPreset : tuning.preset,
-			Date.now(),
-			{ gamma: tuning.gamma, customStops }
-		);
+		const preset = resolvePreset(state.colorPreset);
+		this.renderer.setVisualStyle(preset.glow === true, preset.backdrop ?? null);
+		this.encoding = buildEncoding(this.facts, state.channels, state.colorPreset, Date.now());
 		const sizes = new Float32Array(this.encoding.sizes.length);
 		for (let i = 0; i < sizes.length; i++) sizes[i] = this.encoding.sizes[i] * state.nodeScale;
 		this.renderer.applyEncoding(sizes, this.encoding.tints, this.encoding.glow);
-		this.legend?.update(
-			state.channels.color,
-			tuning.useCustom ? state.colorPreset : tuning.preset,
-			this.encoding.categories,
-			customStops
-		);
+		this.legend?.update(state.channels.color, state.colorPreset, this.encoding.categories);
+		this.redrawBubbles();
 	}
 
 	private async savePositions(): Promise<void> {
@@ -1020,6 +1017,7 @@ export class GraphInsightView extends ItemView {
 			onSemanticChange: (settings) => this.handleSemanticSettings(settings),
 			onTrailReplay: () => this.replayTrail(),
 			onShowHiddenNodes: () => this.resetHiddenNodes(),
+			onResetViewState: () => this.resetViewState(),
 			onPresetApply: (index) => void this.applyViewPreset(index),
 			onPresetSaveRequest: () => {
 				new PromptModal(this.app, "View preset name", "My view", (name) =>
@@ -1170,6 +1168,25 @@ export class GraphInsightView extends ItemView {
 		}
 		this.pinnedNodes.clear();
 		this.layout?.reheat(1);
+	}
+
+	/** One button to undo every temporary visual state. */
+	private resetViewState(): void {
+		this.hiddenNodes.clear();
+		this.hiddenClusters.clear();
+		this.softQuery = null;
+		this.hardQuery = null;
+		this.pathAnchor = null;
+		this.focusRootId = null;
+		this.focusBar?.hide();
+		this.chipFilter = { tags: new Set(), folders: new Set() };
+		this.searchBar?.clear();
+		this.renderer?.setSelected(null);
+		this.renderer?.setHighlightMask(null);
+		this.renderer?.setAlphaFactors(null);
+		this.panel?.setHiddenNodeCount(0);
+		this.recomputeVisual();
+		new Notice("View state reset");
 	}
 
 	private resetHiddenNodes(): void {
