@@ -1,8 +1,8 @@
 # Advanced Graph View
 
-<video src="https://raw.githubusercontent.com/n23eos/advanced_graph_view/main/assets/advanced_graph_view_opt.mp4" controls muted width="100%"></video>
+![Advanced Graph View demo](assets/advanced_graph_view_demo.gif)
 
-[▶ Watch the demo](https://raw.githubusercontent.com/n23eos/advanced_graph_view/main/assets/advanced_graph_view_opt.mp4)
+*[▶ Full-quality video](https://github.com/n23eos/advanced_graph_view/blob/main/assets/advanced_graph_view_opt.mp4)*
 
 An advanced replacement for Obsidian's Graph View, built for large vaults (5,000–50,000 notes) where the default graph turns into a hairball. The graph becomes an analysis tool instead of a decoration: it shows what you actually use, where your knowledge hubs are, and which notes *should* be linked but aren't.
 
