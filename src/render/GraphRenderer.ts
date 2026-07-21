@@ -219,7 +219,18 @@ export class GraphRenderer {
 		window.addEventListener("pointermove", this.handlePointerMove);
 		window.addEventListener("pointerup", this.handlePointerUp);
 
-		app.ticker.add(() => this.renderFrame());
+		app.ticker.add((ticker) => {
+			// Pilot mode drives the camera every frame; reproject if it moved.
+			if (this.pilotUpdate && this.pilotUpdate(ticker.deltaMS)) this.reproject();
+			this.renderFrame();
+		});
+	}
+
+	/** Pilot-mode per-frame camera driver. Returns true when the camera moved.
+	 *  Set to null to leave pilot mode. */
+	private pilotUpdate: ((dtMs: number) => boolean) | null = null;
+	setPilotUpdate(fn: ((dtMs: number) => boolean) | null): void {
+		this.pilotUpdate = fn;
 	}
 
 	setModel(model: GraphModel): void {

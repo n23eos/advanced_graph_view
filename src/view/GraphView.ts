@@ -20,6 +20,7 @@ import { OnboardingModal } from "../ui/OnboardingModal";
 import { PromptModal } from "../ui/PromptModal";
 import { TimelineBar, type TimelineMode } from "../ui/TimelineBar";
 import { CameraWidget } from "../ui/CameraWidget";
+import { PilotMode } from "../pilot/PilotMode";
 import { ToolBar, type CursorTool } from "../ui/ToolBar";
 import { graphToGexf, graphToJson } from "../export/exporters";
 import type GraphInsightPlugin from "../main";
@@ -68,6 +69,7 @@ export class GraphInsightView extends ItemView {
 	private focusDepth = 2;
 	private timeline: TimelineBar | null = null;
 	private cameraWidget: CameraWidget | null = null;
+	private pilotMode: PilotMode | null = null;
 	private timelineCutoff: number | null = null;
 	private timelineMode: TimelineMode = "created";
 	private trailReplayFrame: number | null = null;
@@ -170,6 +172,10 @@ export class GraphInsightView extends ItemView {
 			}
 		);
 
+		if (this.renderer) {
+			this.pilotMode = new PilotMode(container, this.renderer, { onChange: () => {} });
+		}
+
 		this.searchBar = new SearchBar(container, {
 			onQueryChange: (query) => {
 				this.softQuery = query.trim() ? parseQuery(query) : null;
@@ -238,6 +244,11 @@ export class GraphInsightView extends ItemView {
 		if (!this.plugin.settings.onboardingShown) {
 			new OnboardingModal(this.app, () => void this.plugin.markOnboardingShown()).open();
 		}
+	}
+
+	/** Enter/exit pilot mode (fly the 3D graph). */
+	togglePilot(): void {
+		this.pilotMode?.toggle();
 	}
 
 	/** «Путь»: first click sets the anchor, second highlights the chain. */
@@ -1075,6 +1086,8 @@ export class GraphInsightView extends ItemView {
 		this.timeline = null;
 		this.cameraWidget?.destroy();
 		this.cameraWidget = null;
+		this.pilotMode?.destroy();
+		this.pilotMode = null;
 		this.panel?.destroy();
 		this.panel = null;
 		this.legend?.destroy();

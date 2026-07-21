@@ -151,6 +151,11 @@ export default class GraphInsightPlugin extends Plugin {
 			})),
 		});
 		this.addCommand({
+			id: "toggle-pilot-mode",
+			name: "Toggle pilot mode (fly the 3D graph)",
+			callback: () => this.getGraphView()?.togglePilot(),
+		});
+		this.addCommand({
 			id: "open-insights",
 			name: "Open Insights dashboard",
 			callback: () => void this.activateInsights(),

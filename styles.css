@@ -430,6 +430,44 @@
 	margin-top: 0;
 }
 
+/* Pilot mode toggle — top-right corner. */
+.graph-insight-pilot-toggle {
+	position: absolute;
+	top: 12px;
+	right: 12px;
+	z-index: 13;
+	width: 34px;
+	height: 34px;
+	padding: 0;
+	font-size: 17px;
+	line-height: 1;
+	cursor: pointer;
+	background: color-mix(in srgb, var(--background-secondary) 85%, transparent);
+	backdrop-filter: blur(8px);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	box-shadow: var(--shadow-s);
+}
+
+.graph-insight-pilot-toggle:hover {
+	background: var(--background-modifier-hover);
+}
+
+.graph-insight-pilot-toggle.is-active {
+	border-color: var(--interactive-accent);
+	box-shadow: 0 0 0 1px var(--interactive-accent), 0 0 12px var(--interactive-accent);
+}
+
+/* The toggle stays visible even when the rest of the UI is hidden while flying. */
+.graph-insight-ui-hidden .graph-insight-pilot-toggle {
+	display: block;
+}
+
+/* Crosshair-style cursor while piloting. */
+.graph-insight-piloting canvas {
+	cursor: crosshair;
+}
+
 .graph-insight-camera {
 	position: absolute;
 	right: 12px;
