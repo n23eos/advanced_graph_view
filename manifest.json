@@ -1,9 +1,9 @@
 {
 	"id": "graph-insight",
 	"name": "Advanced Graph View",
-	"version": "0.2.0",
+	"version": "0.2.1",
 	"minAppVersion": "1.13.0",
-	"description": "Advanced graph view with 3D visualization, clusters, PageRank and color schemes.",
+	"description": "Explore large vaults as an interactive 3D graph with clusters, PageRank, color schemes and metric-driven node encoding.",
 	"author": "n23eos",
 	"authorUrl": "https://github.com/n23eos",
 	"isDesktopOnly": false

@@ -61,7 +61,7 @@ interface ThemeColors {
 }
 
 function cssColorToNumber(value: string): number {
-	const probe = document.createElement("div");
+	const probe = createEl("div");
 	probe.style.color = value;
 	document.body.appendChild(probe);
 	const rgb = getComputedStyle(probe).color.match(/\d+/g);
@@ -288,7 +288,7 @@ export class GraphRenderer {
 		this.camera.project(
 			this.positions3,
 			this.positions,
-			this.depthScales!,
+			this.depthScales,
 			this.camera.enabled ? this.depthOverride : null
 		);
 		this.syncEdgeVisibility();
@@ -658,14 +658,14 @@ export class GraphRenderer {
 				const sprite = this.sprites[i];
 				sprite.position.set(this.positions[i * 2], this.positions[i * 2 + 1]);
 				if (threeD) {
-					const depth = this.depthScales![i];
+					const depth = threeD[i];
 					const boost =
 						i === this.hoveredId
 							? HOVER_SIZE_BOOST
 							: this.highlightMask !== null && this.highlightMask[i] === 1
 								? HIGHLIGHT_SIZE_BOOST
 								: 1;
-					sprite.setSize(this.radii![i] * 2 * depth * boost * this.spriteScale);
+					sprite.setSize(this.radii[i] * 2 * depth * boost * this.spriteScale);
 					sprite.zIndex = i === this.hoveredId ? Number.MAX_SAFE_INTEGER : depth;
 				}
 			}
