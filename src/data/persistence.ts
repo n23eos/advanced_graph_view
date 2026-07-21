@@ -41,36 +41,6 @@ export class PluginDataStore {
 		}
 	}
 
-	readJsonFile<T>(fileName: string): Promise<T | null> {
-		return this.readJson<T>(fileName);
-	}
-
-	writeJsonFile(fileName: string, data: unknown): Promise<void> {
-		return this.writeJson(fileName, data);
-	}
-
-	async readBinaryFile(fileName: string): Promise<ArrayBuffer | null> {
-		const path = `${this.dataDir}/${fileName}`;
-		try {
-			if (!(await this.app.vault.adapter.exists(path))) return null;
-			return await this.app.vault.adapter.readBinary(path);
-		} catch (error) {
-			console.error(`Graph Insight: failed to read ${fileName}`, error);
-			return null;
-		}
-	}
-
-	async writeBinaryFile(fileName: string, data: ArrayBuffer): Promise<void> {
-		try {
-			if (!(await this.app.vault.adapter.exists(this.dataDir))) {
-				await this.app.vault.adapter.mkdir(this.dataDir);
-			}
-			await this.app.vault.adapter.writeBinary(`${this.dataDir}/${fileName}`, data);
-		} catch (error) {
-			console.error(`Graph Insight: failed to write ${fileName}`, error);
-		}
-	}
-
 	loadUsage(): Promise<UsageLog | null> {
 		return this.readJson<UsageLog>("usage.json");
 	}

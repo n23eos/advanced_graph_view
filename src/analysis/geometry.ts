@@ -1,7 +1,7 @@
 /** Ray-casting point-in-polygon — lasso selection hit test. */
 import type { Point } from "./hull";
 
-/** Distance from a point to a line segment — semantic edge hit test. */
+/** Distance from a point to a line segment. */
 export function distanceToSegment(point: Point, a: Point, b: Point): number {
 	const abx = b.x - a.x;
 	const aby = b.y - a.y;

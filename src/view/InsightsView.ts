@@ -1,6 +1,6 @@
 /**
  * Insights dashboard (right sidebar): vault totals, top notes by opens and
- * PageRank, cooling hubs, semantic link candidates, 90-day activity spark.
+ * PageRank, cooling hubs, 90-day activity spark.
  * Self-contained: builds its own model and runs its own metrics worker.
  */
 import { ItemView, TFile, type WorkspaceLeaf } from "obsidian";
@@ -126,37 +126,6 @@ export class InsightsView extends ItemView {
 			label: x.node.name,
 			value: `${Math.floor((now - (files.get(x.node.path)?.stat.mtime ?? now)) / DAY_MS)}d`,
 		})));
-
-		// Semantic link candidates
-		const linked = new Set<string>();
-		for (const edge of model.edges) {
-			linked.add(`${Math.min(edge.source, edge.target)}|${Math.max(edge.source, edge.target)}`);
-		}
-		const candidates = this.plugin.semantics
-			.getPairs()
-			.filter((pair) => {
-				const a = model.pathToId.get(pair.pathA);
-				const b = model.pathToId.get(pair.pathB);
-				if (a === undefined || b === undefined) return false;
-				return !linked.has(`${Math.min(a, b)}|${Math.max(a, b)}`);
-			})
-			.slice(0, TOP_COUNT);
-		if (candidates.length > 0) {
-			const section = el.createDiv();
-			section.createEl("h5", { text: "Link candidates" });
-			for (const pair of candidates) {
-				const row = section.createDiv({ cls: "graph-insight-insights-row" });
-				const label = row.createSpan({
-					cls: "graph-insight-insights-label",
-					text: `${shortName(pair.pathA)} ↔ ${shortName(pair.pathB)}`,
-				});
-				label.addEventListener("click", () => this.openPath(pair.pathA));
-				row.createSpan({
-					cls: "graph-insight-panel-count",
-					text: `${(pair.similarity * 100).toFixed(0)}%`,
-				});
-			}
-		}
 	}
 
 	/** 90-day opens activity sparkline from the usage log. */
@@ -211,10 +180,4 @@ export class InsightsView extends ItemView {
 		this.metricsClient?.stop();
 		this.metricsClient = null;
 	}
-}
-
-function shortName(path: string): string {
-	const base = path.slice(path.lastIndexOf("/") + 1);
-	const dot = base.lastIndexOf(".");
-	return dot > 0 ? base.slice(0, dot) : base;
 }

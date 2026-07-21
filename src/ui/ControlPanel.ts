@@ -11,7 +11,6 @@ import {
 } from "../encoding/metrics";
 import { DEFAULT_PRESET_ID, SCALE_PRESETS } from "../encoding/colorScales";
 import type { OverlayCounts, OverlayToggles } from "../analysis/overlays";
-import type { SemanticSettings } from "../main";
 import type { PhysicsParams } from "../workers/layoutEngine";
 
 export interface PanelState {
@@ -74,7 +73,6 @@ export interface PanelCallbacks {
 	onReheat(): void;
 	onClusterClick(index: number): void;
 	onClusterToggle(index: number): void;
-	onSemanticChange(settings: SemanticSettings): void;
 	onTrailReplay(): void;
 	onShowHiddenNodes(): void;
 	/** Clear every selection, highlight, focus, filter and hidden node. */
@@ -92,7 +90,6 @@ export class ControlPanel {
 	private root: HTMLElement;
 	private body: HTMLElement;
 	private overlayCountEls = new Map<keyof OverlayToggles, HTMLElement>();
-	private semanticStatusEl: HTMLElement | null = null;
 	private presetSelect: HTMLSelectElement | null = null;
 	private viewPresets: ViewPresetRow[] = [];
 	private hiddenCountEl: HTMLElement | null = null;
@@ -100,7 +97,6 @@ export class ControlPanel {
 	constructor(
 		host: HTMLElement,
 		private state: PanelState,
-		private semantic: SemanticSettings,
 		private readonly callbacks: PanelCallbacks
 	) {
 		this.root = host.createDiv({ cls: "graph-insight-panel" });
@@ -302,52 +298,6 @@ export class ControlPanel {
 		});
 		clusters.createDiv({ cls: "graph-insight-panel-hint", text: "Color nodes by Cluster to see groups" });
 
-		const semanticSection = this.section("Semantics");
-		semanticSection.createDiv({
-			cls: "graph-insight-panel-hint",
-			text: "Dashed lines connect notes that are similar in meaning but not linked. Click a line to create the link.",
-		});
-		const enableRow = semanticSection.createDiv({ cls: "graph-insight-panel-row" });
-		const enableLabel = enableRow.createEl("label", { cls: "graph-insight-panel-checkbox" });
-		const enableCheckbox = enableLabel.createEl("input", { type: "checkbox" });
-		enableCheckbox.checked = this.semantic.enabled;
-		enableLabel.createSpan({ text: "Enable" });
-		enableCheckbox.addEventListener("change", () => {
-			this.semantic = { ...this.semantic, enabled: enableCheckbox.checked };
-			this.callbacks.onSemanticChange(this.semantic);
-		});
-
-		const edgesRow = semanticSection.createDiv({ cls: "graph-insight-panel-row" });
-		const edgesLabel = edgesRow.createEl("label", { cls: "graph-insight-panel-checkbox" });
-		const edgesCheckbox = edgesLabel.createEl("input", { type: "checkbox" });
-		edgesCheckbox.checked = this.semantic.showEdges;
-		edgesLabel.createSpan({ text: "Semantic edges" });
-		edgesCheckbox.addEventListener("change", () => {
-			this.semantic = { ...this.semantic, showEdges: edgesCheckbox.checked };
-			this.callbacks.onSemanticChange(this.semantic);
-		});
-
-		const thresholdRow = semanticSection.createDiv({ cls: "graph-insight-panel-row" });
-		thresholdRow.createSpan({ cls: "graph-insight-panel-label", text: "Threshold" });
-		const thresholdValue = thresholdRow.createSpan({
-			cls: "graph-insight-panel-count",
-			text: this.semantic.threshold.toFixed(2),
-		});
-		const thresholdSlider = semanticSection.createEl("input", { type: "range" });
-		thresholdSlider.min = "0.5";
-		thresholdSlider.max = "0.95";
-		thresholdSlider.step = "0.01";
-		thresholdSlider.value = String(this.semantic.threshold);
-		thresholdSlider.addEventListener("input", () => {
-			this.semantic = { ...this.semantic, threshold: Number(thresholdSlider.value) };
-			thresholdValue.setText(this.semantic.threshold.toFixed(2));
-			this.callbacks.onSemanticChange(this.semantic);
-		});
-		this.semanticStatusEl = semanticSection.createDiv({
-			cls: "graph-insight-panel-hint",
-			text: "",
-		});
-
 		const physics = this.section("Physics");
 		this.physicsSlider(physics, "Node spread (repulsion)", 1, 300, 1, this.state.physics.repel, (value) => {
 			this.setState({ ...this.state, physics: { ...this.state.physics, repel: value } });
@@ -432,10 +382,6 @@ export class ControlPanel {
 		this.viewPresets.forEach((preset, index) => {
 			this.presetSelect!.createEl("option", { text: preset.name, value: String(index) });
 		});
-	}
-
-	setSemanticStatus(text: string): void {
-		this.semanticStatusEl?.setText(text);
 	}
 
 	setOverlayCounts(counts: OverlayCounts): void {

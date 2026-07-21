@@ -13,17 +13,8 @@ import {
 } from "./data/UsageTracker";
 import type { PanelState } from "./ui/ControlPanel";
 import type { SearchPreset } from "./ui/SearchBar";
-import { SemanticService } from "./semantic/SemanticService";
 import { InsightsView, INSIGHTS_VIEW_TYPE } from "./view/InsightsView";
 import { GraphInsightSettingsTab } from "./settings/SettingsTab";
-
-export interface SemanticSettings {
-	enabled: boolean;
-	threshold: number;
-	showEdges: boolean;
-	/** Consent for the one-time model download — asked once, ever. */
-	consentGiven: boolean;
-}
 
 export interface ViewPreset {
 	name: string;
@@ -35,7 +26,6 @@ interface GraphInsightSettings {
 	panel: PanelState;
 	viewPresets: ViewPreset[];
 	presets: SearchPreset[];
-	semantics: SemanticSettings;
 	onboardingShown: boolean;
 	/** Open counts only when the file stays active at least this long. */
 	openDwellSeconds: number;
@@ -62,7 +52,6 @@ const DEFAULT_SETTINGS: GraphInsightSettings = {
 	openDwellSeconds: 5,
 	presets: [],
 	viewPresets: [],
-	semantics: { enabled: false, threshold: 0.75, showEdges: true, consentGiven: false },
 	onboardingShown: false,
 };
 
@@ -72,7 +61,6 @@ const USAGE_SAVE_DEBOUNCE_MS = 30_000;
 export default class GraphInsightPlugin extends Plugin {
 	settings: GraphInsightSettings = DEFAULT_SETTINGS;
 	dataStore!: PluginDataStore;
-	semantics!: SemanticService;
 	usageLog: UsageLog = emptyLog();
 	sessionTrail: SessionEntry[] = [];
 
@@ -115,7 +103,6 @@ export default class GraphInsightPlugin extends Plugin {
 					centering: physics.centering === 0.04 || physics.centering === 0.05 ? 0.09 : physics.centering,
 				},
 			},
-			semantics: { ...DEFAULT_SETTINGS.semantics, ...(saved?.semantics ?? {}) },
 		};
 		this.dataStore = new PluginDataStore(
 			this.app,
@@ -125,17 +112,6 @@ export default class GraphInsightPlugin extends Plugin {
 
 		const loaded = await this.dataStore.loadUsage();
 		this.usageLog = loaded ? compactLog(loaded, Date.now()) : emptyLog();
-
-		this.semantics = new SemanticService(this.app, this.dataStore);
-		if (this.settings.semantics.enabled) {
-			// Consent already given previously; model is cached.
-			void this.semantics.enable();
-		}
-		this.registerEvent(
-			this.app.metadataCache.on("changed", (file) => {
-				if (this.settings.semantics.enabled) this.semantics.scheduleReindex(file);
-			})
-		);
 
 		this.registerView(GRAPH_INSIGHT_VIEW_TYPE, (leaf) => new GraphInsightView(leaf, this));
 		this.registerView(INSIGHTS_VIEW_TYPE, (leaf) => new InsightsView(leaf, this));
@@ -159,15 +135,6 @@ export default class GraphInsightPlugin extends Plugin {
 			},
 		});
 		this.addCommand({
-			id: "toggle-semantic-edges",
-			name: "Toggle semantic edges",
-			callback: () => {
-				const next = { ...this.settings.semantics, showEdges: !this.settings.semantics.showEdges };
-				void this.saveSemanticSettings(next);
-				this.getGraphView()?.refreshFromSettings();
-			},
-		});
-		this.addCommand({
 			id: "toggle-orphan-highlight",
 			name: "Toggle orphan highlight",
 			callback: () => void this.getGraphView()?.updatePanelState((state) => ({
@@ -182,11 +149,6 @@ export default class GraphInsightPlugin extends Plugin {
 				...state,
 				showTrail: !state.showTrail,
 			})),
-		});
-		this.addCommand({
-			id: "rebuild-embeddings",
-			name: "Rebuild embeddings index",
-			callback: () => void this.semantics.rebuild(),
 		});
 		this.addCommand({
 			id: "open-insights",
@@ -215,7 +177,6 @@ export default class GraphInsightPlugin extends Plugin {
 				if (file instanceof TFile) {
 					this.usageLog = renamePath(this.usageLog, oldPath, file.path);
 					this.markUsageDirty();
-					this.semantics.handleRename(oldPath, file.path);
 				}
 			})
 		);
@@ -223,7 +184,6 @@ export default class GraphInsightPlugin extends Plugin {
 			this.app.vault.on("delete", (file) => {
 				this.usageLog = removePath(this.usageLog, file.path);
 				this.markUsageDirty();
-				this.semantics.handleDelete(file.path);
 			})
 		);
 	}
@@ -275,11 +235,6 @@ export default class GraphInsightPlugin extends Plugin {
 		await this.saveData(this.settings);
 	}
 
-	async saveSemanticSettings(semantics: SemanticSettings): Promise<void> {
-		this.settings = { ...this.settings, semantics };
-		await this.saveData(this.settings);
-	}
-
 	getGraphView(): GraphInsightView | null {
 		const leaf = this.app.workspace.getLeavesOfType(GRAPH_INSIGHT_VIEW_TYPE)[0];
 		return leaf ? (leaf.view as GraphInsightView) : null;
@@ -315,7 +270,6 @@ export default class GraphInsightPlugin extends Plugin {
 
 	onunload(): void {
 		if (this.dwellTimer !== null) window.clearTimeout(this.dwellTimer);
-		this.semantics.disable();
 		void this.flushUsage();
 	}
 }

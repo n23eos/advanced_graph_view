@@ -7,7 +7,7 @@ import {
 	type Texture,
 } from "pixi.js";
 import { convexHull, type Point } from "../analysis/hull";
-import { distanceToSegment, pointInPolygon } from "../analysis/geometry";
+import { pointInPolygon } from "../analysis/geometry";
 import type { GraphModel } from "../data/GraphStore";
 import { EdgeMesh } from "./EdgeMesh";
 import { createNodeTexture, createStarTexture, STAR_SIZE_FACTOR } from "./NodeTexture";
@@ -38,9 +38,6 @@ const MIN_LABEL_SCREEN_PX = 8;
 const DOUBLE_CLICK_MS = 350;
 const HULL_FILL_ALPHA = 0.1;
 const HULL_PADDING = 18;
-const SEMANTIC_DASH = 6;
-const SEMANTIC_GAP = 5;
-const SEMANTIC_HIT_PX = 7;
 
 export interface RendererCallbacks {
 	onNodeHover(nodeId: number | null, clientX: number, clientY: number): void;
@@ -51,7 +48,6 @@ export interface RendererCallbacks {
 	onNodeDrag(nodeId: number, worldX: number, worldY: number, worldZ: number): void;
 	onNodeDragEnd(nodeId: number): void;
 	onLassoSelect(nodeIds: number[], event: PointerEvent): void;
-	onSemanticEdgeClick(pairIndex: number, event: MouseEvent): void;
 }
 
 /** Pointer must travel this many pixels before a press becomes a drag. */
@@ -106,24 +102,6 @@ function drawArrowHead(
 	g.stroke({ color, alpha, width: 1.5 });
 }
 
-function drawDashedLine(
-	g: Graphics,
-	x1: number, y1: number, x2: number, y2: number,
-	dash: number, gap: number
-): void {
-	const length = Math.hypot(x2 - x1, y2 - y1);
-	if (length === 0) return;
-	const ux = (x2 - x1) / length;
-	const uy = (y2 - y1) / length;
-	let t = 0;
-	while (t < length) {
-		const end = Math.min(t + dash, length);
-		g.moveTo(x1 + ux * t, y1 + uy * t);
-		g.lineTo(x1 + ux * end, y1 + uy * end);
-		t = end + gap;
-	}
-}
-
 function readThemeColors(): ThemeColors {
 	const styles = getComputedStyle(document.body);
 	const read = (name: string, fallback: string) => styles.getPropertyValue(name).trim() || fallback;
@@ -145,12 +123,9 @@ export class GraphRenderer {
 	private world = new Container();
 	private edgeMesh: EdgeMesh | null = null;
 	private hullGraphics = new Graphics();
-	private semanticGraphics = new Graphics();
 	private trailGraphics = new Graphics();
 	private trailNodeIds: number[] = [];
 	private trailProgress = 1;
-	/** Node id pairs of currently shown semantic edges. */
-	private semanticPairs: { a: number; b: number }[] = [];
 	private nodeLayer = new Container();
 	private labelLayer = new Container();
 	private sprites: Sprite[] = [];
@@ -215,7 +190,7 @@ export class GraphRenderer {
 		);
 		this.nodeTexture = createNodeTexture(app.renderer);
 		this.starTexture = createStarTexture(app.renderer);
-		this.world.addChild(this.hullGraphics, this.semanticGraphics, this.nodeLayer, this.labelLayer, this.trailGraphics);
+		this.world.addChild(this.hullGraphics, this.nodeLayer, this.labelLayer, this.trailGraphics);
 		app.stage.addChild(this.world);
 		this.world.position.set(host.clientWidth / 2, host.clientHeight / 2);
 
@@ -637,40 +612,6 @@ export class GraphRenderer {
 		}
 	}
 
-	setSemanticEdges(pairs: { a: number; b: number }[] | null): void {
-		this.semanticPairs = pairs ?? [];
-		this.redrawSemanticEdges();
-	}
-
-	private redrawSemanticEdges(): void {
-		const g = this.semanticGraphics;
-		g.clear();
-		if (this.semanticPairs.length === 0 || !this.positions || !this.colors) return;
-		for (const pair of this.semanticPairs) {
-			const x1 = this.positions[pair.a * 2];
-			const y1 = this.positions[pair.a * 2 + 1];
-			const x2 = this.positions[pair.b * 2];
-			const y2 = this.positions[pair.b * 2 + 1];
-			drawDashedLine(g, x1, y1, x2, y2, SEMANTIC_DASH, SEMANTIC_GAP);
-		}
-		g.stroke({ color: this.colors.nodeSelected, alpha: 0.55, width: 1, pixelLine: true });
-	}
-
-	/** Index of the semantic pair near the given client point, or null. */
-	findSemanticEdgeAt(clientX: number, clientY: number): number | null {
-		if (!this.app || !this.positions || !this.viewport || this.semanticPairs.length === 0) return null;
-		const rect = this.app.canvas.getBoundingClientRect();
-		const point = this.viewport.toWorld(clientX - rect.left, clientY - rect.top);
-		const hitWorld = SEMANTIC_HIT_PX / this.viewport.scale;
-		for (let i = 0; i < this.semanticPairs.length; i++) {
-			const pair = this.semanticPairs[i];
-			const a = { x: this.positions[pair.a * 2], y: this.positions[pair.a * 2 + 1] };
-			const b = { x: this.positions[pair.b * 2], y: this.positions[pair.b * 2 + 1] };
-			if (distanceToSegment(point, a, b) <= hitWorld) return i;
-		}
-		return null;
-	}
-
 	/** Current viewport rendered at 2x into a PNG blob. */
 	async exportPng(): Promise<Blob | null> {
 		if (!this.app) return null;
@@ -742,7 +683,6 @@ export class GraphRenderer {
 			const t0 = performance.now();
 			this.edgesDirty = false;
 			this.edgeMesh?.updatePositions(this.positions, this.camera.enabled ? this.depthScales : null);
-			this.redrawSemanticEdges();
 			this.redrawTrail();
 			this.prof.edges += performance.now() - t0;
 		}
@@ -972,7 +912,6 @@ export class GraphRenderer {
 	private draggingId: number | null = null;
 	private lastClickAt = 0;
 	private lastClickId: number | null = null;
-	private pressedSemanticPair: number | null = null;
 	private orbiting = false;
 	private orbitLastX = 0;
 	private orbitLastY = 0;
@@ -1100,13 +1039,6 @@ export class GraphRenderer {
 		}
 		const nodeId = this.findNodeAt(event.clientX, event.clientY);
 		if (nodeId === null) {
-			const pairIndex = this.findSemanticEdgeAt(event.clientX, event.clientY);
-			if (pairIndex !== null) {
-				this.pressedSemanticPair = pairIndex;
-				this.pressedEvent = event;
-				if (this.viewport) this.viewport.suppressPan = true;
-				return;
-			}
 			if (this.camera.enabled) {
 				// Empty-area drag rotates the 3D view; hold Alt to pan instead.
 				if (!event.altKey) {
@@ -1152,10 +1084,6 @@ export class GraphRenderer {
 				this.lastClickId = this.pressedId;
 				this.lastClickAt = now;
 			}
-		}
-		if (this.pressedSemanticPair !== null && this.pressedEvent) {
-			this.callbacks.onSemanticEdgeClick(this.pressedSemanticPair, this.pressedEvent);
-			this.pressedSemanticPair = null;
 		}
 		this.pressedId = null;
 		this.pressedEvent = null;

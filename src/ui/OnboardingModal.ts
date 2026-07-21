@@ -18,8 +18,8 @@ export class OnboardingModal extends Modal {
 				"Layers highlight orphans, dead ends and broken links. The search bar understands path:, tag:, opened:>10, edited:<30d. Double-click a node for focus mode, Shift+drag for lasso.",
 			],
 			[
-				"3 · Semantic edges",
-				"Enable semantics in the panel — dashed edges reveal notes that are similar in meaning but NOT linked. Click an edge to create the link.",
+				"3 · Clusters and 3D",
+				"Color by Cluster to see communities, switch on 3D in the bottom-right widget to fly through the graph, and pick a color scheme in the panel.",
 			],
 		];
 		for (const [title, body] of steps) {

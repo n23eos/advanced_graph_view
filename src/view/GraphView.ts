@@ -16,7 +16,6 @@ import { MetricsClient, type GraphMetrics } from "../workers/MetricsClient";
 import { contentNeedles, parseQuery, matchesQuery, type ParsedQuery } from "../query/QueryParser";
 import { SearchBar } from "../ui/SearchBar";
 import { FilterChips, type FilterSelection } from "../ui/FilterChips";
-import { SemanticConsentModal } from "../ui/ConsentModal";
 import { OnboardingModal } from "../ui/OnboardingModal";
 import { PromptModal } from "../ui/PromptModal";
 import { TimelineBar, type TimelineMode } from "../ui/TimelineBar";
@@ -24,8 +23,6 @@ import { CameraWidget } from "../ui/CameraWidget";
 import { ToolBar, type CursorTool } from "../ui/ToolBar";
 import { graphToGexf, graphToJson } from "../export/exporters";
 import type GraphInsightPlugin from "../main";
-import type { SemanticSettings } from "../main";
-import type { SemanticPair, SemanticStatus } from "../semantic/SemanticService";
 
 export const GRAPH_INSIGHT_VIEW_TYPE = "graph-insight-view";
 
@@ -59,7 +56,6 @@ export class GraphInsightView extends ItemView {
 	private chipFilter: FilterSelection = { tags: new Set(), folders: new Set() };
 	private focusBar: HTMLElement | null = null;
 	private toolBar: ToolBar | null = null;
-	private semanticChip: HTMLElement | null = null;
 	private cursorTool: CursorTool = "open";
 	/** First endpoint picked in «Путь» mode. */
 	private pathAnchor: number | null = null;
@@ -115,7 +111,6 @@ export class GraphInsightView extends ItemView {
 			onNodeDoubleClick: (nodeId) => this.enterFocus(nodeId),
 			onNodeContextMenu: (nodeId, event) => this.showNodeMenu(nodeId, event),
 			onLassoSelect: (nodeIds, event) => this.showLassoMenu(nodeIds, event),
-			onSemanticEdgeClick: (pairIndex, event) => this.showSemanticEdgeMenu(pairIndex, event),
 			onNodeDragStart: (nodeId) => {
 				const positions = this.renderer?.currentPositions;
 				if (positions) {
@@ -155,7 +150,6 @@ export class GraphInsightView extends ItemView {
 
 		this.panel = this.buildPanel(this.plugin.settings.panel);
 		this.panel.setViewPresets(this.plugin.settings.viewPresets);
-		this.registerSemanticStatus();
 		this.legend = new Legend(container);
 		this.cameraWidget = new CameraWidget(
 			container,
@@ -219,9 +213,6 @@ export class GraphInsightView extends ItemView {
 			},
 		});
 
-		this.semanticChip = container.createDiv({ cls: "graph-insight-semantic-chip" });
-		this.semanticChip.hide();
-
 		this.focusBar = container.createDiv({ cls: "graph-insight-focusbar" });
 		this.focusBar.hide();
 
@@ -247,175 +238,6 @@ export class GraphInsightView extends ItemView {
 		if (!this.plugin.settings.onboardingShown) {
 			new OnboardingModal(this.app, () => void this.plugin.markOnboardingShown()).open();
 		}
-	}
-
-	/** Re-read plugin settings (used by commands that mutate them). */
-	refreshFromSettings(): void {
-		this.refreshSemanticEdges();
-	}
-
-	// ── Semantics ─────────────────────────────────────────────────────
-
-	/** Semantic pairs currently drawn, parallel to renderer pair indexes. */
-	private shownSemanticPairs: SemanticPair[] = [];
-	private semanticUnsubscribe: (() => void) | null = null;
-
-	private registerSemanticStatus(): void {
-		this.semanticUnsubscribe = this.plugin.semantics.onStatus((status) => {
-			const text = this.formatSemanticStatus(status);
-			this.panel?.setSemanticStatus(text);
-			// A visible chip: model download and indexing take minutes, and
-			// the panel section is usually collapsed.
-			if (this.semanticChip) {
-				const busy = status.state !== "off" && status.state !== "ready";
-				this.semanticChip.setText(`Semantics · ${text}`);
-				this.semanticChip.toggleClass("is-error", status.state === "error");
-				if (busy || status.state === "error") this.semanticChip.show();
-				else this.semanticChip.hide();
-			}
-			if (status.state === "ready") this.refreshSemanticEdges();
-		});
-	}
-
-	private formatSemanticStatus(status: SemanticStatus): string {
-		switch (status.state) {
-			case "off": return "Off";
-			case "loading-model": {
-				const mb = (n: number) => (n / 1024 / 1024).toFixed(0);
-				return status.total > 0
-					? `Downloading model: ${mb(status.done)} / ${mb(status.total)} MB`
-					: "Downloading model…";
-			}
-			case "indexing": return `Indexing: ${status.done} / ${status.total}`;
-			case "pairing": return `Finding pairs: ${status.done} / ${status.total}`;
-			case "ready":
-				return status.done > 0
-					? `Ready · ${status.done} notes indexed`
-					: "Ready · index is empty";
-			case "error": return `Error: ${status.message ?? "?"}`;
-		}
-	}
-
-	private handleSemanticSettings(settings: SemanticSettings): void {
-		const previous = this.plugin.settings.semantics;
-		const wasEnabled = previous.enabled;
-		// Consent is asked once ever; after that enabling is a plain toggle
-		// (the model is already cached locally).
-		if (settings.enabled && !wasEnabled && !previous.consentGiven) {
-			new SemanticConsentModal(this.app, () => {
-				void this.plugin.saveSemanticSettings({ ...settings, consentGiven: true });
-				void this.plugin.semantics.enable();
-			}).open();
-			return;
-		}
-		void this.plugin.saveSemanticSettings(settings);
-		if (settings.enabled && !wasEnabled) void this.plugin.semantics.enable();
-		if (!settings.enabled && wasEnabled) {
-			this.plugin.semantics.disable();
-			this.renderer?.setSemanticEdges(null);
-			this.shownSemanticPairs = [];
-			return;
-		}
-		this.refreshSemanticEdges();
-	}
-
-	/** Filter service pairs by threshold, drop explicitly linked ones, draw. */
-	private refreshSemanticEdges(): void {
-		if (!this.renderer || !this.model) return;
-		const settings = this.plugin.settings.semantics;
-		if (!settings.enabled || !settings.showEdges) {
-			this.renderer.setSemanticEdges(null);
-			this.shownSemanticPairs = [];
-			return;
-		}
-
-		const linked = new Set<string>();
-		for (const edge of this.model.edges) {
-			linked.add(`${Math.min(edge.source, edge.target)}|${Math.max(edge.source, edge.target)}`);
-		}
-
-		const drawn: { a: number; b: number }[] = [];
-		this.shownSemanticPairs = [];
-		for (const pair of this.plugin.semantics.getPairs()) {
-			if (pair.similarity < settings.threshold) break; // pairs are sorted desc
-			const a = this.model.pathToId.get(pair.pathA);
-			const b = this.model.pathToId.get(pair.pathB);
-			if (a === undefined || b === undefined) continue;
-			if (linked.has(`${Math.min(a, b)}|${Math.max(a, b)}`)) continue;
-			drawn.push({ a, b });
-			this.shownSemanticPairs.push(pair);
-		}
-		this.renderer.setSemanticEdges(drawn);
-		const total = this.plugin.semantics.getPairs().length;
-		if (total > 0) {
-			this.panel?.setSemanticStatus(
-				`Showing ${drawn.length} dashed links out of ${total} similar pairs`
-			);
-		}
-	}
-
-	private showSemanticEdgeMenu(pairIndex: number, event: MouseEvent): void {
-		const pair = this.shownSemanticPairs[pairIndex];
-		if (!pair || !this.model) return;
-		const nameA = basename(pair.pathA);
-		const nameB = basename(pair.pathB);
-		const menu = new Menu();
-		menu.addItem((item) =>
-			item.setTitle(`Similarity ${(pair.similarity * 100).toFixed(0)}%: ${nameA} ↔ ${nameB}`).setDisabled(true)
-		);
-		menu.addSeparator();
-		menu.addItem((item) => item.setTitle(`Create link in "${nameA}"`).setIcon("link").onClick(
-			() => void this.insertWikilink(pair.pathA, pair.pathB)
-		));
-		menu.addItem((item) => item.setTitle(`Create link in "${nameB}"`).setIcon("link").onClick(
-			() => void this.insertWikilink(pair.pathB, pair.pathA)
-		));
-		menu.addSeparator();
-		menu.addItem((item) => item.setTitle(`Open "${nameA}"`).onClick(() => this.openPath(pair.pathA)));
-		menu.addItem((item) => item.setTitle(`Open "${nameB}"`).onClick(() => this.openPath(pair.pathB)));
-		menu.showAtMouseEvent(event);
-	}
-
-	/** Explicit user action from the semantic-edge popup — the only place
-	 *  the plugin ever modifies a note. */
-	private async insertWikilink(intoPath: string, targetPath: string): Promise<void> {
-		const file = this.app.vault.getAbstractFileByPath(intoPath);
-		if (!(file instanceof TFile)) return;
-		const target = this.app.vault.getAbstractFileByPath(targetPath);
-		if (!(target instanceof TFile)) return;
-		const link = this.app.metadataCache.fileToLinktext(target, intoPath);
-		await this.app.vault.process(file, (content) => {
-			const relatedHeader = /^##\s+Related\s*$/m.exec(content);
-			if (relatedHeader) {
-				const insertAt = relatedHeader.index + relatedHeader[0].length;
-				return `${content.slice(0, insertAt)}\n[[${link}]]${content.slice(insertAt)}`;
-			}
-			return `${content.trimEnd()}\n\n[[${link}]]\n`;
-		});
-		new Notice(`Link [[${link}]] added to ${basename(intoPath)}`);
-	}
-
-	private openPath(path: string): void {
-		const file = this.app.vault.getAbstractFileByPath(path);
-		if (file instanceof TFile) void this.app.workspace.getLeaf(false).openFile(file);
-	}
-
-	private async showSimilarMenu(nodeId: number, event: MouseEvent): Promise<void> {
-		if (!this.model) return;
-		const path = this.model.nodes[nodeId].path;
-		const { paths, sims } = await this.plugin.semantics.similar(path, 10);
-		const menu = new Menu();
-		if (paths.length === 0) {
-			menu.addItem((item) => item.setTitle("Index is not ready yet").setDisabled(true));
-		}
-		paths.forEach((similarPath, i) => {
-			menu.addItem((item) =>
-				item.setTitle(`${(sims[i] * 100).toFixed(0)}% · ${basename(similarPath)}`).onClick(
-					() => this.openPath(similarPath)
-				)
-			);
-		});
-		menu.showAtPosition({ x: event.clientX, y: event.clientY });
 	}
 
 	/** «Путь»: first click sets the anchor, second highlights the chain. */
@@ -605,11 +427,6 @@ export class GraphInsightView extends ItemView {
 		menu.addItem((item) => item.setTitle("Open").setIcon("file-text").onClick(() => this.openNode(nodeId, false)));
 		menu.addItem((item) => item.setTitle("Open in new tab").setIcon("file-plus").onClick(() => this.openNode(nodeId, true)));
 		menu.addItem((item) => item.setTitle("Focus mode").setIcon("target").onClick(() => this.enterFocus(nodeId)));
-		if (this.plugin.settings.semantics.enabled) {
-			menu.addItem((item) => item.setTitle("Show similar").setIcon("search").onClick(
-				() => void this.showSimilarMenu(nodeId, event)
-			));
-		}
 		menu.addSeparator();
 		menu.addItem((item) => item.setTitle("Hide node").setIcon("eye-off").onClick(() => {
 			this.hiddenNodes.add(nodeId);
@@ -703,7 +520,6 @@ export class GraphInsightView extends ItemView {
 		this.applyOverlays(this.plugin.settings.panel);
 		this.panel?.setOverlayCounts(countOverlayMatches(model));
 		this.metricsClient?.compute(model);
-		this.refreshSemanticEdges();
 		this.refreshTimelineData();
 		this.syncTimelineAndTrail(this.plugin.settings.panel);
 		const vocabulary = collectVocabulary(this.facts);
@@ -1006,7 +822,7 @@ export class GraphInsightView extends ItemView {
 	/** The ONE place panel callbacks are defined — panel is rebuilt from
 	 *  here everywhere, so behavior can never diverge between copies. */
 	private buildPanel(state: PanelState): ControlPanel {
-		return new ControlPanel(this.contentEl, state, this.plugin.settings.semantics, {
+		return new ControlPanel(this.contentEl, state, {
 			onChange: (next) => {
 				void this.plugin.savePanelState(next);
 				this.applyAllPanelState(next);
@@ -1014,7 +830,6 @@ export class GraphInsightView extends ItemView {
 			onReheat: () => this.regroup(),
 			onClusterClick: (index) => this.zoomToCluster(index),
 			onClusterToggle: (index) => this.toggleCluster(index),
-			onSemanticChange: (settings) => this.handleSemanticSettings(settings),
 			onTrailReplay: () => this.replayTrail(),
 			onShowHiddenNodes: () => this.resetHiddenNodes(),
 			onResetViewState: () => this.resetViewState(),
@@ -1255,8 +1070,6 @@ export class GraphInsightView extends ItemView {
 		this.toolBar = null;
 		this.filterChips?.destroy();
 		this.filterChips = null;
-		this.semanticUnsubscribe?.();
-		this.semanticUnsubscribe = null;
 		if (this.trailReplayFrame !== null) window.cancelAnimationFrame(this.trailReplayFrame);
 		this.timeline?.destroy();
 		this.timeline = null;
@@ -1300,8 +1113,3 @@ function collectVocabulary(facts: NodeFacts[]): [string[], string[]] {
 	return [byCount(tagCounts), byCount(folderCounts)];
 }
 
-function basename(path: string): string {
-	const base = path.slice(path.lastIndexOf("/") + 1);
-	const dot = base.lastIndexOf(".");
-	return dot > 0 ? base.slice(0, dot) : base;
-}

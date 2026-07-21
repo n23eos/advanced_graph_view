@@ -1,7 +1,8 @@
 /**
  * Cursor mode selector: what a left click on a node does.
- * Sits under the search bar as a compact row of buttons.
+ * A compact single row of monochrome icon buttons in the top-left corner.
  */
+import { setIcon } from "obsidian";
 
 export type CursorTool = "open" | "links" | "path" | "hide" | "pin";
 
@@ -10,12 +11,13 @@ export interface ToolBarCallbacks {
 	onDepthChange(depth: number): void;
 }
 
+/** Lucide icon names — theme-tinted, so every glyph shares one tone. */
 const TOOLS: { id: CursorTool; icon: string; label: string; hint: string }[] = [
-	{ id: "open", icon: "📄", label: "Open", hint: "Click opens the note" },
-	{ id: "links", icon: "🕸", label: "Links", hint: "Click reveals the neighborhood N steps out" },
-	{ id: "path", icon: "↔", label: "Path", hint: "Click two notes to trace the shortest chain between them" },
-	{ id: "hide", icon: "🚫", label: "Hide", hint: "Click removes the note from the graph" },
-	{ id: "pin", icon: "📌", label: "Pin", hint: "Click pins or releases the note" },
+	{ id: "open", icon: "file-text", label: "Open", hint: "Click opens the note" },
+	{ id: "links", icon: "waypoints", label: "Links", hint: "Click reveals the neighborhood N steps out" },
+	{ id: "path", icon: "route", label: "Path", hint: "Click two notes to trace the shortest chain between them" },
+	{ id: "hide", icon: "eye-off", label: "Hide", hint: "Click removes the note from the graph" },
+	{ id: "pin", icon: "pin", label: "Pin", hint: "Click pins or releases the note" },
 ];
 
 export class ToolBar {
@@ -32,24 +34,23 @@ export class ToolBar {
 	) {
 		this.root = host.createDiv({ cls: "graph-insight-toolbar" });
 
-		const row = this.root.createDiv({ cls: "graph-insight-toolbar-row" });
 		for (const item of TOOLS) {
-			const button = row.createEl("button", {
-				cls: "graph-insight-tool",
-				text: `${item.icon} ${item.label}`,
-			});
-			button.setAttribute("aria-label", item.hint);
+			const button = this.root.createEl("button", { cls: "graph-insight-tool" });
+			setIcon(button, item.icon);
+			button.setAttribute("aria-label", `${item.label} — ${item.hint}`);
+			button.setAttribute("title", `${item.label} — ${item.hint}`);
 			button.addEventListener("click", () => this.setTool(item.id));
 			this.buttons.set(item.id, button);
 		}
 
-		this.depthRow = this.root.createDiv({ cls: "graph-insight-toolbar-row" });
-		this.depthRow.createSpan({ cls: "graph-insight-panel-label", text: "Steps" });
+		// Depth control lives inline; only meaningful in the neighborhood mode.
+		this.depthRow = this.root.createDiv({ cls: "graph-insight-toolbar-depth" });
 		const slider = this.depthRow.createEl("input", { type: "range" });
 		slider.min = "1";
 		slider.max = "6";
 		slider.step = "1";
 		slider.value = String(depth);
+		slider.setAttribute("aria-label", "Neighborhood steps");
 		this.depthValue = this.depthRow.createSpan({
 			cls: "graph-insight-panel-count",
 			text: String(depth),
@@ -72,7 +73,6 @@ export class ToolBar {
 		for (const [id, button] of this.buttons) {
 			button.toggleClass("is-active", id === this.tool);
 		}
-		// The depth slider only means something in the neighborhood mode.
 		this.depthRow.toggleClass("is-hidden", this.tool !== "links");
 	}
 

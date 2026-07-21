@@ -1,9 +1,9 @@
 {
 	"id": "graph-insight",
 	"name": "Advanced Graph View",
-	"version": "0.1.6",
+	"version": "0.2.0",
 	"minAppVersion": "1.13.0",
-	"description": "Advanced graph view with 3D visualization, clusters, PageRank and semantic links.",
+	"description": "Advanced graph view with 3D visualization, clusters, PageRank and color schemes.",
 	"author": "n23eos",
 	"authorUrl": "https://github.com/n23eos",
 	"isDesktopOnly": false

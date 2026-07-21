@@ -1,6 +1,6 @@
 {
 	"name": "graph-insight",
-	"version": "0.1.6",
+	"version": "0.2.0",
 	"description": "Advanced graph view plugin for Obsidian",
 	"main": "main.js",
 	"scripts": {
@@ -25,15 +25,11 @@
 		"vitest": "^4.1.10"
 	},
 	"dependencies": {
-		"@huggingface/transformers": "^4.2.0",
 		"d3-force": "^3.0.0",
 		"d3-force-3d": "^3.0.6",
 		"graphology": "^0.26.0",
 		"graphology-communities-louvain": "^2.0.2",
 		"graphology-metrics": "^2.4.0",
 		"pixi.js": "^8.19.0"
-	},
-	"overrides": {
-		"adm-zip": "^0.6.0"
 	}
 }

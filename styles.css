@@ -25,7 +25,8 @@
 
 .graph-insight-panel {
 	position: absolute;
-	top: 12px;
+	/* Sits below the top-left cursor toolbar. */
+	top: 52px;
 	left: 12px;
 	z-index: 10;
 	min-width: 220px;
@@ -383,7 +384,7 @@
 
 /* Panel polish: tighter rows, full-width thin sliders, section separators */
 .graph-insight-panel {
-	max-height: calc(100% - 24px);
+	max-height: calc(100% - 64px);
 	overflow-y: auto;
 	min-width: 240px;
 }
@@ -579,14 +580,13 @@
 
 .graph-insight-toolbar {
 	position: absolute;
-	top: 58px;
-	left: 50%;
-	transform: translateX(-50%);
+	top: 12px;
+	left: 12px;
 	z-index: 11;
 	display: flex;
-	flex-direction: column;
-	gap: 4px;
-	padding: 5px 8px;
+	align-items: center;
+	gap: 2px;
+	padding: 3px;
 	background: color-mix(in srgb, var(--background-secondary) 85%, transparent);
 	backdrop-filter: blur(8px);
 	border: 1px solid var(--background-modifier-border);
@@ -594,24 +594,31 @@
 	box-shadow: var(--shadow-s);
 }
 
-.graph-insight-toolbar-row {
+.graph-insight-toolbar-depth {
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: 4px;
+	margin-left: 4px;
+	padding-left: 6px;
+	border-left: 1px solid var(--background-modifier-border);
 }
 
-.graph-insight-toolbar-row.is-hidden {
+.graph-insight-toolbar-depth.is-hidden {
 	display: none;
 }
 
-.graph-insight-toolbar-row input[type="range"] {
-	width: 120px;
+.graph-insight-toolbar-depth input[type="range"] {
+	width: 70px;
 	margin: 0;
 }
 
 .graph-insight-tool {
-	padding: 3px 9px;
-	font-size: var(--font-ui-smaller);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 26px;
+	height: 26px;
+	padding: 0;
 	cursor: pointer;
 	background: transparent;
 	border: 1px solid transparent;
@@ -620,8 +627,14 @@
 	box-shadow: none;
 }
 
+.graph-insight-tool .svg-icon {
+	width: 15px;
+	height: 15px;
+}
+
 .graph-insight-tool:hover {
 	background: var(--background-modifier-hover);
+	color: var(--text-normal);
 }
 
 .graph-insight-tool.is-active {
@@ -634,28 +647,9 @@
 	display: none;
 }
 
-/* Focus bar sits below the toolbar */
+/* Focus bar sits just below the centered search bar. */
 .graph-insight-focusbar {
-	top: 108px;
-}
-
-.graph-insight-semantic-chip {
-	position: absolute;
-	top: 12px;
-	right: 12px;
-	z-index: 12;
-	padding: 4px 10px;
-	background: var(--interactive-accent);
-	color: var(--text-on-accent);
-	border-radius: var(--radius-m);
-	font-size: var(--font-ui-smaller);
-	box-shadow: var(--shadow-s);
-	max-width: 260px;
-}
-
-.graph-insight-semantic-chip.is-error {
-	background: var(--background-modifier-error);
-	color: var(--text-normal);
+	top: 56px;
 }
 
 .graph-insight-filters {
