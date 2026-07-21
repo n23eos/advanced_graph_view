@@ -90,19 +90,19 @@ describe("PilotController", () => {
 		expect(pilot.update(cam, 16)).toBe(false);
 	});
 
-	test("mouse look turns yaw and inverts+clamps pitch", () => {
+	test("edge turn rates yaw the ship and pitch down", () => {
 		// Arrange
 		const cam = stubCamera();
 		const pilot = new PilotController();
 
-		// Act
-		pilot.addLook(100, 100);
+		// Act: crosshair pushed to the bottom-right edge
+		pilot.setLookRate(1.5, 1.5);
 		const moved = pilot.update(cam, 16);
 
 		// Assert
 		expect(moved).toBe(true);
 		expect(cam.yaw).toBeGreaterThan(0);
-		expect(cam.pitch).toBeLessThan(0); // dragging down looks down
+		expect(cam.pitch).toBeLessThan(0); // crosshair below centre looks down
 	});
 
 	test("reset stops the ship dead", () => {

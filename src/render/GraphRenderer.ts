@@ -920,13 +920,11 @@ export class GraphRenderer {
 		label.visible = true;
 	}
 
-	/** Visible node nearest the screen centre (crosshair), front-most, within
-	 *  a pixel tolerance. For pilot-mode targeting. */
-	nodeInCrosshair(pxTolerance = 80): number | null {
-		if (!this.app || !this.positions || !this.viewport) return null;
-		const cx = this.app.canvas.clientWidth / 2;
-		const cy = this.app.canvas.clientHeight / 2;
-		const center = this.viewport.toWorld(cx, cy);
+	/** Visible node nearest a canvas point (the free crosshair), within a pixel
+	 *  tolerance. For pilot-mode targeting anywhere on screen. */
+	nodeAtCanvasPoint(canvasX: number, canvasY: number, pxTolerance = 44): number | null {
+		if (!this.positions || !this.viewport) return null;
+		const point = this.viewport.toWorld(canvasX, canvasY);
 		const tol = pxTolerance / this.viewport.scale;
 		let best: number | null = null;
 		let bestDistance = Infinity;
@@ -934,8 +932,8 @@ export class GraphRenderer {
 		for (let i = 0; i < count; i++) {
 			if (this.hiddenMask !== null && this.hiddenMask[i] === 1) continue;
 			if (this.depthScales !== null && this.depthScales[i] === 0) continue; // behind camera
-			const dx = this.positions[i * 2] - center.x;
-			const dy = this.positions[i * 2 + 1] - center.y;
+			const dx = this.positions[i * 2] - point.x;
+			const dy = this.positions[i * 2 + 1] - point.y;
 			const distance = Math.hypot(dx, dy);
 			if (distance <= tol && distance < bestDistance) {
 				best = i;

@@ -1,7 +1,8 @@
 /**
- * Pilot mode input → ship motion (FPS-style). The mouse always steers 1:1
- * (yaw/pitch from raw movement), WASD/Space/C translate the ship with inertia.
- * No banking roll — kept deliberately flat so aiming stays comfortable.
+ * Pilot mode input → ship motion. A free crosshair aims anywhere on screen;
+ * pushing it toward an edge turns the ship at a rate (set via setLookRate),
+ * while the centre zone leaves aiming free. WASD/Space/C translate the ship
+ * with inertia. No banking roll — kept flat so aiming stays comfortable.
  *
  * The camera it drives is anything with the small ShipCamera surface —
  * Camera3D satisfies it, and tests use a stub.
@@ -26,7 +27,6 @@ export interface ShipIntent {
 const MAX_SPEED = 150; // world units / second at full throttle (cruise)
 const BOOST_FACTOR = 2.4;
 const RESPONSE = 5; // velocity smoothing rate (1/s): higher = snappier
-const MOUSE_SENS = 0.0024; // radians per pixel of mouse movement
 const PITCH_LIMIT = 1.45; // ~83°, keeps the horizon from flipping
 
 /**
@@ -60,18 +60,18 @@ export class PilotController {
 	private vStrafe = 0;
 	private vLift = 0;
 	private intent: ShipIntent = { forward: 0, strafe: 0, lift: 0, boost: false };
-	/** Mouse-look deltas accumulated since the last update (pixels). */
-	private pendingYaw = 0;
-	private pendingPitch = 0;
+	/** Turn rates (radians/second) from the crosshair's edge offset. */
+	private yawRate = 0;
+	private pitchRate = 0;
 
 	setIntent(intent: ShipIntent): void {
 		this.intent = intent;
 	}
 
-	/** Feed raw mouse movement (movementX/Y). Steers the view directly. */
-	addLook(dxPixels: number, dyPixels: number): void {
-		this.pendingYaw += dxPixels;
-		this.pendingPitch += dyPixels;
+	/** Set the current turn rates (radians/second). 0,0 = free-aim, no turn. */
+	setLookRate(yawRate: number, pitchRate: number): void {
+		this.yawRate = yawRate;
+		this.pitchRate = pitchRate;
 	}
 
 	/** Advance the ship by `dtMs` milliseconds. Returns true if it moved. */
@@ -82,10 +82,8 @@ export class PilotController {
 		this.vStrafe = stepSpeed(this.vStrafe, this.intent.strafe, dt, max);
 		this.vLift = stepSpeed(this.vLift, this.intent.lift, dt, max);
 
-		const yawDelta = this.pendingYaw * MOUSE_SENS;
-		const pitchDelta = this.pendingPitch * MOUSE_SENS;
-		this.pendingYaw = 0;
-		this.pendingPitch = 0;
+		const yawDelta = this.yawRate * dt;
+		const pitchDelta = this.pitchRate * dt;
 
 		const moving =
 			Math.abs(this.vForward) > 0.01 ||
@@ -107,10 +105,10 @@ export class PilotController {
 		return Math.min(1, Math.abs(this.vForward) / MAX_SPEED);
 	}
 
-	/** Kill all velocity and pending look — used when leaving pilot mode. */
+	/** Kill all velocity and turn rates — used when leaving pilot mode. */
 	reset(): void {
 		this.vForward = this.vStrafe = this.vLift = 0;
-		this.pendingYaw = this.pendingPitch = 0;
+		this.yawRate = this.pitchRate = 0;
 		this.intent = { forward: 0, strafe: 0, lift: 0, boost: false };
 	}
 }

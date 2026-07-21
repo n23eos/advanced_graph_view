@@ -13,6 +13,7 @@ export interface PilotTarget {
 
 export class PilotHud {
 	private root: HTMLElement;
+	private crosshair: HTMLElement;
 	private reticle: HTMLElement;
 	private throttleFill: HTMLElement;
 	private targetTitle: HTMLElement;
@@ -25,7 +26,7 @@ export class PilotHud {
 
 		// Canopy frame: corner struts + inner vignette to feel enclosed.
 		this.root.createDiv({ cls: "graph-insight-hud-cockpit" });
-		this.root.createDiv({ cls: "graph-insight-hud-crosshair" });
+		this.crosshair = this.root.createDiv({ cls: "graph-insight-hud-crosshair" });
 		this.reticle = this.root.createDiv({ cls: "graph-insight-hud-reticle" });
 		this.reticle.hide();
 
@@ -38,7 +39,7 @@ export class PilotHud {
 
 		this.root.createDiv({
 			cls: "graph-insight-hud-hint",
-			text: "move mouse to steer · WASD move · Space/C up/down · left-hold tractor · F open · Shift boost · Esc",
+			text: "aim with crosshair · push to edges to turn · WASD move · Space/C up/down · left-hold tractor · F open · Esc",
 		});
 		this.hide();
 	}
@@ -70,6 +71,12 @@ export class PilotHud {
 	setPreview(text: string): void {
 		this.preview.setText(text);
 		this.preview.toggleClass("is-empty", text.length === 0);
+	}
+
+	/** Position the free crosshair at the cursor (canvas coords). */
+	setCrosshair(x: number, y: number): void {
+		this.crosshair.style.left = `${x}px`;
+		this.crosshair.style.top = `${y}px`;
 	}
 
 	/** Move the reticle onto a node (canvas coords + radius), or hide it.
