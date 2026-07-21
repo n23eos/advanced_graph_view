@@ -25,7 +25,7 @@ export class PluginDataStore {
 			if (!(await this.app.vault.adapter.exists(path))) return null;
 			return JSON.parse(await this.app.vault.adapter.read(path)) as T;
 		} catch (error) {
-			console.error(`Graph Insight: failed to read ${fileName}`, error);
+			console.error(`Advanced Graph View: failed to read ${fileName}`, error);
 			return null;
 		}
 	}
@@ -37,7 +37,7 @@ export class PluginDataStore {
 			}
 			await this.app.vault.adapter.write(`${this.dataDir}/${fileName}`, JSON.stringify(data));
 		} catch (error) {
-			console.error(`Graph Insight: failed to write ${fileName}`, error);
+			console.error(`Advanced Graph View: failed to write ${fileName}`, error);
 		}
 	}
 

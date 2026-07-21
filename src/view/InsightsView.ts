@@ -30,7 +30,7 @@ export class InsightsView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return "Graph Insights";
+		return "Graph insights";
 	}
 
 	getIcon(): string {
@@ -54,7 +54,7 @@ export class InsightsView extends ItemView {
 		const el = this.contentEl;
 		el.empty();
 		el.addClass("graph-insight-insights");
-		el.createEl("h4", { text: "Graph Insights" });
+		el.createEl("h4", { text: "Graph insights" });
 		el.createDiv({ cls: "graph-insight-panel-hint", text: "Computing metrics…" });
 	}
 
@@ -67,7 +67,7 @@ export class InsightsView extends ItemView {
 		const log = this.plugin.usageLog;
 		const now = Date.now();
 
-		el.createEl("h4", { text: "Graph Insights" });
+		el.createEl("h4", { text: "Graph insights" });
 
 		// Totals
 		const counts = countOverlayMatches(model);

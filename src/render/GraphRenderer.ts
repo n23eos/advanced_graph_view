@@ -219,12 +219,8 @@ export class GraphRenderer {
 		window.addEventListener("pointermove", this.handlePointerMove);
 		window.addEventListener("pointerup", this.handlePointerUp);
 
-		// Dev profiling hook: per-section CPU totals, read via window.__giProf.
-		(window as unknown as { __giProf?: unknown }).__giProf = this.prof;
 		app.ticker.add(() => this.renderFrame());
 	}
-
-	private prof = { sprites: 0, edges: 0, cull: 0, frames: 0 };
 
 	setModel(model: GraphModel): void {
 		if (!this.app || !this.nodeTexture || !this.colors) return;
@@ -656,9 +652,7 @@ export class GraphRenderer {
 	private renderFrame(): void {
 		if (!this.model || !this.positions || !this.radii) return;
 
-		this.prof.frames++;
 		if (this.positionsDirty) {
-			const t0 = performance.now();
 			const threeD = this.camera.enabled && this.depthScales;
 			for (let i = 0; i < this.sprites.length; i++) {
 				const sprite = this.sprites[i];
@@ -676,15 +670,12 @@ export class GraphRenderer {
 				}
 			}
 			this.positionsDirty = false;
-			this.prof.sprites += performance.now() - t0;
 		}
 
 		if (this.edgesDirty) {
-			const t0 = performance.now();
 			this.edgesDirty = false;
 			this.edgeMesh?.updatePositions(this.positions, this.camera.enabled ? this.depthScales : null);
 			this.redrawTrail();
-			this.prof.edges += performance.now() - t0;
 		}
 		if (this.cullDirty) {
 			const now = performance.now();
@@ -694,7 +685,6 @@ export class GraphRenderer {
 				this.lastCullAt = now;
 				this.cullDirty = false;
 				this.cullAndLabel(); // may re-set cullDirty to finish deferred labels
-				this.prof.cull += performance.now() - now;
 			}
 		}
 	}
