@@ -465,7 +465,106 @@
 
 /* Crosshair-style cursor while piloting. */
 .graph-insight-piloting canvas {
-	cursor: crosshair;
+	cursor: none;
+}
+
+/* ── Pilot HUD ─────────────────────────────────────────────────────── */
+.graph-insight-hud {
+	position: absolute;
+	inset: 0;
+	z-index: 12;
+	pointer-events: none;
+	color: #cfe3ff;
+	font-family: var(--font-monospace, monospace);
+}
+
+.graph-insight-hud-crosshair {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 22px;
+	height: 22px;
+	transform: translate(-50%, -50%);
+	border: 1.5px solid rgba(120, 220, 255, 0.85);
+	border-radius: 50%;
+	box-shadow: 0 0 6px rgba(80, 200, 255, 0.6);
+}
+
+.graph-insight-hud-crosshair::before,
+.graph-insight-hud-crosshair::after {
+	content: "";
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 2px;
+	height: 2px;
+	background: rgba(160, 235, 255, 0.95);
+	transform: translate(-50%, -50%);
+	border-radius: 50%;
+}
+
+.graph-insight-hud-reticle {
+	position: absolute;
+	transform: translate(-50%, -50%);
+	border: 1.5px solid rgba(130, 255, 200, 0.9);
+	border-radius: 6px;
+	box-shadow: 0 0 10px rgba(80, 255, 180, 0.5);
+	transition: width 60ms linear, height 60ms linear;
+}
+
+.graph-insight-hud-panel {
+	position: absolute;
+	left: 50%;
+	bottom: 22px;
+	transform: translateX(-50%);
+	min-width: 220px;
+	max-width: 60%;
+	padding: 8px 14px;
+	text-align: center;
+	background: rgba(6, 12, 26, 0.72);
+	border: 1px solid rgba(90, 170, 230, 0.4);
+	border-radius: var(--radius-m);
+	backdrop-filter: blur(6px);
+}
+
+.graph-insight-hud-title {
+	font-size: 14px;
+	font-weight: 600;
+	color: #eaf4ff;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.graph-insight-hud-meta {
+	font-size: 11px;
+	color: #8fb8d8;
+	margin-top: 2px;
+}
+
+.graph-insight-hud-throttle {
+	margin-top: 7px;
+	height: 4px;
+	background: rgba(90, 170, 230, 0.2);
+	border-radius: 2px;
+	overflow: hidden;
+}
+
+.graph-insight-hud-throttle-fill {
+	height: 100%;
+	width: 0%;
+	background: linear-gradient(to right, #38bdf8, #4ade80);
+	transition: width 80ms linear;
+}
+
+.graph-insight-hud-hint {
+	position: absolute;
+	left: 50%;
+	top: 14px;
+	transform: translateX(-50%);
+	font-size: 10.5px;
+	color: rgba(150, 190, 220, 0.75);
+	white-space: nowrap;
 }
 
 .graph-insight-camera {

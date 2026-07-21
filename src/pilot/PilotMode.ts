@@ -8,10 +8,13 @@
  */
 import { Notice } from "obsidian";
 import { PilotController } from "./PilotController";
+import { PilotHud, type PilotTarget } from "../ui/PilotHud";
 import type { GraphRenderer } from "../render/GraphRenderer";
 
 export interface PilotCallbacks {
 	onChange(active: boolean): void;
+	/** Instrument-panel info for the node under the crosshair. */
+	nodeInfo(id: number): PilotTarget | null;
 }
 
 /** Held keys that steer the ship; preventDefault so the page never scrolls. */
@@ -22,10 +25,12 @@ const FLIGHT_KEYS = new Set([
 
 export class PilotMode {
 	private controller = new PilotController();
+	private hud: PilotHud;
 	private active = false;
 	private pressed = new Set<string>();
 	/** 3D on/off before entering, so exit restores the prior view. */
 	private prev3D = false;
+	private lastTarget: number | null = null;
 	private toggleBtn: HTMLElement;
 
 	constructor(
@@ -33,6 +38,7 @@ export class PilotMode {
 		private readonly renderer: GraphRenderer,
 		private readonly callbacks: PilotCallbacks
 	) {
+		this.hud = new PilotHud(host);
 		this.toggleBtn = host.createEl("button", { cls: "graph-insight-pilot-toggle", text: "🚀" });
 		this.toggleBtn.setAttribute("aria-label", "Pilot mode — fly the 3D graph");
 		this.toggleBtn.addEventListener("click", () => this.toggle());
@@ -52,9 +58,11 @@ export class PilotMode {
 		this.active = true;
 		this.prev3D = this.renderer.camera.enabled;
 		this.renderer.set3DMode(true);
+		this.renderer.setPilotVisual(true);
 		this.host.toggleClass("graph-insight-ui-hidden", true);
 		this.host.toggleClass("graph-insight-piloting", true);
 		this.toggleBtn.toggleClass("is-active", true);
+		this.hud.show();
 
 		document.addEventListener("keydown", this.onKeyDown);
 		document.addEventListener("keyup", this.onKeyUp);
@@ -62,7 +70,11 @@ export class PilotMode {
 		document.addEventListener("pointerlockchange", this.onLockChange);
 		this.host.requestPointerLock?.();
 
-		this.renderer.setPilotUpdate((dt) => this.controller.update(this.renderer.camera, dt));
+		this.renderer.setPilotUpdate((dt) => {
+			const moved = this.controller.update(this.renderer.camera, dt);
+			this.updateHud();
+			return moved;
+		});
 		new Notice("Pilot mode · WASD fly · Q/E down/up · mouse look · Esc exit", 4000);
 		this.callbacks.onChange(true);
 	}
@@ -73,6 +85,7 @@ export class PilotMode {
 		this.renderer.setPilotUpdate(null);
 		this.controller.reset();
 		this.pressed.clear();
+		this.lastTarget = null;
 
 		document.removeEventListener("keydown", this.onKeyDown);
 		document.removeEventListener("keyup", this.onKeyUp);
@@ -80,16 +93,31 @@ export class PilotMode {
 		document.removeEventListener("pointerlockchange", this.onLockChange);
 		if (document.pointerLockElement) document.exitPointerLock();
 
+		this.hud.hide();
+		this.renderer.setPilotVisual(false);
 		this.host.toggleClass("graph-insight-ui-hidden", false);
 		this.host.toggleClass("graph-insight-piloting", false);
 		this.toggleBtn.toggleClass("is-active", false);
 		if (!this.prev3D) this.renderer.set3DMode(false);
+		// Restore the color scheme's backdrop (pilot forced a dark starfield).
 		this.callbacks.onChange(false);
 	}
 
 	destroy(): void {
 		this.exit();
+		this.hud.destroy();
 		this.toggleBtn.remove();
+	}
+
+	/** Refresh reticle + instrument panel from the node under the crosshair. */
+	private updateHud(): void {
+		const id = this.renderer.nodeInCrosshair();
+		this.hud.setReticle(id !== null ? this.renderer.nodeScreenPos(id) : null);
+		if (id !== this.lastTarget) {
+			this.lastTarget = id;
+			this.hud.setTarget(id !== null ? this.callbacks.nodeInfo(id) : null);
+		}
+		this.hud.setThrottle(this.controller.currentThrottle());
 	}
 
 	private onKeyDown = (event: KeyboardEvent): void => {

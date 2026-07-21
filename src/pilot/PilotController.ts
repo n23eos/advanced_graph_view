@@ -21,10 +21,10 @@ export interface ShipIntent {
 	boost: boolean;
 }
 
-const MAX_SPEED = 420; // world units / second at full throttle
-const BOOST_FACTOR = 2.6;
-const RESPONSE = 6; // velocity smoothing rate (1/s): higher = snappier
-const MOUSE_SENS = 0.0022; // radians per pixel
+const MAX_SPEED = 150; // world units / second at full throttle (cruise)
+const BOOST_FACTOR = 2.4;
+const RESPONSE = 5; // velocity smoothing rate (1/s): higher = snappier
+const MOUSE_SENS = 0.0020; // radians per pixel
 const PITCH_LIMIT = 1.45; // ~83°, keeps the horizon from flipping
 
 /**
@@ -98,6 +98,11 @@ export class PilotController {
 		camera.fly(this.vForward * dt);
 		camera.strafe(this.vStrafe * dt, this.vLift * dt);
 		return true;
+	}
+
+	/** Forward speed as a 0..1 fraction of cruise max — for the throttle bar. */
+	currentThrottle(): number {
+		return Math.min(1, Math.abs(this.vForward) / MAX_SPEED);
 	}
 
 	/** Kill all velocity and pending look — used when leaving pilot mode. */

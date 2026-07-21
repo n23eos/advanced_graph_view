@@ -173,7 +173,13 @@ export class GraphInsightView extends ItemView {
 		);
 
 		if (this.renderer) {
-			this.pilotMode = new PilotMode(container, this.renderer, { onChange: () => {} });
+			this.pilotMode = new PilotMode(container, this.renderer, {
+				onChange: (active) => {
+					// On exit, re-apply the scheme so the dark pilot backdrop reverts.
+					if (!active) this.applyEncoding(this.plugin.settings.panel);
+				},
+				nodeInfo: (id) => this.pilotNodeInfo(id),
+			});
 		}
 
 		this.searchBar = new SearchBar(container, {
@@ -249,6 +255,15 @@ export class GraphInsightView extends ItemView {
 	/** Enter/exit pilot mode (fly the 3D graph). */
 	togglePilot(): void {
 		this.pilotMode?.toggle();
+	}
+
+	/** Instrument-panel readout for the node under the pilot crosshair. */
+	private pilotNodeInfo(id: number): { title: string; links: number; cluster: string } | null {
+		const node = this.model?.nodes[id];
+		if (!node) return null;
+		const community = this.metrics?.community[id];
+		const cluster = community !== undefined ? (this.clusterNames[community] ?? "") : "";
+		return { title: node.name, links: node.inCount + node.outCount, cluster };
 	}
 
 	/** «Путь»: first click sets the anchor, second highlights the chain. */

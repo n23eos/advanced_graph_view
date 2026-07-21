@@ -38,6 +38,10 @@ const MIN_LABEL_SCREEN_PX = 8;
 const DOUBLE_CLICK_MS = 350;
 const HULL_FILL_ALPHA = 0.1;
 const HULL_PADDING = 18;
+/** Pilot mode enlarges nodes so they read as planets/asteroids. */
+const PILOT_SIZE_BOOST = 1.7;
+/** Dark starfield backdrop forced while piloting. */
+const PILOT_BACKDROP = 0x05050f;
 
 export interface RendererCallbacks {
 	onNodeHover(nodeId: number | null, clientX: number, clientY: number): void;
@@ -136,6 +140,9 @@ export class GraphRenderer {
 	private glowMode = false;
 	/** Sprite size multiplier compensating the star texture's smaller core. */
 	private spriteScale = 1;
+	/** Pilot mode: keep nodes opaque ("planets") and slightly larger. */
+	private pilotSolid = false;
+	private pilotSizeBoost = 1;
 	private viewport: Viewport | null = null;
 	private colors: ThemeColors | null = null;
 	private labelFontSize = DEFAULT_LABEL_FONT_SIZE;
@@ -269,7 +276,7 @@ export class GraphRenderer {
 			sprite.anchor.set(0.5);
 			sprite.tint = this.colors.node;
 			if (this.glowMode) sprite.blendMode = "add";
-			sprite.setSize(radius * 2 * this.spriteScale);
+			sprite.setSize(radius * 2 * this.spriteScale * this.pilotSizeBoost);
 			this.sprites.push(sprite);
 			this.nodeLayer.addChild(sprite);
 		}
@@ -433,7 +440,7 @@ export class GraphRenderer {
 		this.encodedGlow = glow;
 		for (let i = 0; i < this.sprites.length; i++) {
 			this.radii[i] = sizes[i];
-			this.sprites[i].setSize(sizes[i] * 2 * this.spriteScale);
+			this.sprites[i].setSize(sizes[i] * 2 * this.spriteScale * this.pilotSizeBoost);
 		}
 		this.applyNodeTints();
 		this.applyNodeAlpha();
@@ -503,7 +510,7 @@ export class GraphRenderer {
 					: this.highlightMask !== null && this.highlightMask[i] === 1
 						? HIGHLIGHT_SIZE_BOOST
 						: 1;
-			this.sprites[i].setSize(this.radii[i] * 2 * depth * boost * this.spriteScale);
+			this.sprites[i].setSize(this.radii[i] * 2 * depth * boost * this.spriteScale * this.pilotSizeBoost);
 		}
 		if (this.hoveredId !== null) {
 			// zIndex only matters when the layer is sorted (3D mode).
@@ -523,10 +530,16 @@ export class GraphRenderer {
 			let fog = 1;
 			if (fogged) {
 				const depth = this.depthScales![i];
-				fog = Math.min(1, Math.max(0.15, (depth - 0.35) * 1.4));
+				// Pilot mode keeps planets solid; only the far-distance fade is
+				// dropped, and the near dissolve tightens so you can fly through.
+				if (!this.pilotSolid) {
+					fog = Math.min(1, Math.max(0.15, (depth - 0.35) * 1.4));
+				}
 				if (depth > 1) {
 					const distance = this.camera.focal / depth;
-					fog *= Math.min(1, Math.max(0, (distance - 40) / 200));
+					fog *= this.pilotSolid
+						? Math.min(1, Math.max(0, (distance - 18) / 55))
+						: Math.min(1, Math.max(0, (distance - 40) / 200));
 				}
 			}
 			let alpha = (dimmed ? glow * DIM_ALPHA : glow) * factor * fog;
@@ -676,7 +689,7 @@ export class GraphRenderer {
 							: this.highlightMask !== null && this.highlightMask[i] === 1
 								? HIGHLIGHT_SIZE_BOOST
 								: 1;
-					sprite.setSize(this.radii[i] * 2 * depth * boost * this.spriteScale);
+					sprite.setSize(this.radii[i] * 2 * depth * boost * this.spriteScale * this.pilotSizeBoost);
 					sprite.zIndex = i === this.hoveredId ? Number.MAX_SAFE_INTEGER : depth;
 				}
 			}
@@ -846,6 +859,23 @@ export class GraphRenderer {
 		this.cullDirty = true;
 	}
 
+	/**
+	 * Pilot mode look: nodes stay opaque like planets, grow a bit, and (when a
+	 * backdrop is given) sit against a dark starfield. Turning it off leaves the
+	 * backdrop to the caller's next setVisualStyle call.
+	 */
+	setPilotVisual(on: boolean): void {
+		this.pilotSolid = on;
+		this.pilotSizeBoost = on ? PILOT_SIZE_BOOST : 1;
+		if (on && this.app) {
+			this.app.renderer.background.alpha = 1;
+			this.app.renderer.background.color = PILOT_BACKDROP;
+		}
+		this.applyHoverSize();
+		this.applyNodeAlpha();
+		this.cullDirty = true;
+	}
+
 	private ensureLabel(nodeId: number, x: number, y: number): void {
 		if (!this.model || !this.colors || !this.radii) return;
 		let label = this.labels.get(nodeId);
@@ -880,6 +910,44 @@ export class GraphRenderer {
 		const viewScale = Math.max(this.viewport!.scale, 0.001);
 		label.scale.set(this.labelScaleWithZoom ? Math.min(1, 1.4 / viewScale) : 1 / viewScale);
 		label.visible = true;
+	}
+
+	/** Visible node nearest the screen centre (crosshair), front-most, within
+	 *  a pixel tolerance. For pilot-mode targeting. */
+	nodeInCrosshair(pxTolerance = 80): number | null {
+		if (!this.app || !this.positions || !this.viewport) return null;
+		const cx = this.app.canvas.clientWidth / 2;
+		const cy = this.app.canvas.clientHeight / 2;
+		const center = this.viewport.toWorld(cx, cy);
+		const tol = pxTolerance / this.viewport.scale;
+		let best: number | null = null;
+		let bestDistance = Infinity;
+		const count = this.positions.length / 2;
+		for (let i = 0; i < count; i++) {
+			if (this.hiddenMask !== null && this.hiddenMask[i] === 1) continue;
+			if (this.depthScales !== null && this.depthScales[i] === 0) continue; // behind camera
+			const dx = this.positions[i * 2] - center.x;
+			const dy = this.positions[i * 2 + 1] - center.y;
+			const distance = Math.hypot(dx, dy);
+			if (distance <= tol && distance < bestDistance) {
+				best = i;
+				bestDistance = distance;
+			}
+		}
+		return best;
+	}
+
+	/** Canvas-space position + on-screen radius of a node, or null if hidden. */
+	nodeScreenPos(id: number): { x: number; y: number; r: number } | null {
+		if (!this.positions || !this.radii || id < 0 || id >= this.radii.length) return null;
+		if (this.depthScales !== null && this.depthScales[id] === 0) return null;
+		const scale = this.world.scale.x;
+		const depth = this.depthScales ? this.depthScales[id] : 1;
+		return {
+			x: this.positions[id * 2] * scale + this.world.position.x,
+			y: this.positions[id * 2 + 1] * scale + this.world.position.y,
+			r: this.radii[id] * depth * scale * this.pilotSizeBoost,
+		};
 	}
 
 	private findNodeAt(clientX: number, clientY: number): number | null {
