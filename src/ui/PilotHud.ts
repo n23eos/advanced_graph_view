@@ -23,6 +23,8 @@ export class PilotHud {
 	constructor(host: HTMLElement) {
 		this.root = host.createDiv({ cls: "graph-insight-hud" });
 
+		// Canopy frame: corner struts + inner vignette to feel enclosed.
+		this.root.createDiv({ cls: "graph-insight-hud-cockpit" });
 		this.root.createDiv({ cls: "graph-insight-hud-crosshair" });
 		this.reticle = this.root.createDiv({ cls: "graph-insight-hud-reticle" });
 		this.reticle.hide();
@@ -36,7 +38,7 @@ export class PilotHud {
 
 		this.root.createDiv({
 			cls: "graph-insight-hud-hint",
-			text: "WASD fly · Q/E · Space up · mouse look · Shift boost · Esc exit",
+			text: "W/S thrust · A/D turn · Q/E·Space up/down · right-drag look · left-hold tractor · F dock · Esc",
 		});
 		this.hide();
 	}

@@ -61,13 +61,37 @@ describe("PilotController", () => {
 		// Arrange
 		const cam = stubCamera();
 		const pilot = new PilotController();
-		pilot.setIntent({ forward: 1, strafe: 0, lift: 0, boost: false });
+		pilot.setIntent({ forward: 1, turn: 0, lift: 0, boost: false });
 
 		// Act: half a second of flight
 		for (let i = 0; i < 30; i++) pilot.update(cam, 16);
 
 		// Assert
 		expect(cam.flown).toBeGreaterThan(0);
+	});
+
+	test("A/D turn yaws the ship and banks the view", () => {
+		// Arrange
+		const cam = stubCamera();
+		const pilot = new PilotController();
+		pilot.setIntent({ forward: 0, turn: 1, lift: 0, boost: false });
+
+		// Act
+		for (let i = 0; i < 30; i++) pilot.update(cam, 16);
+
+		// Assert: yaw advanced and the view rolled (banked into the turn)
+		expect(cam.yaw).not.toBe(0);
+		expect(pilot.currentRoll()).not.toBe(0);
+	});
+
+	test("bank eases back to level when the turn releases", () => {
+		const cam = stubCamera();
+		const pilot = new PilotController();
+		pilot.setIntent({ forward: 0, turn: 1, lift: 0, boost: false });
+		for (let i = 0; i < 30; i++) pilot.update(cam, 16);
+		pilot.setIntent({ forward: 0, turn: 0, lift: 0, boost: false });
+		for (let i = 0; i < 120; i++) pilot.update(cam, 16);
+		expect(Math.abs(pilot.currentRoll())).toBeLessThan(0.01);
 	});
 
 	test("idle with no input reports no movement", () => {
@@ -94,7 +118,7 @@ describe("PilotController", () => {
 	test("reset stops the ship dead", () => {
 		const cam = stubCamera();
 		const pilot = new PilotController();
-		pilot.setIntent({ forward: 1, strafe: 0, lift: 0, boost: false });
+		pilot.setIntent({ forward: 1, turn: 0, lift: 0, boost: false });
 		for (let i = 0; i < 30; i++) pilot.update(cam, 16);
 		pilot.reset();
 		const before = cam.flown;

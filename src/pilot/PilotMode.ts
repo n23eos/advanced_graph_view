@@ -94,12 +94,13 @@ export class PilotMode {
 
 		this.renderer.setPilotUpdate((dt) => {
 			const moved = this.controller.update(this.renderer.camera, dt);
+			this.renderer.setRoll(this.controller.currentRoll()); // cockpit bank
 			this.tow();
 			this.updateHud();
 			return moved || this.towingId !== null;
 		});
 		new Notice(
-			"Pilot · WASD fly · Q/E·Space up/down · right-drag or lock to look · left-hold = tractor · F = dock · Esc exit",
+			"Pilot · W/S thrust · A/D turn · Q/E·Space up/down · right-drag look · left-hold tractor · F dock · Esc exit",
 			5000
 		);
 		this.callbacks.onChange(true);
@@ -126,6 +127,7 @@ export class PilotMode {
 		if (document.pointerLockElement) document.exitPointerLock();
 
 		this.hud.hide();
+		this.renderer.setRoll(0); // level the horizon on exit
 		this.renderer.setPilotVisual(false);
 		this.host.toggleClass("graph-insight-ui-hidden", false);
 		this.host.toggleClass("graph-insight-piloting", false);
@@ -245,7 +247,8 @@ export class PilotMode {
 		const axis = (neg: string, pos: string): number => (k.has(neg) ? -1 : 0) + (k.has(pos) ? 1 : 0);
 		this.controller.setIntent({
 			forward: axis("KeyS", "KeyW"),
-			strafe: axis("KeyA", "KeyD"),
+			// A/D bank-turn the ship left/right (yaw + roll).
+			turn: axis("KeyA", "KeyD"),
 			// E / Space = up, Q = down.
 			lift: axis("KeyQ", "KeyE") + (k.has("Space") ? 1 : 0),
 			boost: k.has("ShiftLeft") || k.has("ShiftRight"),
