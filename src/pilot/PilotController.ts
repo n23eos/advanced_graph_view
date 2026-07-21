@@ -24,7 +24,7 @@ export interface ShipIntent {
 const MAX_SPEED = 150; // world units / second at full throttle (cruise)
 const BOOST_FACTOR = 2.4;
 const RESPONSE = 5; // velocity smoothing rate (1/s): higher = snappier
-const MOUSE_SENS = 0.0020; // radians per pixel
+const MOUSE_SENS = 0.0026; // radians per pixel
 const PITCH_LIMIT = 1.45; // ~83°, keeps the horizon from flipping
 
 /**

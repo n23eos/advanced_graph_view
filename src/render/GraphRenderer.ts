@@ -39,7 +39,7 @@ const DOUBLE_CLICK_MS = 350;
 const HULL_FILL_ALPHA = 0.1;
 const HULL_PADDING = 18;
 /** Pilot mode enlarges nodes so they read as planets/asteroids. */
-const PILOT_SIZE_BOOST = 1.7;
+const PILOT_SIZE_BOOST = 2.4;
 /** Dark starfield backdrop forced while piloting. */
 const PILOT_BACKDROP = 0x05050f;
 
@@ -542,7 +542,9 @@ export class GraphRenderer {
 						: Math.min(1, Math.max(0, (distance - 40) / 200));
 				}
 			}
-			let alpha = (dimmed ? glow * DIM_ALPHA : glow) * factor * fog;
+			// Planets are fully opaque in pilot mode — ignore the glow dimming.
+			const body = this.pilotSolid ? 1 : glow;
+			let alpha = (dimmed ? body * DIM_ALPHA : body) * factor * fog;
 			if (this.hoveredId !== null) {
 				if (i === this.hoveredId) alpha = 1;
 				else if (this.hoverNeighbors.has(i)) alpha = Math.max(alpha, HOVER_NEIGHBOR_ALPHA);
@@ -555,6 +557,11 @@ export class GraphRenderer {
 	/** Raw xyz (stride 3) — for seeding the next layout run. */
 	get currentPositions(): Float32Array | null {
 		return this.positions3;
+	}
+
+	/** The Pixi canvas — pilot mode locks the pointer to it for mouse-look. */
+	get canvasEl(): HTMLCanvasElement | null {
+		return this.app?.canvas ?? null;
 	}
 
 	get isDragging(): boolean {

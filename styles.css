@@ -512,6 +512,11 @@
 	transition: width 60ms linear, height 60ms linear;
 }
 
+.graph-insight-hud-reticle.is-towing {
+	border-color: rgba(255, 200, 90, 0.95);
+	box-shadow: 0 0 16px rgba(255, 180, 60, 0.7);
+}
+
 .graph-insight-hud-panel {
 	position: absolute;
 	left: 50%;

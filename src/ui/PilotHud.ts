@@ -62,8 +62,9 @@ export class PilotHud {
 		this.targetMeta.setText(`${target.links} link${target.links === 1 ? "" : "s"}${cluster}`);
 	}
 
-	/** Move the reticle onto a node (canvas coords + radius), or hide it. */
-	setReticle(pos: { x: number; y: number; r: number } | null): void {
+	/** Move the reticle onto a node (canvas coords + radius), or hide it.
+	 *  `towing` switches it to the active tractor-beam look. */
+	setReticle(pos: { x: number; y: number; r: number } | null, towing = false): void {
 		if (!pos) {
 			this.reticle.hide();
 			return;
@@ -73,6 +74,7 @@ export class PilotHud {
 		this.reticle.style.height = `${size}px`;
 		this.reticle.style.left = `${pos.x}px`;
 		this.reticle.style.top = `${pos.y}px`;
+		this.reticle.toggleClass("is-towing", towing);
 		this.reticle.show();
 	}
 

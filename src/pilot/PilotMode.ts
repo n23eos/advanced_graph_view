@@ -1,10 +1,13 @@
 /**
  * Pilot mode: an opt-in "fly your graph as a starship" layer over the existing
- * 3D view. Owns the top-right toggle, pointer-lock mouse-look, WASD flight, and
- * shows/hides the analysis UI on enter/exit. It never writes to the vault.
+ * 3D view. Owns the top-right toggle, mouse-look, WASD flight, a tractor beam
+ * that tows nodes, and docking (open a note). Shows/hides the analysis UI on
+ * enter/exit. It only writes note positions (via pins); never note text.
  *
- * Movement physics live in PilotController; this class is only wiring: input
- * capture, lifecycle, and driving the renderer's per-frame hook.
+ * Look works two ways so steering is never stuck: pointer-lock free-look when
+ * the browser grants it, and always hold-right-mouse-drag as a fallback.
+ *
+ * Movement physics live in PilotController; this class is input + lifecycle.
  */
 import { Notice } from "obsidian";
 import { PilotController } from "./PilotController";
@@ -15,6 +18,10 @@ export interface PilotCallbacks {
 	onChange(active: boolean): void;
 	/** Instrument-panel info for the node under the crosshair. */
 	nodeInfo(id: number): PilotTarget | null;
+	/** Tow: pin a node to a world point (repeated while the beam is on). */
+	pinNode(id: number, x: number, y: number, z: number): void;
+	/** Dock: open the note for a node. */
+	openNode(id: number): void;
 }
 
 /** Held keys that steer the ship; preventDefault so the page never scrolls. */
@@ -22,15 +29,19 @@ const FLIGHT_KEYS = new Set([
 	"KeyW", "KeyS", "KeyA", "KeyD", "KeyQ", "KeyE",
 	"Space", "ShiftLeft", "ShiftRight",
 ]);
+/** How far ahead of the ship a towed node is held (world units). */
+const TOW_DISTANCE = 140;
 
 export class PilotMode {
 	private controller = new PilotController();
 	private hud: PilotHud;
 	private active = false;
 	private pressed = new Set<string>();
-	/** 3D on/off before entering, so exit restores the prior view. */
 	private prev3D = false;
 	private lastTarget: number | null = null;
+	private hadLock = false;
+	private lookDragging = false;
+	private towingId: number | null = null;
 	private toggleBtn: HTMLElement;
 
 	constructor(
@@ -56,6 +67,7 @@ export class PilotMode {
 	enter(): void {
 		if (this.active) return;
 		this.active = true;
+		this.hadLock = false;
 		this.prev3D = this.renderer.camera.enabled;
 		this.renderer.set3DMode(true);
 		this.renderer.setPilotVisual(true);
@@ -64,18 +76,26 @@ export class PilotMode {
 		this.toggleBtn.toggleClass("is-active", true);
 		this.hud.show();
 
+		const canvas = this.renderer.canvasEl;
 		document.addEventListener("keydown", this.onKeyDown);
 		document.addEventListener("keyup", this.onKeyUp);
 		document.addEventListener("mousemove", this.onMouseMove);
+		document.addEventListener("mouseup", this.onMouseUp);
 		document.addEventListener("pointerlockchange", this.onLockChange);
-		this.host.requestPointerLock?.();
+		canvas?.addEventListener("mousedown", this.onMouseDown);
+		canvas?.addEventListener("contextmenu", this.onContextMenu);
+		canvas?.requestPointerLock?.();
 
 		this.renderer.setPilotUpdate((dt) => {
 			const moved = this.controller.update(this.renderer.camera, dt);
+			this.tow();
 			this.updateHud();
-			return moved;
+			return moved || this.towingId !== null;
 		});
-		new Notice("Pilot mode · WASD fly · Q/E down/up · mouse look · Esc exit", 4000);
+		new Notice(
+			"Pilot · WASD fly · Q/E·Space up/down · right-drag or lock to look · left-hold = tractor · F = dock · Esc exit",
+			5000
+		);
 		this.callbacks.onChange(true);
 	}
 
@@ -86,11 +106,17 @@ export class PilotMode {
 		this.controller.reset();
 		this.pressed.clear();
 		this.lastTarget = null;
+		this.towingId = null;
+		this.lookDragging = false;
 
+		const canvas = this.renderer.canvasEl;
 		document.removeEventListener("keydown", this.onKeyDown);
 		document.removeEventListener("keyup", this.onKeyUp);
 		document.removeEventListener("mousemove", this.onMouseMove);
+		document.removeEventListener("mouseup", this.onMouseUp);
 		document.removeEventListener("pointerlockchange", this.onLockChange);
+		canvas?.removeEventListener("mousedown", this.onMouseDown);
+		canvas?.removeEventListener("contextmenu", this.onContextMenu);
 		if (document.pointerLockElement) document.exitPointerLock();
 
 		this.hud.hide();
@@ -99,7 +125,6 @@ export class PilotMode {
 		this.host.toggleClass("graph-insight-piloting", false);
 		this.toggleBtn.toggleClass("is-active", false);
 		if (!this.prev3D) this.renderer.set3DMode(false);
-		// Restore the color scheme's backdrop (pilot forced a dark starfield).
 		this.callbacks.onChange(false);
 	}
 
@@ -109,10 +134,23 @@ export class PilotMode {
 		this.toggleBtn.remove();
 	}
 
+	/** While the beam is on, hold the towed node a fixed distance ahead. */
+	private tow(): void {
+		if (this.towingId === null) return;
+		const c = this.renderer.camera;
+		const [fx, fy, fz] = c.forward();
+		this.callbacks.pinNode(
+			this.towingId,
+			c.px + fx * TOW_DISTANCE,
+			c.py + fy * TOW_DISTANCE,
+			c.pz + fz * TOW_DISTANCE
+		);
+	}
+
 	/** Refresh reticle + instrument panel from the node under the crosshair. */
 	private updateHud(): void {
-		const id = this.renderer.nodeInCrosshair();
-		this.hud.setReticle(id !== null ? this.renderer.nodeScreenPos(id) : null);
+		const id = this.towingId ?? this.renderer.nodeInCrosshair();
+		this.hud.setReticle(id !== null ? this.renderer.nodeScreenPos(id) : null, this.towingId !== null);
 		if (id !== this.lastTarget) {
 			this.lastTarget = id;
 			this.hud.setTarget(id !== null ? this.callbacks.nodeInfo(id) : null);
@@ -123,6 +161,14 @@ export class PilotMode {
 	private onKeyDown = (event: KeyboardEvent): void => {
 		if (event.key === "Escape") {
 			this.exit();
+			return;
+		}
+		if (event.code === "KeyF") {
+			const id = this.renderer.nodeInCrosshair(60);
+			if (id !== null) {
+				this.callbacks.openNode(id);
+				this.exit(); // docked — leave the ship at the note
+			}
 			return;
 		}
 		this.pressed.add(event.code);
@@ -137,14 +183,40 @@ export class PilotMode {
 		this.updateIntent();
 	};
 
-	private onMouseMove = (event: MouseEvent): void => {
-		// Only trust movement deltas while the pointer is locked.
-		if (document.pointerLockElement) this.controller.addLook(event.movementX, event.movementY);
+	private onMouseDown = (event: MouseEvent): void => {
+		if (event.button === 2) {
+			// Right button: hold-drag look (works with or without pointer lock).
+			this.lookDragging = true;
+			event.preventDefault();
+		} else if (event.button === 0) {
+			// Left button: tractor beam onto the crosshair node.
+			this.towingId = this.renderer.nodeInCrosshair();
+			event.preventDefault();
+		}
 	};
 
-	/** Browser released the lock (Esc, focus loss) — leave pilot mode. */
+	private onMouseUp = (event: MouseEvent): void => {
+		if (event.button === 2) this.lookDragging = false;
+		else if (event.button === 0) this.towingId = null; // released — stays pinned
+	};
+
+	private onContextMenu = (event: MouseEvent): void => {
+		event.preventDefault(); // right button is look, not a menu
+	};
+
+	private onMouseMove = (event: MouseEvent): void => {
+		if (document.pointerLockElement || this.lookDragging) {
+			this.controller.addLook(event.movementX, event.movementY);
+		}
+	};
+
+	/** Track lock; if it was granted and later lost (Esc), leave pilot mode. */
 	private onLockChange = (): void => {
-		if (this.active && !document.pointerLockElement) this.exit();
+		if (document.pointerLockElement) {
+			this.hadLock = true;
+		} else if (this.active && this.hadLock) {
+			this.exit();
+		}
 	};
 
 	private updateIntent(): void {

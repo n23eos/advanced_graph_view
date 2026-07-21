@@ -179,6 +179,8 @@ export class GraphInsightView extends ItemView {
 					if (!active) this.applyEncoding(this.plugin.settings.panel);
 				},
 				nodeInfo: (id) => this.pilotNodeInfo(id),
+				pinNode: (id, x, y, z) => this.layout?.pin(id, x, y, z),
+				openNode: (id) => this.openNode(id, false),
 			});
 		}
 
