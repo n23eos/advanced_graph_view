@@ -179,8 +179,19 @@ export class GraphInsightView extends ItemView {
 					if (!active) this.applyEncoding(this.plugin.settings.panel);
 				},
 				nodeInfo: (id) => this.pilotNodeInfo(id),
+				notePreview: (id) => this.pilotNotePreview(id),
+				beginTow: (id) => {
+					const p = this.renderer?.currentPositions;
+					if (p) this.layout?.pin(id, p[id * 3], p[id * 3 + 1], p[id * 3 + 2]);
+					this.layout?.dragStart();
+				},
 				pinNode: (id, x, y, z) => this.layout?.pin(id, x, y, z),
-				openNode: (id) => this.openNode(id, false),
+				endTow: (id) => {
+					this.pinnedNodes.add(id); // stays where the beam left it
+					this.layout?.dragEnd();
+					this.savePositionsDebounced();
+				},
+				openNode: (id) => this.openNode(id, true),
 			});
 		}
 
@@ -266,6 +277,24 @@ export class GraphInsightView extends ItemView {
 		const community = this.metrics?.community[id];
 		const cluster = community !== undefined ? (this.clusterNames[community] ?? "") : "";
 		return { title: node.name, links: node.inCount + node.outCount, cluster };
+	}
+
+	/** First ~300 words of the targeted note for the instrument preview. */
+	private async pilotNotePreview(id: number): Promise<string | null> {
+		const node = this.model?.nodes[id];
+		if (!node) return null;
+		const file = this.app.vault.getAbstractFileByPath(node.path);
+		if (!(file instanceof TFile)) return null;
+		let raw = "";
+		try {
+			raw = await this.app.vault.cachedRead(file);
+		} catch {
+			return null;
+		}
+		// Strip frontmatter and collapse whitespace, then keep the first 300 words.
+		const body = raw.replace(/^---\n[\s\S]*?\n---\n/, "").replace(/\s+/g, " ").trim();
+		const words = body.split(" ").slice(0, 300);
+		return words.join(" ");
 	}
 
 	/** «Путь»: first click sets the anchor, second highlights the chain. */

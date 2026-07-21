@@ -18,8 +18,14 @@ export interface PilotCallbacks {
 	onChange(active: boolean): void;
 	/** Instrument-panel info for the node under the crosshair. */
 	nodeInfo(id: number): PilotTarget | null;
+	/** First ~300 words of the note, for the instrument preview. */
+	notePreview(id: number): Promise<string | null>;
+	/** Grab a node with the tractor beam (warms the simulation). */
+	beginTow(id: number): void;
 	/** Tow: pin a node to a world point (repeated while the beam is on). */
 	pinNode(id: number, x: number, y: number, z: number): void;
+	/** Release the tractor beam; the node stays where it was left. */
+	endTow(id: number): void;
 	/** Dock: open the note for a node. */
 	openNode(id: number): void;
 }
@@ -154,6 +160,13 @@ export class PilotMode {
 		if (id !== this.lastTarget) {
 			this.lastTarget = id;
 			this.hud.setTarget(id !== null ? this.callbacks.nodeInfo(id) : null);
+			this.hud.setPreview("");
+			if (id !== null) {
+				void this.callbacks.notePreview(id).then((text) => {
+					// Ignore if the crosshair already moved to another node.
+					if (this.active && this.lastTarget === id) this.hud.setPreview(text ?? "");
+				});
+			}
 		}
 		this.hud.setThrottle(this.controller.currentThrottle());
 	}
@@ -164,10 +177,10 @@ export class PilotMode {
 			return;
 		}
 		if (event.code === "KeyF") {
-			const id = this.renderer.nodeInCrosshair(60);
+			const id = this.renderer.nodeInCrosshair(130);
 			if (id !== null) {
+				this.exit(); // release the lock first, then open the note
 				this.callbacks.openNode(id);
-				this.exit(); // docked — leave the ship at the note
 			}
 			return;
 		}
@@ -190,14 +203,22 @@ export class PilotMode {
 			event.preventDefault();
 		} else if (event.button === 0) {
 			// Left button: tractor beam onto the crosshair node.
-			this.towingId = this.renderer.nodeInCrosshair();
+			const id = this.renderer.nodeInCrosshair(110);
+			if (id !== null) {
+				this.towingId = id;
+				this.callbacks.beginTow(id); // warms the sim so the node follows
+			}
 			event.preventDefault();
 		}
 	};
 
 	private onMouseUp = (event: MouseEvent): void => {
-		if (event.button === 2) this.lookDragging = false;
-		else if (event.button === 0) this.towingId = null; // released — stays pinned
+		if (event.button === 2) {
+			this.lookDragging = false;
+		} else if (event.button === 0 && this.towingId !== null) {
+			this.callbacks.endTow(this.towingId);
+			this.towingId = null; // released — stays pinned where left
+		}
 	};
 
 	private onContextMenu = (event: MouseEvent): void => {

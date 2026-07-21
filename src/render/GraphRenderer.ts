@@ -39,7 +39,7 @@ const DOUBLE_CLICK_MS = 350;
 const HULL_FILL_ALPHA = 0.1;
 const HULL_PADDING = 18;
 /** Pilot mode enlarges nodes so they read as planets/asteroids. */
-const PILOT_SIZE_BOOST = 2.4;
+const PILOT_SIZE_BOOST = 1.9;
 /** Dark starfield backdrop forced while piloting. */
 const PILOT_BACKDROP = 0x05050f;
 
@@ -542,8 +542,9 @@ export class GraphRenderer {
 						: Math.min(1, Math.max(0, (distance - 40) / 200));
 				}
 			}
-			// Planets are fully opaque in pilot mode — ignore the glow dimming.
-			const body = this.pilotSolid ? 1 : glow;
+			// Pilot planets stay solid but a touch below full white so they
+			// don't glare against the dark starfield.
+			const body = this.pilotSolid ? 0.9 : glow;
 			let alpha = (dimmed ? body * DIM_ALPHA : body) * factor * fog;
 			if (this.hoveredId !== null) {
 				if (i === this.hoveredId) alpha = 1;

@@ -547,6 +547,23 @@
 	margin-top: 2px;
 }
 
+.graph-insight-hud-preview {
+	margin-top: 7px;
+	max-height: 26vh;
+	overflow: hidden;
+	font-size: 11px;
+	line-height: 1.45;
+	text-align: left;
+	color: #b7cfe4;
+	white-space: pre-wrap;
+	-webkit-mask-image: linear-gradient(to bottom, #000 78%, transparent);
+	mask-image: linear-gradient(to bottom, #000 78%, transparent);
+}
+
+.graph-insight-hud-preview.is-empty {
+	display: none;
+}
+
 .graph-insight-hud-throttle {
 	margin-top: 7px;
 	height: 4px;

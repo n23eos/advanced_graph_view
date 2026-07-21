@@ -17,6 +17,7 @@ export class PilotHud {
 	private throttleFill: HTMLElement;
 	private targetTitle: HTMLElement;
 	private targetMeta: HTMLElement;
+	private preview: HTMLElement;
 	private lastTitle: string | null = null;
 
 	constructor(host: HTMLElement) {
@@ -29,6 +30,7 @@ export class PilotHud {
 		const panel = this.root.createDiv({ cls: "graph-insight-hud-panel" });
 		this.targetTitle = panel.createDiv({ cls: "graph-insight-hud-title", text: "— no target —" });
 		this.targetMeta = panel.createDiv({ cls: "graph-insight-hud-meta" });
+		this.preview = panel.createDiv({ cls: "graph-insight-hud-preview" });
 		const throttle = panel.createDiv({ cls: "graph-insight-hud-throttle" });
 		this.throttleFill = throttle.createDiv({ cls: "graph-insight-hud-throttle-fill" });
 
@@ -60,6 +62,12 @@ export class PilotHud {
 		this.targetTitle.setText(target.title);
 		const cluster = target.cluster ? ` · ${target.cluster}` : "";
 		this.targetMeta.setText(`${target.links} link${target.links === 1 ? "" : "s"}${cluster}`);
+	}
+
+	/** Note excerpt for the targeted planet; empty string clears it. */
+	setPreview(text: string): void {
+		this.preview.setText(text);
+		this.preview.toggleClass("is-empty", text.length === 0);
 	}
 
 	/** Move the reticle onto a node (canvas coords + radius), or hide it.
