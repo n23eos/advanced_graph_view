@@ -38,7 +38,7 @@ export class PilotHud {
 
 		this.root.createDiv({
 			cls: "graph-insight-hud-hint",
-			text: "W/S thrust · A/D turn · Q/E·Space up/down · right-drag look · left-hold tractor · F dock · Esc",
+			text: "move mouse to steer · WASD move · Space/C up/down · left-hold tractor · F open · Shift boost · Esc",
 		});
 		this.hide();
 	}

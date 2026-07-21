@@ -565,11 +565,6 @@ export class GraphRenderer {
 		return this.app?.canvas ?? null;
 	}
 
-	/** Bank the whole view around screen centre — pilot-mode cockpit roll. */
-	setRoll(angle: number): void {
-		this.world.rotation = angle;
-	}
-
 	get isDragging(): boolean {
 		return this.draggingId !== null;
 	}
@@ -956,14 +951,9 @@ export class GraphRenderer {
 		if (this.depthScales !== null && this.depthScales[id] === 0) return null;
 		const scale = this.world.scale.x;
 		const depth = this.depthScales ? this.depthScales[id] : 1;
-		// Apply the cockpit roll (world.rotation) so the reticle tracks the node.
-		const rot = this.world.rotation;
-		const lx = this.positions[id * 2] * scale;
-		const ly = this.positions[id * 2 + 1] * scale;
-		const cos = Math.cos(rot), sin = Math.sin(rot);
 		return {
-			x: lx * cos - ly * sin + this.world.position.x,
-			y: lx * sin + ly * cos + this.world.position.y,
+			x: this.positions[id * 2] * scale + this.world.position.x,
+			y: this.positions[id * 2 + 1] * scale + this.world.position.y,
 			r: this.radii[id] * depth * scale * this.pilotSizeBoost,
 		};
 	}

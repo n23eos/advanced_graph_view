@@ -32,8 +32,8 @@ export interface PilotCallbacks {
 
 /** Held keys that steer the ship; preventDefault so the page never scrolls. */
 const FLIGHT_KEYS = new Set([
-	"KeyW", "KeyS", "KeyA", "KeyD", "KeyQ", "KeyE",
-	"Space", "ShiftLeft", "ShiftRight",
+	"KeyW", "KeyS", "KeyA", "KeyD", "KeyQ", "KeyE", "KeyC",
+	"Space", "ShiftLeft", "ShiftRight", "ControlLeft",
 ]);
 /** How far ahead of the ship a towed node is held (world units). */
 const TOW_DISTANCE = 140;
@@ -45,8 +45,6 @@ export class PilotMode {
 	private pressed = new Set<string>();
 	private prev3D = false;
 	private lastTarget: number | null = null;
-	private hadLock = false;
-	private lookDragging = false;
 	private towingId: number | null = null;
 	private toggleBtn: HTMLElement;
 
@@ -73,7 +71,6 @@ export class PilotMode {
 	enter(): void {
 		if (this.active) return;
 		this.active = true;
-		this.hadLock = false;
 		this.prev3D = this.renderer.camera.enabled;
 		this.renderer.set3DMode(true);
 		this.renderer.setPilotVisual(true);
@@ -94,13 +91,12 @@ export class PilotMode {
 
 		this.renderer.setPilotUpdate((dt) => {
 			const moved = this.controller.update(this.renderer.camera, dt);
-			this.renderer.setRoll(this.controller.currentRoll()); // cockpit bank
 			this.tow();
 			this.updateHud();
 			return moved || this.towingId !== null;
 		});
 		new Notice(
-			"Pilot · W/S thrust · A/D turn · Q/E·Space up/down · right-drag look · left-hold tractor · F dock · Esc exit",
+			"Pilot · move mouse to steer · WASD move · Space/C up/down · left-hold tractor · F open · Esc exit",
 			5000
 		);
 		this.callbacks.onChange(true);
@@ -114,7 +110,6 @@ export class PilotMode {
 		this.pressed.clear();
 		this.lastTarget = null;
 		this.towingId = null;
-		this.lookDragging = false;
 
 		const canvas = this.renderer.canvasEl;
 		document.removeEventListener("keydown", this.onKeyDown);
@@ -127,7 +122,6 @@ export class PilotMode {
 		if (document.pointerLockElement) document.exitPointerLock();
 
 		this.hud.hide();
-		this.renderer.setRoll(0); // level the horizon on exit
 		this.renderer.setPilotVisual(false);
 		this.host.toggleClass("graph-insight-ui-hidden", false);
 		this.host.toggleClass("graph-insight-piloting", false);
@@ -199,58 +193,45 @@ export class PilotMode {
 	};
 
 	private onMouseDown = (event: MouseEvent): void => {
-		if (event.button === 2) {
-			// Right button: hold-drag look (works with or without pointer lock).
-			this.lookDragging = true;
-			event.preventDefault();
-		} else if (event.button === 0) {
-			// Left button: tractor beam onto the crosshair node.
-			const id = this.renderer.nodeInCrosshair(110);
-			if (id !== null) {
-				this.towingId = id;
-				this.callbacks.beginTow(id); // warms the sim so the node follows
-			}
-			event.preventDefault();
+		if (event.button !== 0) return;
+		// Left button: tractor beam onto the crosshair node.
+		const id = this.renderer.nodeInCrosshair(110);
+		if (id !== null) {
+			this.towingId = id;
+			this.callbacks.beginTow(id); // warms the sim so the node follows
 		}
+		event.preventDefault();
 	};
 
 	private onMouseUp = (event: MouseEvent): void => {
-		if (event.button === 2) {
-			this.lookDragging = false;
-		} else if (event.button === 0 && this.towingId !== null) {
+		if (event.button === 0 && this.towingId !== null) {
 			this.callbacks.endTow(this.towingId);
 			this.towingId = null; // released — stays pinned where left
 		}
 	};
 
 	private onContextMenu = (event: MouseEvent): void => {
-		event.preventDefault(); // right button is look, not a menu
+		event.preventDefault(); // no context menu while flying
 	};
 
+	/** Mouse always steers 1:1 — no button, no lock required. Pointer lock (if
+	 *  granted) just keeps the cursor from hitting the screen edge. */
 	private onMouseMove = (event: MouseEvent): void => {
-		if (document.pointerLockElement || this.lookDragging) {
-			this.controller.addLook(event.movementX, event.movementY);
-		}
+		this.controller.addLook(event.movementX, event.movementY);
 	};
 
-	/** Track lock; if it was granted and later lost (Esc), leave pilot mode. */
-	private onLockChange = (): void => {
-		if (document.pointerLockElement) {
-			this.hadLock = true;
-		} else if (this.active && this.hadLock) {
-			this.exit();
-		}
-	};
+	/** If a granted lock is lost, steering still works via movementX; do nothing. */
+	private onLockChange = (): void => {};
 
 	private updateIntent(): void {
 		const k = this.pressed;
 		const axis = (neg: string, pos: string): number => (k.has(neg) ? -1 : 0) + (k.has(pos) ? 1 : 0);
+		const up = k.has("Space") || k.has("KeyE") ? 1 : 0;
+		const down = k.has("KeyC") || k.has("KeyQ") || k.has("ControlLeft") ? 1 : 0;
 		this.controller.setIntent({
 			forward: axis("KeyS", "KeyW"),
-			// A/D bank-turn the ship left/right (yaw + roll).
-			turn: axis("KeyA", "KeyD"),
-			// E / Space = up, Q = down.
-			lift: axis("KeyQ", "KeyE") + (k.has("Space") ? 1 : 0),
+			strafe: axis("KeyA", "KeyD"),
+			lift: up - down,
 			boost: k.has("ShiftLeft") || k.has("ShiftRight"),
 		});
 	}
