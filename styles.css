@@ -17,7 +17,7 @@
 	box-shadow: var(--shadow-s);
 	padding: 4px 8px;
 	font-size: var(--font-ui-small);
-	max-width: 260px;
+	max-width: 360px;
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -152,10 +152,9 @@
 	border-top: 1px solid var(--background-modifier-border);
 	color: var(--text-muted);
 	font-size: var(--font-ui-smaller);
-	/* Override the tooltip's single-line clamp so the body can wrap. */
+	/* Override the tooltip's single-line clamp so the whole body wraps and
+	 * shows in full — no inner scrollbar. */
 	white-space: normal;
-	max-height: 12em;
-	overflow-y: auto;
 }
 
 .graph-insight-panel-checkbox {
