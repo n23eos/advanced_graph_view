@@ -381,6 +381,15 @@ export class GraphInsightView extends ItemView {
 				if (matched) highlight[i] = 1;
 			}
 		}
+		// Filter chips narrow the graph — brighten the survivors with the
+		// accent tint + size boost so the matching notes read at a glance
+		// instead of sitting at their normal weight.
+		if ((pickedTags.size > 0 || pickedFolders.size > 0) && hidden) {
+			highlight ??= new Uint8Array(count);
+			for (let i = 0; i < count; i++) {
+				if (hidden[i] !== 1) highlight[i] = 1;
+			}
+		}
 		// Active overlays glow with the accent color, same as search hits.
 		if (this.overlayMask) {
 			highlight ??= new Uint8Array(count);
