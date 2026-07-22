@@ -9,7 +9,7 @@ import { usageToCsv } from "../export/exporters";
 import type GraphInsightPlugin from "../main";
 
 /** Keys addressed by the declarative settings API. */
-type SettingKey = "openDwellSeconds";
+type SettingKey = "openDwellSeconds" | "hoverPreviewEnabled" | "hoverPreviewWords";
 
 /**
  * Declarative settings (Obsidian 1.13+). Describing the settings instead of
@@ -62,6 +62,34 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 			},
 			{
 				type: "group",
+				heading: "Hover preview",
+				items: [
+					{
+						name: "Show note preview on hover",
+						desc: "When hovering a node, show the first words of the note in the tooltip.",
+						aliases: ["tooltip", "hover", "preview"],
+						control: {
+							type: "toggle",
+							key: "hoverPreviewEnabled",
+						},
+					},
+					{
+						name: "Preview length",
+						desc: "How many leading words of the note body to show in the hover preview.",
+						aliases: ["tooltip", "hover", "words"],
+						control: {
+							type: "slider",
+							key: "hoverPreviewWords",
+							min: 10,
+							max: 500,
+							step: 10,
+							displayFormat: (value) => `${value} words`,
+						},
+					},
+				],
+			},
+			{
+				type: "group",
 				heading: "Data",
 				items: [
 					{
@@ -79,6 +107,10 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 		switch (key as SettingKey) {
 			case "openDwellSeconds":
 				return this.plugin.settings.openDwellSeconds;
+			case "hoverPreviewEnabled":
+				return this.plugin.settings.hoverPreview.enabled;
+			case "hoverPreviewWords":
+				return this.plugin.settings.hoverPreview.words;
 		}
 	}
 
@@ -86,6 +118,20 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 		switch (key as SettingKey) {
 			case "openDwellSeconds":
 				this.plugin.settings = { ...this.plugin.settings, openDwellSeconds: value as number };
+				await this.plugin.saveData(this.plugin.settings);
+				return;
+			case "hoverPreviewEnabled":
+				this.plugin.settings = {
+					...this.plugin.settings,
+					hoverPreview: { ...this.plugin.settings.hoverPreview, enabled: value as boolean },
+				};
+				await this.plugin.saveData(this.plugin.settings);
+				return;
+			case "hoverPreviewWords":
+				this.plugin.settings = {
+					...this.plugin.settings,
+					hoverPreview: { ...this.plugin.settings.hoverPreview, words: value as number },
+				};
 				await this.plugin.saveData(this.plugin.settings);
 				return;
 		}

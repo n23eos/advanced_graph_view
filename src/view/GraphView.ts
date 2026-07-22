@@ -46,6 +46,8 @@ export class GraphInsightView extends ItemView {
 	/** Explicit «Закрепить позицию» pins — survive regrouping. */
 	private explicitPins = new Set<number>();
 	private tooltip: HTMLElement | null = null;
+	/** Bumped on every hover so a slow preview read for an old node is discarded. */
+	private hoverToken = 0;
 	private panel: ControlPanel | null = null;
 	/** needle → set of matching paths, built lazily on Enter. */
 	private contentIndex = new Map<string, Set<string>>();
@@ -725,6 +727,8 @@ export class GraphInsightView extends ItemView {
 
 	private showTooltip(nodeId: number | null, clientX: number, clientY: number): void {
 		if (!this.tooltip || !this.model) return;
+		// Any hover change invalidates a preview read still in flight.
+		const token = ++this.hoverToken;
 		if (nodeId === null) {
 			this.tooltip.hide();
 			return;
@@ -743,6 +747,36 @@ export class GraphInsightView extends ItemView {
 		this.tooltip.style.left = `${clientX - rect.left + 12}px`;
 		this.tooltip.style.top = `${clientY - rect.top + 12}px`;
 		this.tooltip.show();
+
+		const preview = this.plugin.settings.hoverPreview;
+		if (preview.enabled) {
+			void this.appendNotePreview(nodeId, preview.words, token);
+		}
+	}
+
+	/** Read the note body off the main thread and append it to the tooltip,
+	 *  unless the hover moved on while the read was pending. */
+	private async appendNotePreview(nodeId: number, words: number, token: number): Promise<void> {
+		const text = await this.notePreview(nodeId, words);
+		if (token !== this.hoverToken || !this.tooltip || !text) return;
+		this.tooltip.createDiv({ cls: "graph-insight-tooltip-preview", text });
+	}
+
+	/** First `words` words of the note body (frontmatter stripped). */
+	private async notePreview(nodeId: number, words: number): Promise<string | null> {
+		const node = this.model?.nodes[nodeId];
+		if (!node) return null;
+		const file = this.app.vault.getAbstractFileByPath(node.path);
+		if (!(file instanceof TFile)) return null;
+		let raw = "";
+		try {
+			raw = await this.app.vault.cachedRead(file);
+		} catch {
+			return null;
+		}
+		const body = raw.replace(/^---\n[\s\S]*?\n---\n/, "").replace(/\s+/g, " ").trim();
+		if (!body) return null;
+		return body.split(" ").slice(0, words).join(" ");
 	}
 
 	private handleNodeClick(nodeId: number, event: PointerEvent): void {

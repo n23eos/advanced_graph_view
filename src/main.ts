@@ -29,6 +29,15 @@ interface GraphInsightSettings {
 	onboardingShown: boolean;
 	/** Open counts only when the file stays active at least this long. */
 	openDwellSeconds: number;
+	/** Note-body preview shown in the hover tooltip. */
+	hoverPreview: HoverPreviewSettings;
+}
+
+interface HoverPreviewSettings {
+	/** When off, the tooltip stays name + metadata only. */
+	enabled: boolean;
+	/** How many leading words of the note body to show. */
+	words: number;
 }
 
 const DEFAULT_SETTINGS: GraphInsightSettings = {
@@ -50,6 +59,7 @@ const DEFAULT_SETTINGS: GraphInsightSettings = {
 		view3d: { enabled: false, depthSource: "physics", focal: 900 },
 	},
 	openDwellSeconds: 5,
+	hoverPreview: { enabled: true, words: 300 },
 	presets: [],
 	viewPresets: [],
 	onboardingShown: false,
@@ -75,6 +85,7 @@ export default class GraphInsightPlugin extends Plugin {
 		this.settings = {
 			...DEFAULT_SETTINGS,
 			...(saved ?? {}),
+			hoverPreview: { ...DEFAULT_SETTINGS.hoverPreview, ...(saved?.hoverPreview ?? {}) },
 			panel: {
 				...DEFAULT_SETTINGS.panel,
 				...(saved?.panel ?? {}),

@@ -146,6 +146,18 @@
 	font-size: var(--font-ui-smaller);
 }
 
+.graph-insight-tooltip-preview {
+	margin-top: 6px;
+	padding-top: 6px;
+	border-top: 1px solid var(--background-modifier-border);
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	/* Override the tooltip's single-line clamp so the body can wrap. */
+	white-space: normal;
+	max-height: 12em;
+	overflow-y: auto;
+}
+
 .graph-insight-panel-checkbox {
 	display: flex;
 	align-items: center;
