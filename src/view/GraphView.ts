@@ -46,8 +46,9 @@ export class GraphInsightView extends ItemView {
 	/** Explicit «Закрепить позицию» pins — survive regrouping. */
 	private explicitPins = new Set<number>();
 	private tooltip: HTMLElement | null = null;
-	/** Bumped on every hover so a slow preview read for an old node is discarded. */
-	private hoverToken = 0;
+	/** Node the tooltip currently describes; guards async preview reads and
+	 *  avoids rebuilding the tooltip on every same-node pointermove. */
+	private tooltipNodeId: number | null = null;
 	private panel: ControlPanel | null = null;
 	/** needle → set of matching paths, built lazily on Enter. */
 	private contentIndex = new Map<string, Set<string>>();
@@ -727,12 +728,20 @@ export class GraphInsightView extends ItemView {
 
 	private showTooltip(nodeId: number | null, clientX: number, clientY: number): void {
 		if (!this.tooltip || !this.model) return;
-		// Any hover change invalidates a preview read still in flight.
-		const token = ++this.hoverToken;
 		if (nodeId === null) {
+			this.tooltipNodeId = null;
 			this.tooltip.hide();
 			return;
 		}
+		// The tooltip trails the cursor on every move, but only its position.
+		const rect = this.contentEl.getBoundingClientRect();
+		this.tooltip.style.left = `${clientX - rect.left + 12}px`;
+		this.tooltip.style.top = `${clientY - rect.top + 12}px`;
+		// Same node: don't rebuild or re-read — that would cancel the pending
+		// preview read on every micro-movement of the mouse.
+		if (nodeId === this.tooltipNodeId) return;
+		this.tooltipNodeId = nodeId;
+
 		const node = this.model.nodes[nodeId];
 		const facts = this.facts[nodeId];
 		this.tooltip.empty();
@@ -743,22 +752,19 @@ export class GraphInsightView extends ItemView {
 			meta.createDiv({ text: `Links: ← ${facts.inCount} · → ${facts.outCount}` });
 			meta.createDiv({ text: `Edited: ${new Date(facts.mtime).toLocaleDateString()}` });
 		}
-		const rect = this.contentEl.getBoundingClientRect();
-		this.tooltip.style.left = `${clientX - rect.left + 12}px`;
-		this.tooltip.style.top = `${clientY - rect.top + 12}px`;
 		this.tooltip.show();
 
 		const preview = this.plugin.settings.hoverPreview;
 		if (preview.enabled) {
-			void this.appendNotePreview(nodeId, preview.words, token);
+			void this.appendNotePreview(nodeId, preview.words);
 		}
 	}
 
 	/** Read the note body off the main thread and append it to the tooltip,
-	 *  unless the hover moved on while the read was pending. */
-	private async appendNotePreview(nodeId: number, words: number, token: number): Promise<void> {
+	 *  unless the hover moved to another node while the read was pending. */
+	private async appendNotePreview(nodeId: number, words: number): Promise<void> {
 		const text = await this.notePreview(nodeId, words);
-		if (token !== this.hoverToken || !this.tooltip || !text) return;
+		if (nodeId !== this.tooltipNodeId || !this.tooltip || !text) return;
 		this.tooltip.createDiv({ cls: "graph-insight-tooltip-preview", text });
 	}
 
