@@ -74,16 +74,18 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 						},
 					},
 					{
-						name: "Preview length",
+						name: "Preview length (words)",
 						desc: "How many leading words of the note body to show in the hover preview.",
 						aliases: ["tooltip", "hover", "words"],
 						control: {
-							type: "slider",
+							type: "number",
 							key: "hoverPreviewWords",
 							min: 10,
 							max: 500,
 							step: 10,
-							displayFormat: (value) => `${value} words`,
+							placeholder: "300",
+							validate: (value) =>
+								value >= 10 && value <= 500 ? undefined : "Enter a number between 10 and 500",
 						},
 					},
 				],
