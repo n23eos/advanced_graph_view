@@ -84,14 +84,16 @@ function presetPanel(overrides: Partial<PanelState>): PanelState {
 		channels: { ...base.channels, ...(overrides.channels ?? {}) },
 		overlays: { ...base.overlays, ...(overrides.overlays ?? {}) },
 		physics: { ...base.physics, ...(overrides.physics ?? {}) },
-		labels: { ...base.labels, ...(overrides.labels ?? {}) },
-		edges: { ...base.edges, ...(overrides.edges ?? {}) },
+		// Every built-in preset ships with labels off and thin links unless it
+		// explicitly overrides them.
+		labels: { ...base.labels, show: false, ...(overrides.labels ?? {}) },
+		edges: { ...base.edges, width: 0.4, ...(overrides.edges ?? {}) },
 		view3d: { ...base.view3d, ...(overrides.view3d ?? {}) },
 	};
 }
 
 /** Bump when DEFAULT_VIEW_PRESETS changes so existing installs re-seed. */
-const VIEW_PRESET_VERSION = 2;
+const VIEW_PRESET_VERSION = 3;
 /** Default preset names retired in newer versions — removed on migration. */
 const RETIRED_VIEW_PRESETS = new Set(["3D галактика"]);
 
@@ -143,8 +145,7 @@ const DEFAULT_VIEW_PRESETS: ViewPreset[] = [
 			channels: { size: "pagerank", color: "recency-edit", glow: null },
 			colorPreset: "mono",
 			nodeScale: 0.7,
-			labels: { show: false, fontSize: 11, zoomThreshold: 0.9, maxCount: 100, scaleWithZoom: true },
-			edges: { show: true, width: 1, opacity: 0.08 },
+			edges: { show: true, width: 0.3, opacity: 0.08 },
 		}),
 	},
 ];
@@ -205,12 +206,16 @@ export default class GraphInsightPlugin extends Plugin {
 		// own presets and any they still keep are preserved. The version guard
 		// means deleting a default doesn't bring it back until the set changes.
 		if ((this.settings.viewPresetsVersion ?? 0) < VIEW_PRESET_VERSION) {
-			const kept = this.settings.viewPresets.filter((p) => !RETIRED_VIEW_PRESETS.has(p.name));
-			const keptNames = new Set(kept.map((p) => p.name));
-			const added = DEFAULT_VIEW_PRESETS.filter((p) => !keptNames.has(p.name));
+			// Refresh the bundled presets to their latest definition (so tweaks
+			// like thinner links / labels-off reach existing installs), keep the
+			// user's own presets, and drop retired defaults.
+			const defaultNames = new Set(DEFAULT_VIEW_PRESETS.map((p) => p.name));
+			const userPresets = this.settings.viewPresets.filter(
+				(p) => !defaultNames.has(p.name) && !RETIRED_VIEW_PRESETS.has(p.name)
+			);
 			this.settings = {
 				...this.settings,
-				viewPresets: [...added, ...kept],
+				viewPresets: [...DEFAULT_VIEW_PRESETS, ...userPresets],
 				viewPresetsVersion: VIEW_PRESET_VERSION,
 			};
 			await this.saveData(this.settings);

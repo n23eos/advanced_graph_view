@@ -211,7 +211,7 @@ export class ControlPanel {
 		this.checkboxRow(edgeSection, "Show links", this.state.edges.show, (value) => {
 			this.setState({ ...this.state, edges: { ...this.state.edges, show: value } });
 		});
-		this.physicsSlider(edgeSection, "Thickness", 0.05, 8, 0.05, this.state.edges.width, (value) => {
+		this.physicsSlider(edgeSection, "Thickness", 0.05, 2, 0.05, this.state.edges.width, (value) => {
 			this.setState({ ...this.state, edges: { ...this.state.edges, width: value } });
 		});
 		this.physicsSlider(edgeSection, "Opacity", 0.02, 1, 0.01, this.state.edges.opacity, (value) => {

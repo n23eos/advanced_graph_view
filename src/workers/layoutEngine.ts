@@ -30,6 +30,9 @@ export interface InitMessage {
 	dimensions?: 2 | 3;
 	/** When true the engine only advances on explicit "step" messages (tests, debugging). */
 	paused?: boolean;
+	/** Freeze every node at its seed position — a static shape (circle/grid)
+	 *  that holds instead of relaxing into a cloud. Dragging still works. */
+	static?: boolean;
 }
 
 export interface PhysicsParams {
@@ -82,12 +85,13 @@ const FRAME_INTERVAL_MS = 33;
 const DRAG_INTERVAL_MS = 16;
 // Lower energy + heavier damping while dragging: the neighborhood follows in a
 // smooth glide instead of the coarse Barnes-Hut noise vibrating every node.
-const DRAG_ALPHA_TARGET = 0.1;
-const DRAG_EXTRA_DAMPING = 0.3;
-const MAX_DRAG_DAMPING = 0.86;
+const DRAG_ALPHA_TARGET = 0.04;
+const DRAG_EXTRA_DAMPING = 0.45;
+const MAX_DRAG_DAMPING = 0.93;
 /** Accurate repulsion while dragging: the default coarse theta (0.9) is what
- *  makes nearby nodes jitter, so tighten it for the duration of the drag. */
-const DRAG_THETA = 0.5;
+ *  makes distant nodes jitter, so tighten it hard for the duration of the drag
+ *  — this is the main lever against the whole graph vibrating. */
+const DRAG_THETA = 0.3;
 /** The dragged node eases toward the pointer by this fraction each tick, so a
  *  fast mouse flick arrives as smooth motion with a little inertia. */
 const DRAG_FOLLOW = 0.28;
@@ -264,6 +268,23 @@ export function createLayoutEngine(
 			.alphaMin(ALPHA_MIN)
 			.velocityDecay(params.velocityDecay)
 			.stop(); // stepping is driven by our own timer, never d3-timer
+
+		if (message.static) {
+			// Pin every node at its seed so the shape holds. Dragging one node
+			// still moves it (drag-start starts the timer); the rest stay put,
+			// so a static layout never vibrates.
+			for (const node of nodes) {
+				node.fx = node.x;
+				node.fy = node.y;
+				if (dimensions === 3) node.fz = node.z;
+			}
+			const positions = snapshotPositions();
+			post({ type: "tick", positions, alpha: 0 }, [positions.buffer]);
+			const settled = snapshotPositions();
+			post({ type: "end", positions: settled }, [settled.buffer]);
+			running = false;
+			return;
+		}
 
 		running = true;
 		if (!message.paused) {

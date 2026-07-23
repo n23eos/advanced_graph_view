@@ -55,6 +55,8 @@ export class GraphInsightView extends ItemView {
 	private previewTimer: number | null = null;
 	/** View preset currently shown as applied in the panel dropdown. */
 	private activePresetIndex: number | null = null;
+	/** True while a static shape (circle/grid) holds — every node is pinned. */
+	private frozenLayout = false;
 	private panel: ControlPanel | null = null;
 	/** needle → set of matching paths, built lazily on Enter. */
 	private contentIndex = new Map<string, Set<string>>();
@@ -1075,6 +1077,12 @@ export class GraphInsightView extends ItemView {
 
 	/** Release drag pins and re-run the layout from scratch. */
 	private regroup(): void {
+		// Coming out of a frozen shape: re-form as a free cloud, not a reheat
+		// (every node is pinned, so a reheat wouldn't move anything).
+		if (this.frozenLayout) {
+			this.applyLayoutShape("scatter");
+			return;
+		}
 		for (const id of this.pinnedNodes) {
 			if (!this.explicitPins.has(id)) this.layout?.unpin(id);
 		}
@@ -1082,10 +1090,11 @@ export class GraphInsightView extends ItemView {
 		this.layout?.reheat(1);
 	}
 
-	/** Reseed the layout in the chosen shape and let physics relax it from
-	 *  there. Explicit pins are re-applied so they stay put across the reseed. */
+	/** Rearrange the graph into a shape. Circle/grid are static (they hold the
+	 *  figure); force/scatter seed a cloud that physics relaxes. */
 	private applyLayoutShape(shape: LayoutShape): void {
 		if (!this.model || !this.layout) return;
+		const isStatic = shape === "circle" || shape === "grid";
 		const seed = computeLayoutSeed(shape, this.model.nodes.length);
 		// Keep explicitly pinned nodes where they are instead of teleporting them.
 		const current = this.renderer?.currentPositions;
@@ -1098,13 +1107,16 @@ export class GraphInsightView extends ItemView {
 		}
 		// Drop temporary drag pins; explicit pins are re-applied after restart.
 		this.pinnedNodes.clear();
+		this.frozenLayout = isStatic;
 		const view3d = this.plugin.settings.panel.view3d;
 		const dims = view3d.enabled && view3d.depthSource === "physics" ? 3 : 2;
-		this.layout.start(this.model, seed, dims);
-		// A fresh worker resets to its default physics params — push the current
-		// sliders back in so the shape relaxes with the user's settings.
-		this.lastPhysics = "";
-		this.applyPhysics(this.plugin.settings.panel);
+		this.layout.start(this.model, seed, dims, isStatic);
+		if (!isStatic) {
+			// A fresh worker resets to its default physics params — push the
+			// current sliders back in so the cloud relaxes with the user's values.
+			this.lastPhysics = "";
+			this.applyPhysics(this.plugin.settings.panel);
+		}
 		if (current) {
 			for (const id of this.explicitPins) {
 				this.layout.pin(id, current[id * 3], current[id * 3 + 1], current[id * 3 + 2]);

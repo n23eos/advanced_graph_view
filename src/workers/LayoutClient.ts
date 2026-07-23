@@ -15,7 +15,7 @@ export class LayoutClient {
 		private readonly onSettled: (positions: Float32Array) => void
 	) {}
 
-	start(model: GraphModel, seedPositions?: Float32Array, dimensions: 2 | 3 = 2): void {
+	start(model: GraphModel, seedPositions?: Float32Array, dimensions: 2 | 3 = 2, isStatic = false): void {
 		this.stop();
 		const blob = new Blob([layoutWorkerSource], { type: "text/javascript" });
 		this.blobUrl = URL.createObjectURL(blob);
@@ -44,6 +44,7 @@ export class LayoutClient {
 			weights,
 			positions: seedPositions,
 			dimensions,
+			static: isStatic,
 		};
 		// Seed is deliberately NOT transferred: callers may still hold views
 		// onto it; 80 KB copy per rebuild is nothing.
