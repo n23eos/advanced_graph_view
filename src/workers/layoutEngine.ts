@@ -128,7 +128,10 @@ export interface LayoutEngine {
 }
 
 const ALPHA_MIN = 0.01;
-const BARNES_HUT_THETA = 0.9;
+// Tighter than d3's loose 0.9 default: accurate repulsion means forces stay
+// consistent frame-to-frame, so nodes glide to rest like Obsidian's graph
+// instead of buzzing on approximate Barnes-Hut noise.
+const BARNES_HUT_THETA = 0.6;
 // 30 Hz: settle animation stays smooth while halving main-thread work
 // (sprite sync + edge rewrite + cull run per received tick).
 const FRAME_INTERVAL_MS = 33;
