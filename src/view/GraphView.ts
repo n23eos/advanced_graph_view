@@ -121,17 +121,8 @@ export class GraphInsightView extends ItemView {
 			onNodeMiddleClick: (nodeId) => this.openNode(nodeId, true),
 			onNodeContextMenu: (nodeId, event) => this.showNodeMenu(nodeId, event),
 			onLassoSelect: (nodeIds, event) => this.showLassoMenu(nodeIds, event),
-			onNodeDragStart: (nodeId) => {
-				const positions = this.renderer?.currentPositions;
-				if (positions) {
-					this.layout?.pin(
-						nodeId,
-						positions[nodeId * 3], positions[nodeId * 3 + 1], positions[nodeId * 3 + 2]
-					);
-				}
-				this.layout?.dragStart();
-			},
-			onNodeDrag: (nodeId, x, y, z) => this.layout?.pin(nodeId, x, y, z),
+			onNodeDragStart: (nodeId) => this.layout?.dragStart(nodeId),
+			onNodeDrag: (nodeId, x, y, z) => this.layout?.dragMove(nodeId, x, y, z),
 			onNodeDragEnd: (nodeId) => {
 				// Released node keeps its spot (temporary fixation) — otherwise
 				// the warm simulation immediately drags it back to its links,

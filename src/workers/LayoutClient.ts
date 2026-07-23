@@ -62,8 +62,13 @@ export class LayoutClient {
 		this.worker?.postMessage({ type: "params", params } satisfies EngineInMessage);
 	}
 
-	dragStart(): void {
-		this.worker?.postMessage({ type: "drag-start" } satisfies EngineInMessage);
+	dragStart(id: number): void {
+		this.worker?.postMessage({ type: "drag-start", id } satisfies EngineInMessage);
+	}
+
+	/** Smoothed pointer target for the node being dragged. */
+	dragMove(id: number, x: number, y: number, z?: number): void {
+		this.worker?.postMessage({ type: "drag-move", id, x, y, z } satisfies EngineInMessage);
 	}
 
 	dragEnd(): void {
