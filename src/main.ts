@@ -27,9 +27,9 @@ interface GraphInsightSettings {
 	viewPresets: ViewPreset[];
 	presets: SearchPreset[];
 	onboardingShown: boolean;
-	/** True once the built-in view presets have been seeded, so deleting them
-	 *  doesn't make them reappear on the next launch. */
-	viewPresetsSeeded: boolean;
+	/** Version of the built-in view presets last seeded. Lower than
+	 *  VIEW_PRESET_VERSION triggers a one-time re-seed + retire migration. */
+	viewPresetsVersion: number;
 	/** Open counts only when the file stays active at least this long. */
 	openDwellSeconds: number;
 	/** Note-body preview shown in the hover tooltip. */
@@ -70,7 +70,7 @@ const DEFAULT_SETTINGS: GraphInsightSettings = {
 	chipFilter: { tags: [], folders: [] },
 	presets: [],
 	viewPresets: [],
-	viewPresetsSeeded: false,
+	viewPresetsVersion: 0,
 	onboardingShown: false,
 };
 
@@ -90,7 +90,12 @@ function presetPanel(overrides: Partial<PanelState>): PanelState {
 	};
 }
 
-/** Three ready-made views seeded on first launch so the panel isn't empty. */
+/** Bump when DEFAULT_VIEW_PRESETS changes so existing installs re-seed. */
+const VIEW_PRESET_VERSION = 2;
+/** Default preset names retired in newer versions — removed on migration. */
+const RETIRED_VIEW_PRESETS = new Set(["3D галактика"]);
+
+/** Ready-made views seeded so the panel isn't empty out of the box. */
 const DEFAULT_VIEW_PRESETS: ViewPreset[] = [
 	{
 		name: "Хабы и кластеры",
@@ -108,11 +113,38 @@ const DEFAULT_VIEW_PRESETS: ViewPreset[] = [
 		}),
 	},
 	{
-		name: "3D галактика",
+		name: "Мелкие ноды",
 		panel: presetPanel({
-			channels: { size: "pagerank", color: "cluster", glow: null },
-			colorPreset: "nebula",
-			view3d: { enabled: true, depthSource: "cluster", focal: 900 },
+			channels: { size: "pagerank", color: "recency-edit", glow: null },
+			nodeScale: 0.4,
+		}),
+	},
+	{
+		name: "Широкий разброс",
+		panel: presetPanel({
+			physics: {
+				repel: 150, linkDistance: 120, centering: 0.02,
+				linkStrength: 0.08, velocityDecay: 0.55, elasticity: 0.4, freeLayout: false,
+			},
+		}),
+	},
+	{
+		name: "Плотный клубок",
+		panel: presetPanel({
+			physics: {
+				repel: 15, linkDistance: 12, centering: 0.25,
+				linkStrength: 0.3, velocityDecay: 0.55, elasticity: 0.4, freeLayout: false,
+			},
+		}),
+	},
+	{
+		name: "Минимализм",
+		panel: presetPanel({
+			channels: { size: "pagerank", color: "recency-edit", glow: null },
+			colorPreset: "mono",
+			nodeScale: 0.7,
+			labels: { show: false, fontSize: 11, zoomThreshold: 0.9, maxCount: 100, scaleWithZoom: true },
+			edges: { show: true, width: 1, opacity: 0.08 },
 		}),
 	},
 ];
@@ -168,15 +200,18 @@ export default class GraphInsightPlugin extends Plugin {
 				},
 			},
 		};
-		// Seed the built-in view presets once. The flag means a user who deletes
-		// them won't have them reappear on the next launch.
-		if (!this.settings.viewPresetsSeeded) {
-			const existingNames = new Set(this.settings.viewPresets.map((p) => p.name));
-			const seeded = DEFAULT_VIEW_PRESETS.filter((p) => !existingNames.has(p.name));
+		// Seed/refresh the built-in view presets when the bundled set changes.
+		// Retired defaults are dropped; new ones are added by name; the user's
+		// own presets and any they still keep are preserved. The version guard
+		// means deleting a default doesn't bring it back until the set changes.
+		if ((this.settings.viewPresetsVersion ?? 0) < VIEW_PRESET_VERSION) {
+			const kept = this.settings.viewPresets.filter((p) => !RETIRED_VIEW_PRESETS.has(p.name));
+			const keptNames = new Set(kept.map((p) => p.name));
+			const added = DEFAULT_VIEW_PRESETS.filter((p) => !keptNames.has(p.name));
 			this.settings = {
 				...this.settings,
-				viewPresets: [...seeded, ...this.settings.viewPresets],
-				viewPresetsSeeded: true,
+				viewPresets: [...added, ...kept],
+				viewPresetsVersion: VIEW_PRESET_VERSION,
 			};
 			await this.saveData(this.settings);
 		}
