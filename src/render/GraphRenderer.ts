@@ -36,7 +36,6 @@ const HOVER_SIZE_BOOST = 1.9;
 /** Search/overlay matches grow a little so they read at a glance. */
 const HIGHLIGHT_SIZE_BOOST = 1.45;
 const HOVER_NEIGHBOR_ALPHA = 0.9;
-const HOVER_REST_ALPHA = 0.25;
 const CULL_MIN_INTERVAL_MS = 30;
 const MIN_LABEL_SCREEN_PX = 8;
 const DOUBLE_CLICK_MS = 350;
@@ -313,9 +312,9 @@ export class GraphRenderer {
 		if (turningOn) {
 			this.camera.yaw = 0.5;
 			this.camera.pitch = -0.3;
-			this.camera.px = 0;
-			this.camera.py = 0;
-			this.camera.pz = 0;
+			// Sit the camera outside the cloud looking at its center, so orbiting
+			// spins the whole scene around the center instead of turning in place.
+			this.frameCloud();
 			// Flat zoom/pan would multiply on top of the perspective and make
 			// the flight feel like scaling a picture — reset to identity.
 			if (this.app && this.viewport) {
@@ -347,34 +346,51 @@ export class GraphRenderer {
 		this.viewport.centerOn(-dx / this.viewport.scale, -dy / this.viewport.scale, view.clientWidth, view.clientHeight);
 	}
 
+	/** Position the 3D camera outside the cloud, pulled back along its look
+	 *  direction so the whole graph is framed and centered. No-op in 2D or
+	 *  before positions exist. */
+	private frameCloud(): void {
+		if (!this.camera.enabled || !this.positions3) {
+			this.camera.px = 0;
+			this.camera.py = 0;
+			this.camera.pz = 0;
+			return;
+		}
+		let cx = 0, cy = 0, cz = 0;
+		const count = this.positions3.length / 3;
+		for (let i = 0; i < count; i++) {
+			cx += this.positions3[i * 3];
+			cy += this.positions3[i * 3 + 1];
+			cz += this.positions3[i * 3 + 2];
+		}
+		cx /= count; cy /= count; cz /= count;
+		let radius = 1;
+		for (let i = 0; i < count; i++) {
+			const d = Math.hypot(
+				this.positions3[i * 3] - cx,
+				this.positions3[i * 3 + 1] - cy,
+				this.positions3[i * 3 + 2] - cz
+			);
+			if (d > radius) radius = d;
+		}
+		const [fx, fy, fz] = this.camera.forward();
+		const distance = radius * 1.6;
+		this.camera.px = cx - fx * distance;
+		this.camera.py = cy - fy * distance;
+		this.camera.pz = cz - fz * distance;
+		// Remember the center so orbiting pivots exactly around it.
+		this.camera.tx = cx;
+		this.camera.ty = cy;
+		this.camera.tz = cz;
+	}
+
 	/** Fit every visible node into the viewport. */
 	fitAll(): void {
 		if (!this.positions || !this.radii) return;
 		if (this.camera.enabled && this.positions3) {
 			// 3D: fly the camera back to где всё облако в кадре — fitting the
 			// 2D projection would chase coordinates that move with the camera.
-			let cx = 0, cy = 0, cz = 0;
-			const count = this.positions3.length / 3;
-			for (let i = 0; i < count; i++) {
-				cx += this.positions3[i * 3];
-				cy += this.positions3[i * 3 + 1];
-				cz += this.positions3[i * 3 + 2];
-			}
-			cx /= count; cy /= count; cz /= count;
-			let radius = 1;
-			for (let i = 0; i < count; i++) {
-				const d = Math.hypot(
-					this.positions3[i * 3] - cx,
-					this.positions3[i * 3 + 1] - cy,
-					this.positions3[i * 3 + 2] - cz
-				);
-				if (d > radius) radius = d;
-			}
-			const [fx, fy, fz] = this.camera.forward();
-			const distance = radius * 1.6;
-			this.camera.px = cx - fx * distance;
-			this.camera.py = cy - fy * distance;
-			this.camera.pz = cz - fz * distance;
+			this.frameCloud();
 			this.reproject();
 			return;
 		}
@@ -531,9 +547,10 @@ export class GraphRenderer {
 			}
 			let alpha = (dimmed ? glow * DIM_ALPHA : glow) * factor * fog;
 			if (this.hoveredId !== null) {
+				// Lift the hovered node and its neighbors; leave the rest of the
+				// scene at its normal brightness (no whole-scene dimming).
 				if (i === this.hoveredId) alpha = 1;
 				else if (this.hoverNeighbors.has(i)) alpha = Math.max(alpha, HOVER_NEIGHBOR_ALPHA);
-				else alpha *= HOVER_REST_ALPHA;
 			}
 			this.sprites[i].alpha = alpha;
 		}
@@ -962,10 +979,10 @@ export class GraphRenderer {
 			return;
 		}
 		if (this.orbiting) {
-			this.camera.yaw += (event.clientX - this.orbitLastX) * 0.005;
-			this.camera.pitch = Math.max(
-				-1.45,
-				Math.min(1.45, this.camera.pitch + (event.clientY - this.orbitLastY) * 0.005)
+			// Orbit around the scene center, not the camera's own axis.
+			this.camera.orbit(
+				(event.clientX - this.orbitLastX) * 0.005,
+				(event.clientY - this.orbitLastY) * 0.005
 			);
 			this.orbitLastX = event.clientX;
 			this.orbitLastY = event.clientY;

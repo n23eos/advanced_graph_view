@@ -15,11 +15,14 @@ export class Camera3D {
 	yaw = 0;
 	pitch = 0;
 	focal = DEFAULT_FOCAL;
-	/** Camera position in world space — a real flying camera: rotation
-	 *  pivots around the viewer, wheel moves along the look direction. */
+	/** Camera position in world space. */
 	px = 0;
 	py = 0;
 	pz = 0;
+	/** Orbit pivot — the graph center the camera rotates around. */
+	tx = 0;
+	ty = 0;
+	tz = 0;
 
 	/**
 	 * Project xyz (stride 3) into out2d (stride 2) + per-point depth scale.
@@ -67,6 +70,22 @@ export class Camera3D {
 			out2d[i * 2 + 1] = y2 * scale;
 			depthScale[i] = scale;
 		}
+	}
+
+	/** Orbit the camera around the scene center (target) at its current
+	 *  distance, so the whole scene spins around the center instead of the
+	 *  camera turning in place. */
+	orbit(deltaYaw: number, deltaPitch: number): void {
+		const dx = this.px - this.tx;
+		const dy = this.py - this.ty;
+		const dz = this.pz - this.tz;
+		const radius = Math.hypot(dx, dy, dz) || this.focal;
+		this.yaw += deltaYaw;
+		this.pitch = Math.max(-1.45, Math.min(1.45, this.pitch + deltaPitch));
+		const [fx, fy, fz] = this.forward();
+		this.px = this.tx - fx * radius;
+		this.py = this.ty - fy * radius;
+		this.pz = this.tz - fz * radius;
 	}
 
 	/** World-space unit vector of the look direction (view +z axis). */
