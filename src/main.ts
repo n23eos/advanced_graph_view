@@ -27,6 +27,9 @@ interface GraphInsightSettings {
 	viewPresets: ViewPreset[];
 	presets: SearchPreset[];
 	onboardingShown: boolean;
+	/** True once the built-in view presets have been seeded, so deleting them
+	 *  doesn't make them reappear on the next launch. */
+	viewPresetsSeeded: boolean;
 	/** Open counts only when the file stays active at least this long. */
 	openDwellSeconds: number;
 	/** Note-body preview shown in the hover tooltip. */
@@ -67,8 +70,52 @@ const DEFAULT_SETTINGS: GraphInsightSettings = {
 	chipFilter: { tags: [], folders: [] },
 	presets: [],
 	viewPresets: [],
+	viewPresetsSeeded: false,
 	onboardingShown: false,
 };
+
+/** Build a full panel snapshot from the defaults with a few fields overridden,
+ *  cloning nested objects so presets never share references with the base. */
+function presetPanel(overrides: Partial<PanelState>): PanelState {
+	const base = DEFAULT_SETTINGS.panel;
+	return {
+		...base,
+		...overrides,
+		channels: { ...base.channels, ...(overrides.channels ?? {}) },
+		overlays: { ...base.overlays, ...(overrides.overlays ?? {}) },
+		physics: { ...base.physics, ...(overrides.physics ?? {}) },
+		labels: { ...base.labels, ...(overrides.labels ?? {}) },
+		edges: { ...base.edges, ...(overrides.edges ?? {}) },
+		view3d: { ...base.view3d, ...(overrides.view3d ?? {}) },
+	};
+}
+
+/** Three ready-made views seeded on first launch so the panel isn't empty. */
+const DEFAULT_VIEW_PRESETS: ViewPreset[] = [
+	{
+		name: "Хабы и кластеры",
+		panel: presetPanel({
+			channels: { size: "pagerank", color: "cluster", glow: "links-total" },
+			colorPreset: "galaxy",
+			showBubbles: true,
+		}),
+	},
+	{
+		name: "Недавнее",
+		panel: presetPanel({
+			channels: { size: "opens-30", color: "recency-edit", glow: null },
+			colorPreset: "heat",
+		}),
+	},
+	{
+		name: "3D галактика",
+		panel: presetPanel({
+			channels: { size: "pagerank", color: "cluster", glow: null },
+			colorPreset: "nebula",
+			view3d: { enabled: true, depthSource: "cluster", focal: 900 },
+		}),
+	},
+];
 
 const SESSION_TRAIL_CAP = 200;
 const USAGE_SAVE_DEBOUNCE_MS = 30_000;
@@ -121,6 +168,18 @@ export default class GraphInsightPlugin extends Plugin {
 				},
 			},
 		};
+		// Seed the built-in view presets once. The flag means a user who deletes
+		// them won't have them reappear on the next launch.
+		if (!this.settings.viewPresetsSeeded) {
+			const existingNames = new Set(this.settings.viewPresets.map((p) => p.name));
+			const seeded = DEFAULT_VIEW_PRESETS.filter((p) => !existingNames.has(p.name));
+			this.settings = {
+				...this.settings,
+				viewPresets: [...seeded, ...this.settings.viewPresets],
+				viewPresetsSeeded: true,
+			};
+			await this.saveData(this.settings);
+		}
 		this.dataStore = new PluginDataStore(
 			this.app,
 			// The config folder is user-configurable — never hardcode ".obsidian".
