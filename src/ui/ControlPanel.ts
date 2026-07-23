@@ -92,6 +92,7 @@ export class ControlPanel {
 	private overlayCountEls = new Map<keyof OverlayToggles, HTMLElement>();
 	private presetSelect: HTMLSelectElement | null = null;
 	private viewPresets: ViewPresetRow[] = [];
+	private selectedPresetIndex: number | null = null;
 	private hiddenCountEl: HTMLElement | null = null;
 
 	constructor(
@@ -134,7 +135,10 @@ export class ControlPanel {
 		this.presetSelect.addEventListener("change", () => {
 			const index = Number(this.presetSelect!.value);
 			if (!Number.isNaN(index) && this.presetSelect!.value !== "") {
+				this.selectedPresetIndex = index;
 				this.callbacks.onPresetApply(index);
+			} else {
+				this.selectedPresetIndex = null;
 			}
 		});
 		const presetButtons = presets.createDiv({ cls: "graph-insight-panel-row" });
@@ -371,16 +375,31 @@ export class ControlPanel {
 		this.renderPresetOptions();
 	}
 
+	/** Keep the applied preset shown as selected (and thus deletable) across
+	 *  the panel rebuild that follows applying one. */
+	setSelectedPreset(index: number | null): void {
+		this.selectedPresetIndex = index;
+		this.renderPresetOptions();
+	}
+
 	private renderPresetOptions(): void {
 		if (!this.presetSelect) return;
 		this.presetSelect.empty();
+		const hasSelection =
+			this.selectedPresetIndex !== null &&
+			this.selectedPresetIndex >= 0 &&
+			this.selectedPresetIndex < this.viewPresets.length;
 		const placeholder = this.presetSelect.createEl("option", {
 			text: this.viewPresets.length > 0 ? "Choose a preset…" : "No presets yet",
 			value: "",
 		});
-		placeholder.selected = true;
+		placeholder.selected = !hasSelection;
 		this.viewPresets.forEach((preset, index) => {
-			this.presetSelect!.createEl("option", { text: preset.name, value: String(index) });
+			const option = this.presetSelect!.createEl("option", {
+				text: preset.name,
+				value: String(index),
+			});
+			if (hasSelection && index === this.selectedPresetIndex) option.selected = true;
 		});
 	}
 

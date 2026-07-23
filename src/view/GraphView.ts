@@ -52,6 +52,8 @@ export class GraphInsightView extends ItemView {
 	private tooltipNodeId: number | null = null;
 	/** Pending delayed-preview timer, so a quick sweep across nodes never reads. */
 	private previewTimer: number | null = null;
+	/** View preset currently shown as applied in the panel dropdown. */
+	private activePresetIndex: number | null = null;
 	private panel: ControlPanel | null = null;
 	/** needle → set of matching paths, built lazily on Enter. */
 	private contentIndex = new Map<string, Set<string>>();
@@ -920,6 +922,8 @@ export class GraphInsightView extends ItemView {
 	private buildPanel(state: PanelState): ControlPanel {
 		return new ControlPanel(this.contentEl, state, {
 			onChange: (next) => {
+				// A manual tweak diverges from the preset, so it's no longer "applied".
+				this.activePresetIndex = null;
 				void this.plugin.savePanelState(next);
 				this.applyAllPanelState(next);
 			},
@@ -944,6 +948,7 @@ export class GraphInsightView extends ItemView {
 	private async applyViewPreset(index: number): Promise<void> {
 		const preset = this.plugin.settings.viewPresets[index];
 		if (!preset) return;
+		this.activePresetIndex = index;
 		await this.updatePanelState(() => preset.panel);
 		new Notice(`View "${preset.name}" applied`);
 	}
@@ -966,8 +971,10 @@ export class GraphInsightView extends ItemView {
 		const preset = existing[index];
 		if (!preset) return;
 		const next = existing.filter((_, i) => i !== index);
+		this.activePresetIndex = null;
 		await this.plugin.saveViewPresets(next);
 		this.panel?.setViewPresets(next);
+		this.panel?.setSelectedPreset(null);
 		new Notice(`Preset "${preset.name}" deleted`);
 	}
 
@@ -993,6 +1000,7 @@ export class GraphInsightView extends ItemView {
 		this.panel?.destroy();
 		this.panel = this.buildPanel(next);
 		this.panel.setViewPresets(this.plugin.settings.viewPresets);
+		this.panel.setSelectedPreset(this.activePresetIndex);
 		if (this.model) this.panel.setOverlayCounts(countOverlayMatches(this.model));
 		this.panel.setHiddenNodeCount(this.hiddenNodes.size);
 		this.refreshClusterPanel();
