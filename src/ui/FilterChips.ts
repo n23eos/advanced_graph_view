@@ -46,6 +46,17 @@ export class FilterChips {
 		if (this.openKind && !this.root.contains(event.target as Node)) this.closeMenu();
 	};
 
+	/** Restore a selection (e.g. persisted from a previous session) without
+	 *  firing onChange — the caller owns applying it. */
+	setSelection(selection: FilterSelection): void {
+		this.selection = {
+			tags: new Set(selection.tags),
+			folders: new Set(selection.folders),
+		};
+		this.refreshLabels();
+		if (this.openKind) this.renderMenu(this.openKind);
+	}
+
 	setVocabulary(tags: string[], folders: string[]): void {
 		this.tags = tags;
 		this.folders = folders;

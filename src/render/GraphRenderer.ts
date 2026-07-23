@@ -43,6 +43,7 @@ export interface RendererCallbacks {
 	onNodeHover(nodeId: number | null, clientX: number, clientY: number): void;
 	onNodeClick(nodeId: number, event: PointerEvent): void;
 	onNodeDoubleClick(nodeId: number): void;
+	onNodeMiddleClick(nodeId: number): void;
 	onNodeContextMenu(nodeId: number, event: MouseEvent): void;
 	onNodeDragStart(nodeId: number): void;
 	onNodeDrag(nodeId: number, worldX: number, worldY: number, worldZ: number): void;
@@ -899,6 +900,8 @@ export class GraphRenderer {
 	/** Node pressed but not yet moved past the drag threshold. */
 	private pressedId: number | null = null;
 	private pressedEvent: PointerEvent | null = null;
+	/** Node under a pressed middle mouse button, resolved on release. */
+	private middlePressedId: number | null = null;
 	private draggingId: number | null = null;
 	private lastClickAt = 0;
 	private lastClickId: number | null = null;
@@ -1022,6 +1025,16 @@ export class GraphRenderer {
 			}
 			return;
 		}
+		if (event.button === 1) {
+			// Middle button opens in a new tab; resolve on release so a
+			// press-and-move doesn't count. preventDefault stops autoscroll.
+			const middleId = this.findNodeAt(event.clientX, event.clientY);
+			if (middleId !== null) {
+				this.middlePressedId = middleId;
+				event.preventDefault();
+			}
+			return;
+		}
 		if (event.button !== 0) return;
 		if (event.shiftKey) {
 			this.startLasso(event);
@@ -1050,6 +1063,16 @@ export class GraphRenderer {
 	private handlePointerUp = (event: PointerEvent): void => {
 		if (this.rmbPanning && event.button === 2) {
 			this.rmbPanning = false;
+			return;
+		}
+		if (event.button === 1) {
+			if (
+				this.middlePressedId !== null &&
+				this.findNodeAt(event.clientX, event.clientY) === this.middlePressedId
+			) {
+				this.callbacks.onNodeMiddleClick(this.middlePressedId);
+			}
+			this.middlePressedId = null;
 			return;
 		}
 		if (this.orbiting) {

@@ -3,6 +3,7 @@ import { buildAdjacency, computeDistances, shortestPath } from "../analysis/focu
 import { nameClusters, type ClusterContent } from "../analysis/clusterNames";
 import { computeOverlayMask, countOverlayMatches } from "../analysis/overlays";
 import { buildGraphModel, type GraphModel } from "../data/GraphStore";
+import { stripMarkdown } from "../data/stripMarkdown";
 import { countRecentOpens } from "../data/UsageTracker";
 import type { PositionMap } from "../data/persistence";
 import { buildEncoding, type NodeEncoding } from "../encoding/encode";
@@ -49,6 +50,8 @@ export class GraphInsightView extends ItemView {
 	/** Node the tooltip currently describes; guards async preview reads and
 	 *  avoids rebuilding the tooltip on every same-node pointermove. */
 	private tooltipNodeId: number | null = null;
+	/** Pending delayed-preview timer, so a quick sweep across nodes never reads. */
+	private previewTimer: number | null = null;
 	private panel: ControlPanel | null = null;
 	/** needle → set of matching paths, built lazily on Enter. */
 	private contentIndex = new Map<string, Set<string>>();
@@ -111,7 +114,8 @@ export class GraphInsightView extends ItemView {
 		this.renderer = new GraphRenderer({
 			onNodeHover: (nodeId, clientX, clientY) => this.showTooltip(nodeId, clientX, clientY),
 			onNodeClick: (nodeId, event) => this.handleNodeClick(nodeId, event),
-			onNodeDoubleClick: (nodeId) => this.enterFocus(nodeId),
+			onNodeDoubleClick: (nodeId) => this.openNode(nodeId, false),
+			onNodeMiddleClick: (nodeId) => this.openNode(nodeId, true),
 			onNodeContextMenu: (nodeId, event) => this.showNodeMenu(nodeId, event),
 			onLassoSelect: (nodeIds, event) => this.showLassoMenu(nodeIds, event),
 			onNodeDragStart: (nodeId) => {
@@ -198,8 +202,18 @@ export class GraphInsightView extends ItemView {
 			onChange: (selection) => {
 				this.chipFilter = selection;
 				this.recomputeVisual();
+				void this.plugin.saveChipFilter({
+					tags: [...selection.tags],
+					folders: [...selection.folders],
+				});
 			},
 		});
+		// Restore the last session's filter so the graph opens where it left off.
+		const savedFilter = this.plugin.settings.chipFilter;
+		if (savedFilter.tags.length > 0 || savedFilter.folders.length > 0) {
+			this.chipFilter = { tags: new Set(savedFilter.tags), folders: new Set(savedFilter.folders) };
+			this.filterChips.setSelection(this.chipFilter);
+		}
 
 		this.toolBar = new ToolBar(container, this.cursorTool, this.focusDepth, {
 			onToolChange: (tool) => {
@@ -231,7 +245,18 @@ export class GraphInsightView extends ItemView {
 		});
 
 		this.registerDomEvent(document, "keydown", (event) => {
-			if (event.key === "Escape" && this.focusRootId !== null) this.exitFocus();
+			if (event.key !== "Escape" || !this.contentEl.isShown()) return;
+			const target = event.target as HTMLElement | null;
+			// Don't hijack Esc while the user is editing the search box etc.
+			if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
+				return;
+			}
+			// First Esc leaves focus mode; a second clears any remaining filters.
+			if (this.focusRootId !== null) {
+				this.exitFocus();
+			} else if (this.hasActiveViewState()) {
+				this.resetViewState();
+			}
 		});
 
 		await this.rebuildGraph();
@@ -461,6 +486,12 @@ export class GraphInsightView extends ItemView {
 					);
 				}
 			}
+		}));
+		menu.addSeparator();
+		menu.addItem((item) => item.setTitle("Copy link").setIcon("link").onClick(async () => {
+			// Write-only: paste-ready Obsidian wikilink for the note.
+			await navigator.clipboard.writeText(`[[${node.name}]]`);
+			new Notice(`Copied [[${node.name}]]`);
 		}));
 		menu.addItem((item) => item.setTitle(`Path: ${node.path}`).setDisabled(true));
 		menu.showAtMouseEvent(event);
@@ -739,6 +770,7 @@ export class GraphInsightView extends ItemView {
 		if (!this.tooltip || !this.model) return;
 		if (nodeId === null) {
 			this.tooltipNodeId = null;
+			this.clearPreviewTimer();
 			this.tooltip.hide();
 			return;
 		}
@@ -750,6 +782,7 @@ export class GraphInsightView extends ItemView {
 		// preview read on every micro-movement of the mouse.
 		if (nodeId === this.tooltipNodeId) return;
 		this.tooltipNodeId = nodeId;
+		this.clearPreviewTimer();
 
 		const node = this.model.nodes[nodeId];
 		const facts = this.facts[nodeId];
@@ -765,7 +798,19 @@ export class GraphInsightView extends ItemView {
 
 		const preview = this.plugin.settings.hoverPreview;
 		if (preview.enabled) {
-			void this.appendNotePreview(nodeId, preview.words);
+			// Only load once the cursor has settled on this node, so sweeping
+			// across a dense cluster doesn't fire a read per node.
+			this.previewTimer = window.setTimeout(() => {
+				this.previewTimer = null;
+				if (nodeId === this.tooltipNodeId) void this.appendNotePreview(nodeId, preview.words);
+			}, Math.max(0, preview.delayMs));
+		}
+	}
+
+	private clearPreviewTimer(): void {
+		if (this.previewTimer !== null) {
+			window.clearTimeout(this.previewTimer);
+			this.previewTimer = null;
 		}
 	}
 
@@ -789,7 +834,9 @@ export class GraphInsightView extends ItemView {
 		} catch {
 			return null;
 		}
-		const body = raw.replace(/^---\n[\s\S]*?\n---\n/, "").replace(/\s+/g, " ").trim();
+		const body = stripMarkdown(raw.replace(/^---\n[\s\S]*?\n---\n/, ""))
+			.replace(/\s+/g, " ")
+			.trim();
 		if (!body) return null;
 		return body.split(" ").slice(0, words).join(" ");
 	}
@@ -1034,6 +1081,19 @@ export class GraphInsightView extends ItemView {
 		this.layout?.reheat(1);
 	}
 
+	/** True when there is any temporary visual state Esc could clear. */
+	private hasActiveViewState(): boolean {
+		return (
+			this.hiddenNodes.size > 0 ||
+			this.hiddenClusters.size > 0 ||
+			this.softQuery !== null ||
+			this.hardQuery !== null ||
+			this.pathAnchor !== null ||
+			this.chipFilter.tags.size > 0 ||
+			this.chipFilter.folders.size > 0
+		);
+	}
+
 	/** One button to undo every temporary visual state. */
 	private resetViewState(): void {
 		this.hiddenNodes.clear();
@@ -1044,6 +1104,8 @@ export class GraphInsightView extends ItemView {
 		this.focusRootId = null;
 		this.focusBar?.hide();
 		this.chipFilter = { tags: new Set(), folders: new Set() };
+		this.filterChips?.setSelection(this.chipFilter);
+		void this.plugin.saveChipFilter({ tags: [], folders: [] });
 		this.searchBar?.clear();
 		this.renderer?.setSelected(null);
 		this.renderer?.setHighlightMask(null);
@@ -1108,6 +1170,7 @@ export class GraphInsightView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
+		this.clearPreviewTimer();
 		await this.savePositions();
 		this.layout?.stop();
 		this.layout = null;

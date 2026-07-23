@@ -31,6 +31,8 @@ interface GraphInsightSettings {
 	openDwellSeconds: number;
 	/** Note-body preview shown in the hover tooltip. */
 	hoverPreview: HoverPreviewSettings;
+	/** Last tag/folder filter, restored on the next session. */
+	chipFilter: { tags: string[]; folders: string[] };
 }
 
 interface HoverPreviewSettings {
@@ -38,6 +40,8 @@ interface HoverPreviewSettings {
 	enabled: boolean;
 	/** How many leading words of the note body to show. */
 	words: number;
+	/** Hold the cursor on a node this long before the preview loads. */
+	delayMs: number;
 }
 
 const DEFAULT_SETTINGS: GraphInsightSettings = {
@@ -59,7 +63,8 @@ const DEFAULT_SETTINGS: GraphInsightSettings = {
 		view3d: { enabled: false, depthSource: "physics", focal: 900 },
 	},
 	openDwellSeconds: 5,
-	hoverPreview: { enabled: true, words: 300 },
+	hoverPreview: { enabled: true, words: 300, delayMs: 350 },
+	chipFilter: { tags: [], folders: [] },
 	presets: [],
 	viewPresets: [],
 	onboardingShown: false,
@@ -86,6 +91,7 @@ export default class GraphInsightPlugin extends Plugin {
 			...DEFAULT_SETTINGS,
 			...(saved ?? {}),
 			hoverPreview: { ...DEFAULT_SETTINGS.hoverPreview, ...(saved?.hoverPreview ?? {}) },
+			chipFilter: { ...DEFAULT_SETTINGS.chipFilter, ...(saved?.chipFilter ?? {}) },
 			panel: {
 				...DEFAULT_SETTINGS.panel,
 				...(saved?.panel ?? {}),
@@ -233,6 +239,11 @@ export default class GraphInsightPlugin extends Plugin {
 
 	async savePanelState(panel: PanelState): Promise<void> {
 		this.settings = { ...this.settings, panel };
+		await this.saveData(this.settings);
+	}
+
+	async saveChipFilter(chipFilter: { tags: string[]; folders: string[] }): Promise<void> {
+		this.settings = { ...this.settings, chipFilter };
 		await this.saveData(this.settings);
 	}
 

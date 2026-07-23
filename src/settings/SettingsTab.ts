@@ -9,7 +9,11 @@ import { usageToCsv } from "../export/exporters";
 import type GraphInsightPlugin from "../main";
 
 /** Keys addressed by the declarative settings API. */
-type SettingKey = "openDwellSeconds" | "hoverPreviewEnabled" | "hoverPreviewWords";
+type SettingKey =
+	| "openDwellSeconds"
+	| "hoverPreviewEnabled"
+	| "hoverPreviewWords"
+	| "hoverPreviewDelay";
 
 /**
  * Declarative settings (Obsidian 1.13+). Describing the settings instead of
@@ -88,6 +92,21 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 								value >= 10 && value <= 500 ? undefined : "Enter a number between 10 and 500",
 						},
 					},
+					{
+						name: "Preview delay (ms)",
+						desc: "How long to hover a node before its preview loads. 0 shows it instantly.",
+						aliases: ["tooltip", "hover", "delay"],
+						control: {
+							type: "number",
+							key: "hoverPreviewDelay",
+							min: 0,
+							max: 2000,
+							step: 50,
+							placeholder: "350",
+							validate: (value) =>
+								value >= 0 && value <= 2000 ? undefined : "Enter a number between 0 and 2000",
+						},
+					},
 				],
 			},
 			{
@@ -113,6 +132,8 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 				return this.plugin.settings.hoverPreview.enabled;
 			case "hoverPreviewWords":
 				return this.plugin.settings.hoverPreview.words;
+			case "hoverPreviewDelay":
+				return this.plugin.settings.hoverPreview.delayMs;
 		}
 	}
 
@@ -133,6 +154,13 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 				this.plugin.settings = {
 					...this.plugin.settings,
 					hoverPreview: { ...this.plugin.settings.hoverPreview, words: value as number },
+				};
+				await this.plugin.saveData(this.plugin.settings);
+				return;
+			case "hoverPreviewDelay":
+				this.plugin.settings = {
+					...this.plugin.settings,
+					hoverPreview: { ...this.plugin.settings.hoverPreview, delayMs: value as number },
 				};
 				await this.plugin.saveData(this.plugin.settings);
 				return;
