@@ -146,13 +146,14 @@ const DRAG_INTERVAL_MS = 16;
 const DRAG_ALPHA_TARGET = 0.08;
 const DRAG_EXTRA_DAMPING = 0.4;
 const MAX_DRAG_DAMPING = 0.9;
-/** Accurate repulsion while dragging: the default coarse theta (0.9) is what
- *  makes distant nodes jitter, so tighten it hard for the duration of the drag
- *  — this is the main lever against the whole graph vibrating. */
-const DRAG_THETA = 0.3;
-/** The dragged node eases toward the pointer by this fraction each tick, so a
- *  fast mouse flick arrives as smooth motion with a little inertia. */
-const DRAG_FOLLOW = 0.28;
+/** Repulsion accuracy while dragging. Kept loose enough that a big graph's
+ *  Barnes-Hut tick finishes well inside the frame budget — an over-tight theta
+ *  overruns 16 ms and the drag stutters. */
+const DRAG_THETA = 0.75;
+/** The grabbed node tracks the pointer tightly (near 1:1) so dragging feels
+ *  responsive; the smoothing/inertia lives in how neighbors follow via links,
+ *  not in lagging the node you're holding. */
+const DRAG_FOLLOW = 0.65;
 /** Links stiffen while dragging so neighbors follow the pointer harder — the
  *  dragged note tows its connections along. Tighter theta keeps the pull from
  *  turning into a whole-graph wobble. */
