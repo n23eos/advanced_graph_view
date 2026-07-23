@@ -3,6 +3,7 @@
  * cluster list. Native DOM + Obsidian CSS variables, no framework.
  */
 import type { ChannelAssignment } from "../encoding/encode";
+import type { LayoutShape } from "../workers/layoutSeed";
 import {
 	CATEGORICAL_METRIC_LABELS,
 	NUMERIC_METRIC_LABELS,
@@ -71,6 +72,8 @@ export interface PanelCallbacks {
 	onPresetDelete(index: number): void;
 	onChange(state: PanelState): void;
 	onReheat(): void;
+	/** Reseed the layout in a chosen shape, then let physics relax it. */
+	onLayoutShape(shape: LayoutShape): void;
 	onClusterClick(index: number): void;
 	onClusterToggle(index: number): void;
 	onTrailReplay(): void;
@@ -303,6 +306,16 @@ export class ControlPanel {
 		clusters.createDiv({ cls: "graph-insight-panel-hint", text: "Color nodes by Cluster to see groups" });
 
 		const physics = this.section("Physics");
+		// Not part of PanelState — a one-shot reseed action, so it always shows
+		// "Force" and applies immediately on change.
+		this.channelSelect(
+			physics,
+			"Layout shape",
+			"force",
+			{ force: "Force", circle: "Круг", grid: "Сетка", scatter: "Разброс" },
+			(value) => this.callbacks.onLayoutShape((value ?? "force") as LayoutShape),
+			false
+		);
 		this.physicsSlider(physics, "Node spread (repulsion)", 1, 300, 1, this.state.physics.repel, (value) => {
 			this.setState({ ...this.state, physics: { ...this.state.physics, repel: value } });
 		});

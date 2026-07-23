@@ -13,6 +13,7 @@ import { GraphRenderer } from "../render/GraphRenderer";
 import { ControlPanel, type PanelState } from "../ui/ControlPanel";
 import { Legend } from "../ui/Legend";
 import { LayoutClient } from "../workers/LayoutClient";
+import { computeLayoutSeed, type LayoutShape } from "../workers/layoutSeed";
 import { MetricsClient, type GraphMetrics } from "../workers/MetricsClient";
 import { contentNeedles, parseQuery, matchesQuery, type ParsedQuery } from "../query/QueryParser";
 import { SearchBar } from "../ui/SearchBar";
@@ -928,6 +929,7 @@ export class GraphInsightView extends ItemView {
 				this.applyAllPanelState(next);
 			},
 			onReheat: () => this.regroup(),
+			onLayoutShape: (shape) => this.applyLayoutShape(shape),
 			onClusterClick: (index) => this.zoomToCluster(index),
 			onClusterToggle: (index) => this.toggleCluster(index),
 			onTrailReplay: () => this.replayTrail(),
@@ -1087,6 +1089,36 @@ export class GraphInsightView extends ItemView {
 		}
 		this.pinnedNodes.clear();
 		this.layout?.reheat(1);
+	}
+
+	/** Reseed the layout in the chosen shape and let physics relax it from
+	 *  there. Explicit pins are re-applied so they stay put across the reseed. */
+	private applyLayoutShape(shape: LayoutShape): void {
+		if (!this.model || !this.layout) return;
+		const seed = computeLayoutSeed(shape, this.model.nodes.length);
+		// Keep explicitly pinned nodes where they are instead of teleporting them.
+		const current = this.renderer?.currentPositions;
+		if (current) {
+			for (const id of this.explicitPins) {
+				seed[id * 3] = current[id * 3];
+				seed[id * 3 + 1] = current[id * 3 + 1];
+				seed[id * 3 + 2] = current[id * 3 + 2];
+			}
+		}
+		// Drop temporary drag pins; explicit pins are re-applied after restart.
+		this.pinnedNodes.clear();
+		const view3d = this.plugin.settings.panel.view3d;
+		const dims = view3d.enabled && view3d.depthSource === "physics" ? 3 : 2;
+		this.layout.start(this.model, seed, dims);
+		// A fresh worker resets to its default physics params — push the current
+		// sliders back in so the shape relaxes with the user's settings.
+		this.lastPhysics = "";
+		this.applyPhysics(this.plugin.settings.panel);
+		if (current) {
+			for (const id of this.explicitPins) {
+				this.layout.pin(id, current[id * 3], current[id * 3 + 1], current[id * 3 + 2]);
+			}
+		}
 	}
 
 	/** True when there is any temporary visual state Esc could clear. */

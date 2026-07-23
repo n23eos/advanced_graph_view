@@ -12,6 +12,7 @@ import {
 	type Simulation3D,
 	type SimulationNodeDatum3D,
 } from "d3-force-3d";
+import { computeLayoutSeed } from "./layoutSeed";
 
 interface SimNode extends SimulationNodeDatum3D {
 	id: number;
@@ -166,23 +167,28 @@ export function createLayoutEngine(
 		stopTimer();
 		const dimensions = message.dimensions ?? 2;
 
+		// No carried-over seed? Scatter nodes into a cloud rather than leaving
+		// them position-less: d3-force would otherwise seed a phyllotaxis
+		// spiral that survives as a visible fractal in sparse graphs.
+		const positions = message.positions ?? computeLayoutSeed("scatter", message.nodeCount);
+
 		// A seed carried over from a 2D layout has z=0 everywhere. That is an
 		// unstable equilibrium: symmetric forces keep the layout a flat disc
 		// forever, and a rotating disc reads as a "tube". Detect flat seeds
 		// and scatter z deterministically so the simulation inflates into a
 		// real ball.
 		let flatSeed = true;
-		if (dimensions === 3 && message.positions) {
+		if (dimensions === 3) {
 			// Compare z spread against xy spread: a few stray z values must
 			// not fool the detector — a QUASI-flat pancake still collapses
 			// into a rotating "tube" without a proper z scatter.
 			let maxAbsZ = 0;
 			let maxAbsXY = 1;
 			for (let i = 0; i < message.nodeCount; i++) {
-				const az = Math.abs(message.positions[i * 3 + 2]);
+				const az = Math.abs(positions[i * 3 + 2]);
 				if (az > maxAbsZ) maxAbsZ = az;
-				const ax = Math.abs(message.positions[i * 3]);
-				const ay = Math.abs(message.positions[i * 3 + 1]);
+				const ax = Math.abs(positions[i * 3]);
+				const ay = Math.abs(positions[i * 3 + 1]);
 				if (ax > maxAbsXY) maxAbsXY = ax;
 				if (ay > maxAbsXY) maxAbsXY = ay;
 			}
@@ -192,14 +198,12 @@ export function createLayoutEngine(
 		nodes = [];
 		for (let i = 0; i < message.nodeCount; i++) {
 			const node: SimNode = { id: i };
-			if (message.positions) {
-				node.x = message.positions[i * 3];
-				node.y = message.positions[i * 3 + 1];
-				if (dimensions === 3) {
-					node.z = flatSeed
-						? ((i * 2654435761 % 200000) / 1000 - 100) // ±100, deterministic
-						: message.positions[i * 3 + 2];
-				}
+			node.x = positions[i * 3];
+			node.y = positions[i * 3 + 1];
+			if (dimensions === 3) {
+				node.z = flatSeed
+					? ((i * 2654435761 % 200000) / 1000 - 100) // ±100, deterministic
+					: positions[i * 3 + 2];
 			}
 			nodes.push(node);
 		}
