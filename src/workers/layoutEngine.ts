@@ -404,6 +404,15 @@ export function createLayoutEngine(
 						(simulation.force("link") as ReturnType<typeof forceLink>).strength(
 							Math.min(MAX_DRAG_LINK_STRENGTH, effectiveLinkStrength() * DRAG_LINK_BOOST)
 						);
+						// Kill centering during the drag: the warm sim would otherwise
+						// let it contract the whole graph toward the middle. The tow
+						// still spreads through links.
+						(simulation.force("x") as ReturnType<typeof forceX>).strength(0);
+						(simulation.force("y") as ReturnType<typeof forceY>).strength(0);
+						{
+							const zForce = simulation.force("z") as ReturnType<typeof forceZ> | null;
+							if (zForce) zForce.strength(0);
+						}
 						startTimer(DRAG_INTERVAL_MS);
 					}
 					break;
@@ -431,6 +440,13 @@ export function createLayoutEngine(
 						(simulation.force("charge") as ReturnType<typeof forceManyBody>).theta(BARNES_HUT_THETA);
 						(simulation.force("link") as ReturnType<typeof forceLink>)
 							.strength(effectiveLinkStrength());
+						// Restore centering that was suppressed during the drag.
+						(simulation.force("x") as ReturnType<typeof forceX>).strength(effectiveCentering());
+						(simulation.force("y") as ReturnType<typeof forceY>).strength(effectiveCentering());
+						{
+							const zForce = simulation.force("z") as ReturnType<typeof forceZ> | null;
+							if (zForce) zForce.strength(effectiveCentering());
+						}
 						// Elastic layouts rebound after the drag instead of
 						// freezing wherever the pointer left them.
 						if (params.elasticity > 0) {
