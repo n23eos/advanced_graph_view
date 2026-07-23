@@ -89,9 +89,9 @@ const FRAME_INTERVAL_MS = 33;
 const DRAG_INTERVAL_MS = 16;
 // Lower energy + heavier damping while dragging: the neighborhood follows in a
 // smooth glide instead of the coarse Barnes-Hut noise vibrating every node.
-const DRAG_ALPHA_TARGET = 0.04;
-const DRAG_EXTRA_DAMPING = 0.45;
-const MAX_DRAG_DAMPING = 0.93;
+const DRAG_ALPHA_TARGET = 0.08;
+const DRAG_EXTRA_DAMPING = 0.4;
+const MAX_DRAG_DAMPING = 0.9;
 /** Accurate repulsion while dragging: the default coarse theta (0.9) is what
  *  makes distant nodes jitter, so tighten it hard for the duration of the drag
  *  — this is the main lever against the whole graph vibrating. */
@@ -99,10 +99,11 @@ const DRAG_THETA = 0.3;
 /** The dragged node eases toward the pointer by this fraction each tick, so a
  *  fast mouse flick arrives as smooth motion with a little inertia. */
 const DRAG_FOLLOW = 0.28;
-/** Links stiffen a little while dragging so neighbors follow the pointer;
- *  kept modest so stiff springs don't overshoot into a pulsing wobble. */
-const DRAG_LINK_BOOST = 1.4;
-const MAX_DRAG_LINK_STRENGTH = 1.2;
+/** Links stiffen while dragging so neighbors follow the pointer harder — the
+ *  dragged note tows its connections along. Tighter theta keeps the pull from
+ *  turning into a whole-graph wobble. */
+const DRAG_LINK_BOOST = 2.2;
+const MAX_DRAG_LINK_STRENGTH = 1.8;
 // Tuned for compactness: bounded-range repulsion + noticeable centering,
 // otherwise sparse vaults explode into a huge sparse cloud.
 const CENTERING_STRENGTH = 0.04;
