@@ -143,22 +143,19 @@ const FRAME_INTERVAL_MS = 33;
 const DRAG_INTERVAL_MS = 16;
 // Lower energy + heavier damping while dragging: the neighborhood follows in a
 // smooth glide instead of the coarse Barnes-Hut noise vibrating every node.
-const DRAG_ALPHA_TARGET = 0.08;
-const DRAG_EXTRA_DAMPING = 0.4;
-const MAX_DRAG_DAMPING = 0.9;
+// Keep the sim lively while dragging so linked nodes actually get towed along
+// instead of sitting frozen: more warmth, light damping.
+const DRAG_ALPHA_TARGET = 0.3;
+const DRAG_EXTRA_DAMPING = 0.05;
+const MAX_DRAG_DAMPING = 0.7;
 /** Repulsion accuracy while dragging. Kept loose enough that a big graph's
- *  Barnes-Hut tick finishes well inside the frame budget — an over-tight theta
- *  overruns 16 ms and the drag stutters. */
-const DRAG_THETA = 0.75;
-/** The grabbed node tracks the pointer tightly (near 1:1) so dragging feels
- *  responsive; the smoothing/inertia lives in how neighbors follow via links,
- *  not in lagging the node you're holding. */
-const DRAG_FOLLOW = 0.65;
+ *  Barnes-Hut tick finishes inside the 16 ms frame budget — an over-tight theta
+ *  overruns it and the drag stutters. */
+const DRAG_THETA = 0.6;
 /** Links stiffen while dragging so neighbors follow the pointer harder — the
- *  dragged note tows its connections along. Tighter theta keeps the pull from
- *  turning into a whole-graph wobble. */
-const DRAG_LINK_BOOST = 2.2;
-const MAX_DRAG_LINK_STRENGTH = 1.8;
+ *  dragged note tows its connections along. */
+const DRAG_LINK_BOOST = 2.6;
+const MAX_DRAG_LINK_STRENGTH = 2;
 // Tuned for compactness: bounded-range repulsion + noticeable centering,
 // otherwise sparse vaults explode into a huge sparse cloud.
 const CENTERING_STRENGTH = 0.04;
@@ -189,9 +186,6 @@ export function createLayoutEngine(
 	};
 	let running = false;
 	let timer: number | null = null;
-	// Active drag: the node eases toward this pointer target each tick.
-	let dragId: number | null = null;
-	const dragTarget = { x: 0, y: 0, z: 0 };
 	// Cluster-by-group attraction, persisted across re-inits.
 	const cluster = createClusterForce();
 	let clusterGroups: Int32Array | null = null;
@@ -232,20 +226,6 @@ export function createLayoutEngine(
 
 	const stepOnce = () => {
 		if (!simulation || !running) return;
-		// Ease the dragged node toward the pointer instead of snapping its fixed
-		// position there — the smoothing is what turns jumpy input into a glide.
-		if (dragId !== null) {
-			const node = nodes[dragId];
-			if (node) {
-				const cx = node.fx ?? node.x ?? 0;
-				const cy = node.fy ?? node.y ?? 0;
-				node.fx = cx + (dragTarget.x - cx) * DRAG_FOLLOW;
-				node.fy = cy + (dragTarget.y - cy) * DRAG_FOLLOW;
-				if (node.fz !== undefined && node.fz !== null) {
-					node.fz = node.fz + (dragTarget.z - node.fz) * DRAG_FOLLOW;
-				}
-			}
-		}
 		simulation.tick();
 		const positions = snapshotPositions();
 		post({ type: "tick", positions, alpha: simulation.alpha() }, [positions.buffer]);
@@ -409,13 +389,11 @@ export function createLayoutEngine(
 				case "drag-start":
 					if (simulation) {
 						const node = nodes[message.id];
-						dragId = message.id;
-						dragTarget.x = node?.fx ?? node?.x ?? 0;
-						dragTarget.y = node?.fy ?? node?.y ?? 0;
-						dragTarget.z = node?.fz ?? node?.z ?? 0;
 						if (node) {
-							node.fx = dragTarget.x;
-							node.fy = dragTarget.y;
+							// Fix the node at its current spot; drag-move follows the pointer.
+							node.fx = node.x ?? 0;
+							node.fy = node.y ?? 0;
+							if (node.z !== undefined) node.fz = node.z;
 						}
 						simulation.alphaTarget(DRAG_ALPHA_TARGET);
 						if (simulation.alpha() < DRAG_ALPHA_TARGET) simulation.alpha(DRAG_ALPHA_TARGET);
@@ -432,25 +410,22 @@ export function createLayoutEngine(
 				case "drag-move": {
 					const node = nodes[message.id];
 					if (node) {
-						dragId = message.id;
-						dragTarget.x = message.x;
-						dragTarget.y = message.y;
-						if (message.z !== undefined) dragTarget.z = message.z;
+						// Pin the grabbed node straight to the pointer — no easing,
+						// so it tracks 1:1 and never rubber-bands.
+						node.fx = message.x;
+						node.fy = message.y;
+						if (message.z !== undefined) node.fz = message.z;
+						// Keep the sim warm so the tow keeps propagating to neighbors.
+						if (simulation && simulation.alpha() < DRAG_ALPHA_TARGET) {
+							simulation.alpha(DRAG_ALPHA_TARGET);
+						}
 					}
 					break;
 				}
 				case "drag-end":
 					if (simulation) {
-						if (dragId !== null) {
-							// Land exactly on the final pointer target, then stop easing.
-							const node = nodes[dragId];
-							if (node) {
-								node.fx = dragTarget.x;
-								node.fy = dragTarget.y;
-								if (node.fz !== undefined && node.fz !== null) node.fz = dragTarget.z;
-							}
-							dragId = null;
-						}
+						// The node stays fixed at the last pointer position (fx set by
+						// drag-move); the host may unpin it later.
 						simulation.alphaTarget(0);
 						simulation.velocityDecay(params.velocityDecay);
 						(simulation.force("charge") as ReturnType<typeof forceManyBody>).theta(BARNES_HUT_THETA);
