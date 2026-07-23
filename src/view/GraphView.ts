@@ -29,9 +29,9 @@ import type GraphInsightPlugin from "../main";
 export const GRAPH_INSIGHT_VIEW_TYPE = "graph-insight-view";
 
 const POSITION_SAVE_DEBOUNCE_MS = 5000;
-/** World-unit collision radius at nodeScale 1; scales with node size so bigger
- *  nodes keep more distance and stop overlapping. */
-const COLLIDE_BASE_RADIUS = 12;
+/** World-unit collision radius at nodeScale 1. 0 = no size-based repulsion
+ *  (nodes may overlap; layout spacing comes from charge + links only). */
+const COLLIDE_BASE_RADIUS = 0;
 
 export class GraphInsightView extends ItemView {
 	private renderer: GraphRenderer | null = null;
