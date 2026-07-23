@@ -1094,6 +1094,16 @@ export class GraphInsightView extends ItemView {
 	 *  figure); force/scatter seed a cloud that physics relaxes. */
 	private applyLayoutShape(shape: LayoutShape): void {
 		if (!this.model || !this.layout) return;
+		if (shape === "free") {
+			// Free = airy cloud: thaw any frozen shape into a live cloud, then
+			// switch on free-layout physics (the checkbox syncs too).
+			this.applyLayoutShape("scatter");
+			void this.updatePanelState((state) => ({
+				...state,
+				physics: { ...state.physics, freeLayout: true },
+			}));
+			return;
+		}
 		const isStatic = shape === "circle" || shape === "grid";
 		const seed = computeLayoutSeed(shape, this.model.nodes.length);
 		// Keep explicitly pinned nodes where they are instead of teleporting them.

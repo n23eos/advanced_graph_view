@@ -5,7 +5,7 @@
  * fractal spiral d3-force falls into when nodes start with no position.
  */
 
-export type LayoutShape = "force" | "circle" | "grid" | "scatter";
+export type LayoutShape = "force" | "circle" | "grid" | "scatter" | "free";
 
 /** World-space distance between neighbours in the seed arrangements. */
 const SPACING = 40;
@@ -28,12 +28,14 @@ export function computeLayoutSeed(shape: LayoutShape, count: number): Float32Arr
 	if (count === 0) return seed;
 
 	if (shape === "circle") {
-		// Radius grows with node count so spacing between neighbours holds.
-		const radius = Math.max(SPACING, (SPACING * count) / (2 * Math.PI));
+		// A FILLED disc, not a ring: r = R·√u spreads points evenly over the
+		// area, and a random angle avoids any visible spiral.
+		const radius = SPACING * Math.sqrt(count / Math.PI);
 		for (let i = 0; i < count; i++) {
-			const angle = (i / count) * 2 * Math.PI;
-			seed[i * 3] = Math.cos(angle) * radius;
-			seed[i * 3 + 1] = Math.sin(angle) * radius;
+			const r = radius * Math.sqrt(hash01(i * 2 + 1));
+			const angle = hash01(i * 2 + 2) * 2 * Math.PI;
+			seed[i * 3] = Math.cos(angle) * r;
+			seed[i * 3 + 1] = Math.sin(angle) * r;
 		}
 		return seed;
 	}
@@ -50,7 +52,7 @@ export function computeLayoutSeed(shape: LayoutShape, count: number): Float32Arr
 		return seed;
 	}
 
-	// "force" and "scatter": a uniform square cloud sized to keep density even.
+	// "force" / "scatter" / "free": a uniform square cloud, density kept even.
 	const extent = SPACING * Math.sqrt(count);
 	for (let i = 0; i < count; i++) {
 		seed[i * 3] = (hash01(i * 2 + 1) - 0.5) * extent;

@@ -12,13 +12,18 @@ describe("computeLayoutSeed", () => {
 		expect(computeLayoutSeed("circle", 0).length).toBe(0);
 	});
 
-	test("circle places every node at the same radius", () => {
-		const count = 12;
+	test("circle fills a disc: nodes at varied radii, all within the bound", () => {
+		const count = 200;
 		const seed = computeLayoutSeed("circle", count);
-		const radius = Math.hypot(seed[0], seed[1]);
-		for (let i = 1; i < count; i++) {
-			expect(Math.hypot(seed[i * 3], seed[i * 3 + 1])).toBeCloseTo(radius, 5);
+		const bound = 40 * Math.sqrt(count / Math.PI) + 1e-6;
+		const radii = [];
+		for (let i = 0; i < count; i++) {
+			const r = Math.hypot(seed[i * 3], seed[i * 3 + 1]);
+			expect(r).toBeLessThanOrEqual(bound);
+			radii.push(r);
 		}
+		// A filled disc has a spread of radii, unlike a ring where all are equal.
+		expect(Math.max(...radii) - Math.min(...radii)).toBeGreaterThan(bound * 0.3);
 	});
 
 	test("grid lays nodes on distinct integer-spaced rows and columns", () => {

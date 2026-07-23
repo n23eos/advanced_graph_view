@@ -312,7 +312,7 @@ export class ControlPanel {
 			physics,
 			"Layout shape",
 			"force",
-			{ force: "Force", circle: "Круг", grid: "Сетка", scatter: "Разброс" },
+			{ force: "Force", circle: "Круг", grid: "Сетка", scatter: "Разброс", free: "Свободно (облако)" },
 			(value) => this.callbacks.onLayoutShape((value ?? "force") as LayoutShape),
 			false
 		);
