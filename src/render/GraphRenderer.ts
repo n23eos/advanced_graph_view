@@ -722,8 +722,15 @@ export class GraphRenderer {
 		// flat zoom stays pinned at 1 and any threshold above 1 would wipe out
 		// every label. There the threshold applies per node against its
 		// perspective depth: raising it keeps labels on nearer nodes only.
+		//
+		// In 2D compare against the fit baseline, not the raw scale: a large
+		// vault fits at a tiny absolute scale, so an absolute threshold above
+		// ~1 would hide every label regardless of zoom. Relative to fit,
+		// threshold 1 = "labels at the framed view", >1 = only when zoomed in.
 		const depthGated = this.camera.enabled && this.depthScales !== null;
-		const showLabels = this.labelsVisible && (depthGated || scale >= this.labelZoomThreshold);
+		const reference = this.viewport.referenceScale;
+		const zoomRatio = reference > 0 ? scale / reference : scale;
+		const showLabels = this.labelsVisible && (depthGated || zoomRatio >= this.labelZoomThreshold);
 		const readable = !this.labelScaleWithZoom || this.labelFontSize * scale >= MIN_LABEL_SCREEN_PX;
 		let labelBudget = showLabels && readable ? this.labelMaxCount : 0;
 		let creationBudget = NEW_LABELS_PER_FRAME;

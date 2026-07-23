@@ -26,8 +26,18 @@ export class Viewport {
 		window.addEventListener("pointerup", this.handlePointerUp);
 	}
 
+	/** Zoom set by the last fitBounds — the "whole graph on screen" baseline.
+	 *  Label thresholds compare against this so they don't depend on how big
+	 *  the vault is (a huge graph fits at a tiny absolute scale). */
+	private _referenceScale = 1;
+
 	get scale(): number {
 		return this.world.scale.x;
+	}
+
+	/** Baseline zoom from the last fitBounds; 1 = graph framed to fit. */
+	get referenceScale(): number {
+		return this._referenceScale;
 	}
 
 	/** Convert canvas-local pixel coordinates to world coordinates. */
@@ -58,6 +68,7 @@ export class Viewport {
 			Math.max(MIN_SCALE, Math.min(viewWidth / width, viewHeight / height) * 0.8)
 		);
 		this.world.scale.set(scale);
+		this._referenceScale = scale;
 		this.centerOn((minX + maxX) / 2, (minY + maxY) / 2, viewWidth, viewHeight);
 	}
 
