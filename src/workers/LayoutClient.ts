@@ -76,6 +76,14 @@ export class LayoutClient {
 		this.worker?.postMessage({ type: "drag-end" } satisfies EngineInMessage);
 	}
 
+	/** Cluster nodes by group id (same tag/folder pull together); null = off. */
+	setCluster(groups: Int32Array | null): void {
+		this.worker?.postMessage(
+			{ type: "cluster", groups } satisfies EngineInMessage,
+			groups ? [groups.buffer] : []
+		);
+	}
+
 	/** alpha 1 = full re-layout, 0.5 = nudge. */
 	reheat(alpha?: number): void {
 		this.worker?.postMessage({ type: "reheat", alpha } satisfies EngineInMessage);

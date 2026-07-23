@@ -19,6 +19,56 @@ interface SimNode extends SimulationNodeDatum3D {
 	id: number;
 }
 
+/** Which attraction rule shapes the layout: by links (default), or by pulling
+ *  notes that share a tag / folder into the same cluster. */
+export type LayoutRule = "links" | "tags" | "folders";
+
+interface ClusterForce {
+	(alpha: number): void;
+	initialize(nodes: SimNode[]): void;
+	setGroups(groups: Int32Array | null): void;
+	setStrength(strength: number): void;
+}
+
+/** Custom d3 force: nudges every node toward the centroid of its group so that
+ *  same-tag / same-folder notes gather into clumps. Group id < 0 = ungrouped. */
+function createClusterForce(): ClusterForce {
+	let nodes: SimNode[] = [];
+	let groups: Int32Array | null = null;
+	let strength = 0.12;
+
+	const force = ((alpha: number) => {
+		if (!groups) return;
+		const sumX = new Map<number, number>();
+		const sumY = new Map<number, number>();
+		const sumZ = new Map<number, number>();
+		const count = new Map<number, number>();
+		for (const n of nodes) {
+			const g = groups[n.id];
+			if (g < 0) continue;
+			sumX.set(g, (sumX.get(g) ?? 0) + (n.x ?? 0));
+			sumY.set(g, (sumY.get(g) ?? 0) + (n.y ?? 0));
+			sumZ.set(g, (sumZ.get(g) ?? 0) + (n.z ?? 0));
+			count.set(g, (count.get(g) ?? 0) + 1);
+		}
+		const k = strength * alpha;
+		for (const n of nodes) {
+			const g = groups[n.id];
+			if (g < 0) continue;
+			const c = count.get(g) ?? 0;
+			if (c < 2) continue;
+			n.vx = (n.vx ?? 0) + ((sumX.get(g)! / c) - (n.x ?? 0)) * k;
+			n.vy = (n.vy ?? 0) + ((sumY.get(g)! / c) - (n.y ?? 0)) * k;
+			if (n.z !== undefined) n.vz = (n.vz ?? 0) + ((sumZ.get(g)! / c) - (n.z ?? 0)) * k;
+		}
+	}) as ClusterForce;
+
+	force.initialize = (n: SimNode[]) => { nodes = n; };
+	force.setGroups = (g: Int32Array | null) => { groups = g; };
+	force.setStrength = (s: number) => { strength = s; };
+	return force;
+}
+
 export interface InitMessage {
 	type: "init";
 	nodeCount: number;
@@ -62,6 +112,7 @@ export type EngineInMessage =
 	| { type: "step" }
 	| { type: "stop" }
 	| { type: "reheat"; alpha?: number }
+	| { type: "cluster"; groups: Int32Array | null; strength?: number }
 	| { type: "drag-start"; id: number }
 	| { type: "drag-move"; id: number; x: number; y: number; z?: number }
 	| { type: "drag-end" }
@@ -137,6 +188,9 @@ export function createLayoutEngine(
 	// Active drag: the node eases toward this pointer target each tick.
 	let dragId: number | null = null;
 	const dragTarget = { x: 0, y: 0, z: 0 };
+	// Cluster-by-group attraction, persisted across re-inits.
+	const cluster = createClusterForce();
+	let clusterGroups: Int32Array | null = null;
 
 	// Elastic links are simply stiffer springs; the extra alphaMin keeps a
 	// residual jiggle so a stretched graph visibly snaps back.
@@ -272,9 +326,11 @@ export function createLayoutEngine(
 			.force("y", forceY(0).strength(effectiveCentering()))
 			.force("z", dimensions === 3 ? forceZ(0).strength(effectiveCentering()) : null)
 			.force("collide", forceCollide(params.collideRadius ?? 0).strength(0.7))
+			.force("cluster", cluster)
 			.alphaMin(ALPHA_MIN)
 			.velocityDecay(params.velocityDecay)
 			.stop(); // stepping is driven by our own timer, never d3-timer
+		cluster.setGroups(clusterGroups);
 
 		if (message.static) {
 			// Pin every node at its seed so the shape holds. Dragging one node
@@ -330,6 +386,15 @@ export function createLayoutEngine(
 				case "stop":
 					running = false;
 					stopTimer();
+					break;
+				case "cluster":
+					clusterGroups = message.groups;
+					cluster.setGroups(clusterGroups);
+					if (message.strength !== undefined) cluster.setStrength(message.strength);
+					if (simulation) {
+						simulation.alpha(Math.max(simulation.alpha(), 0.6));
+						if (!running) startTimer(FRAME_INTERVAL_MS);
+					}
 					break;
 				case "reheat":
 					if (simulation) {

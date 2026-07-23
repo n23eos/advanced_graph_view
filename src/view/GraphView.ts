@@ -13,7 +13,7 @@ import { GraphRenderer } from "../render/GraphRenderer";
 import { ControlPanel, type PanelState } from "../ui/ControlPanel";
 import { Legend } from "../ui/Legend";
 import { LayoutClient } from "../workers/LayoutClient";
-import { computeLayoutSeed, type LayoutShape } from "../workers/layoutSeed";
+import type { LayoutRule } from "../workers/layoutEngine";
 import { MetricsClient, type GraphMetrics } from "../workers/MetricsClient";
 import { contentNeedles, parseQuery, matchesQuery, type ParsedQuery } from "../query/QueryParser";
 import { SearchBar } from "../ui/SearchBar";
@@ -58,8 +58,6 @@ export class GraphInsightView extends ItemView {
 	private previewTimer: number | null = null;
 	/** View preset currently shown as applied in the panel dropdown. */
 	private activePresetIndex: number | null = null;
-	/** True while a static shape (circle/grid) holds — every node is pinned. */
-	private frozenLayout = false;
 	private panel: ControlPanel | null = null;
 	/** needle → set of matching paths, built lazily on Enter. */
 	private contentIndex = new Map<string, Set<string>>();
@@ -925,7 +923,7 @@ export class GraphInsightView extends ItemView {
 				this.applyAllPanelState(next);
 			},
 			onReheat: () => this.regroup(),
-			onLayoutShape: (shape) => this.applyLayoutShape(shape),
+			onLayoutRule: (rule) => this.applyLayoutRule(rule),
 			onClusterClick: (index) => this.zoomToCluster(index),
 			onClusterToggle: (index) => this.toggleCluster(index),
 			onTrailReplay: () => this.replayTrail(),
@@ -1083,12 +1081,6 @@ export class GraphInsightView extends ItemView {
 
 	/** Release drag pins and re-run the layout from scratch. */
 	private regroup(): void {
-		// Coming out of a frozen shape: re-form as a free cloud, not a reheat
-		// (every node is pinned, so a reheat wouldn't move anything).
-		if (this.frozenLayout) {
-			this.applyLayoutShape("scatter");
-			return;
-		}
 		for (const id of this.pinnedNodes) {
 			if (!this.explicitPins.has(id)) this.layout?.unpin(id);
 		}
@@ -1096,48 +1088,33 @@ export class GraphInsightView extends ItemView {
 		this.layout?.reheat(1);
 	}
 
-	/** Rearrange the graph into a shape. Circle/grid are static (they hold the
-	 *  figure); force/scatter seed a cloud that physics relaxes. */
-	private applyLayoutShape(shape: LayoutShape): void {
-		if (!this.model || !this.layout) return;
-		if (shape === "free") {
-			// Free = airy cloud: thaw any frozen shape into a live cloud, then
-			// switch on free-layout physics (the checkbox syncs too).
-			this.applyLayoutShape("scatter");
-			void this.updatePanelState((state) => ({
-				...state,
-				physics: { ...state.physics, freeLayout: true },
-			}));
-			return;
-		}
-		const isStatic = shape === "circle" || shape === "grid";
-		const seed = computeLayoutSeed(shape, this.model.nodes.length);
-		// Keep explicitly pinned nodes where they are instead of teleporting them.
-		const current = this.renderer?.currentPositions;
-		if (current) {
-			for (const id of this.explicitPins) {
-				seed[id * 3] = current[id * 3];
-				seed[id * 3 + 1] = current[id * 3 + 1];
-				seed[id * 3 + 2] = current[id * 3 + 2];
+	/** Choose what pulls notes together: their links (default force layout), or
+	 *  a shared tag / folder clustering them into clumps. */
+	private applyLayoutRule(rule: LayoutRule): void {
+		if (!this.layout) return;
+		this.layout.setCluster(rule === "links" ? null : this.computeGroups(rule));
+		this.layout.reheat(0.6);
+	}
+
+	/** Group id per node: same tag (primary) or same folder share an id; nodes
+	 *  with no tag / at the vault root are ungrouped (-1). */
+	private computeGroups(rule: LayoutRule): Int32Array {
+		const count = this.model?.nodes.length ?? 0;
+		const groups = new Int32Array(count).fill(-1);
+		const ids = new Map<string, number>();
+		for (let i = 0; i < count; i++) {
+			const facts = this.facts[i];
+			if (!facts) continue;
+			const key = rule === "tags" ? facts.tags[0] ?? "" : facts.folder;
+			if (!key || key === "/") continue;
+			let g = ids.get(key);
+			if (g === undefined) {
+				g = ids.size;
+				ids.set(key, g);
 			}
+			groups[i] = g;
 		}
-		// Drop temporary drag pins; explicit pins are re-applied after restart.
-		this.pinnedNodes.clear();
-		this.frozenLayout = isStatic;
-		const view3d = this.plugin.settings.panel.view3d;
-		const dims = view3d.enabled && view3d.depthSource === "physics" ? 3 : 2;
-		this.layout.start(this.model, seed, dims, isStatic);
-		if (!isStatic) {
-			// A fresh worker resets to its default physics params — push the
-			// current sliders back in so the cloud relaxes with the user's values.
-			this.lastPhysics = "";
-			this.applyPhysics(this.plugin.settings.panel);
-		}
-		if (current) {
-			for (const id of this.explicitPins) {
-				this.layout.pin(id, current[id * 3], current[id * 3 + 1], current[id * 3 + 2]);
-			}
-		}
+		return groups;
 	}
 
 	/** True when there is any temporary visual state Esc could clear. */
