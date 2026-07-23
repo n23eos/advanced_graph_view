@@ -84,16 +84,18 @@ function presetPanel(overrides: Partial<PanelState>): PanelState {
 		channels: { ...base.channels, ...(overrides.channels ?? {}) },
 		overlays: { ...base.overlays, ...(overrides.overlays ?? {}) },
 		physics: { ...base.physics, ...(overrides.physics ?? {}) },
-		// Every built-in preset ships with labels off and thin links unless it
-		// explicitly overrides them.
+		// Shared baseline from the user's "Default" preset — every built-in
+		// preset inherits its node size, thin links, low edge opacity and
+		// labels-off unless it explicitly overrides them.
+		nodeScale: overrides.nodeScale ?? 1.25,
 		labels: { ...base.labels, show: false, ...(overrides.labels ?? {}) },
-		edges: { ...base.edges, width: 0.4, ...(overrides.edges ?? {}) },
+		edges: { ...base.edges, width: 0.2, opacity: 0.16, ...(overrides.edges ?? {}) },
 		view3d: { ...base.view3d, ...(overrides.view3d ?? {}) },
 	};
 }
 
 /** Bump when DEFAULT_VIEW_PRESETS changes so existing installs re-seed. */
-const VIEW_PRESET_VERSION = 3;
+const VIEW_PRESET_VERSION = 4;
 /** Default preset names retired in newer versions — removed on migration. */
 const RETIRED_VIEW_PRESETS = new Set(["3D галактика"]);
 
@@ -144,8 +146,6 @@ const DEFAULT_VIEW_PRESETS: ViewPreset[] = [
 		panel: presetPanel({
 			channels: { size: "pagerank", color: "recency-edit", glow: null },
 			colorPreset: "mono",
-			nodeScale: 0.7,
-			edges: { show: true, width: 0.3, opacity: 0.08 },
 		}),
 	},
 ];
