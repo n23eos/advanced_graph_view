@@ -3,6 +3,7 @@
  * worker globals) so the message protocol is unit-testable on the main thread.
  */
 import {
+	forceCollide,
 	forceLink,
 	forceManyBody,
 	forceSimulation,
@@ -50,6 +51,9 @@ export interface PhysicsParams {
 	/** true = no repulsion range cap and light centering: nodes spread freely
 	 *  instead of packing into round geometric clumps. */
 	freeLayout: boolean;
+	/** Hard minimum spacing between node centers (world units). Grows with node
+	 *  size so big nodes push apart instead of overlapping. 0 = off. */
+	collideRadius?: number;
 }
 
 export type EngineInMessage =
@@ -125,6 +129,7 @@ export function createLayoutEngine(
 		velocityDecay: 0.4,
 		elasticity: 0.4,
 		freeLayout: false,
+		collideRadius: 0,
 	};
 	let running = false;
 	let timer: number | null = null;
@@ -265,6 +270,7 @@ export function createLayoutEngine(
 			.force("x", forceX(0).strength(effectiveCentering()))
 			.force("y", forceY(0).strength(effectiveCentering()))
 			.force("z", dimensions === 3 ? forceZ(0).strength(effectiveCentering()) : null)
+			.force("collide", forceCollide(params.collideRadius ?? 0).strength(0.7))
 			.alphaMin(ALPHA_MIN)
 			.velocityDecay(params.velocityDecay)
 			.stop(); // stepping is driven by our own timer, never d3-timer
@@ -312,6 +318,8 @@ export function createLayoutEngine(
 						(simulation.force("y") as ReturnType<typeof forceY>).strength(effectiveCentering());
 						const zForce = simulation.force("z") as ReturnType<typeof forceZ> | null;
 						if (zForce) zForce.strength(effectiveCentering());
+						(simulation.force("collide") as ReturnType<typeof forceCollide>)
+							.radius(params.collideRadius ?? 0);
 					}
 					break;
 				}

@@ -17,6 +17,10 @@ import { Viewport } from "./Viewport";
 const BASE_NODE_RADIUS = 4;
 const DEGREE_RADIUS_BOOST = 0.35; // radius grows with sqrt(degree)
 const MAX_NODE_RADIUS = 16;
+// 3D depth floors: keep far nodes legible when the camera pulls back instead of
+// letting perspective shrink them to specks and fog dim them to near-black.
+const MIN_SIZE_DEPTH = 0.5;
+const FOG_FLOOR = 0.55;
 const HOVER_RADIUS_PX = 12;
 const DEFAULT_LABEL_ZOOM_THRESHOLD = 0.9;
 const DEFAULT_LABEL_FONT_SIZE = 11;
@@ -482,6 +486,12 @@ export class GraphRenderer {
 		this.edgeMesh.setHiddenNodes(mask);
 	}
 
+	/** Perspective depth clamped for sizing: far nodes stop shrinking below a
+	 *  floor, but nodes behind the camera (depth 0) stay hidden. */
+	private sizeDepth(depth: number): number {
+		return depth <= 0 ? 0 : Math.max(depth, MIN_SIZE_DEPTH);
+	}
+
 	/** Blow up the hovered sprite and lift it above the crowd. */
 	private applyHoverSize(): void {
 		if (!this.radii) return;
@@ -493,7 +503,7 @@ export class GraphRenderer {
 					: this.highlightMask !== null && this.highlightMask[i] === 1
 						? HIGHLIGHT_SIZE_BOOST
 						: 1;
-			this.sprites[i].setSize(this.radii[i] * 2 * depth * boost * this.spriteScale);
+			this.sprites[i].setSize(this.radii[i] * 2 * this.sizeDepth(depth) * boost * this.spriteScale);
 		}
 		if (this.hoveredId !== null) {
 			// zIndex only matters when the layer is sorted (3D mode).
@@ -513,7 +523,7 @@ export class GraphRenderer {
 			let fog = 1;
 			if (fogged) {
 				const depth = this.depthScales![i];
-				fog = Math.min(1, Math.max(0.15, (depth - 0.35) * 1.4));
+				fog = Math.min(1, Math.max(FOG_FLOOR, (depth - 0.2) * 1.3));
 				if (depth > 1) {
 					const distance = this.camera.focal / depth;
 					fog *= Math.min(1, Math.max(0, (distance - 40) / 200));
@@ -666,7 +676,7 @@ export class GraphRenderer {
 							: this.highlightMask !== null && this.highlightMask[i] === 1
 								? HIGHLIGHT_SIZE_BOOST
 								: 1;
-					sprite.setSize(this.radii[i] * 2 * depth * boost * this.spriteScale);
+					sprite.setSize(this.radii[i] * 2 * this.sizeDepth(depth) * boost * this.spriteScale);
 					sprite.zIndex = i === this.hoveredId ? Number.MAX_SAFE_INTEGER : depth;
 				}
 			}

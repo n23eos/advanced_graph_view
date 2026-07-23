@@ -46,6 +46,10 @@ declare module "d3-force-3d" {
 		distanceMax(d: number): ReturnType<typeof forceManyBody>;
 	};
 
+	export function forceCollide(radius?: number): {
+		radius(r: number): ReturnType<typeof forceCollide>;
+		strength(s: number): ReturnType<typeof forceCollide>;
+	};
 	export function forceX(x?: number): { strength(s: number): ReturnType<typeof forceX> };
 	export function forceY(y?: number): { strength(s: number): ReturnType<typeof forceY> };
 	export function forceZ(z?: number): { strength(s: number): ReturnType<typeof forceZ> };

@@ -29,6 +29,9 @@ import type GraphInsightPlugin from "../main";
 export const GRAPH_INSIGHT_VIEW_TYPE = "graph-insight-view";
 
 const POSITION_SAVE_DEBOUNCE_MS = 5000;
+/** World-unit collision radius at nodeScale 1; scales with node size so bigger
+ *  nodes keep more distance and stop overlapping. */
+const COLLIDE_BASE_RADIUS = 12;
 
 export class GraphInsightView extends ItemView {
 	private renderer: GraphRenderer | null = null;
@@ -1057,10 +1060,13 @@ export class GraphInsightView extends ItemView {
 
 	/** Push slider values into the layout worker; reheat so they take hold. */
 	private applyPhysics(state: PanelState): void {
-		const key = JSON.stringify(state.physics);
+		// Bigger nodes need proportionally more elbow room, so fold node size
+		// into the collision radius and the change key.
+		const collideRadius = COLLIDE_BASE_RADIUS * state.nodeScale;
+		const key = `${JSON.stringify(state.physics)}|${state.nodeScale}`;
 		if (key === this.lastPhysics) return;
 		this.lastPhysics = key;
-		this.layout?.setParams(state.physics);
+		this.layout?.setParams({ ...state.physics, collideRadius });
 
 		// Toggling «Свободно» re-forms the whole layout: drop the temporary
 		// pins left by dragging (explicit pins stay) and run the simulation
