@@ -5,7 +5,6 @@
  */
 
 export interface ScalePreset {
-	label: string;
 	/** Gradient stops for numeric color metrics. */
 	stops: number[];
 	/** Distinct hues for categorical color metrics. */
@@ -26,12 +25,10 @@ export const CATEGORY_PALETTE: number[] = [
 export const SCALE_PRESETS: Record<string, ScalePreset> = {
 	// Default: cooled slate blue → warm amber.
 	recency: {
-		label: "Amber → steel",
 		stops: [0x4a5568, 0x718096, 0xd69e2e, 0xf6ad55],
 		categories: CATEGORY_PALETTE,
 	},
 	heat: {
-		label: "Fire",
 		stops: [0x2c5282, 0x805ad5, 0xe53e3e, 0xf6e05e],
 		categories: [
 			0xe53e3e, 0xed8936, 0xf6e05e, 0x805ad5, 0xd53f8c, 0xdd6b20,
@@ -39,7 +36,6 @@ export const SCALE_PRESETS: Record<string, ScalePreset> = {
 		],
 	},
 	mono: {
-		label: "Mono",
 		stops: [0x4a5568, 0xe2e8f0],
 		categories: [
 			0x2d3748, 0x4a5568, 0x718096, 0xa0aec0, 0xcbd5e0, 0xe2e8f0,
@@ -47,7 +43,6 @@ export const SCALE_PRESETS: Record<string, ScalePreset> = {
 		],
 	},
 	galaxy: {
-		label: "Galaxy ✨",
 		stops: [0x1a1a4e, 0x4c1d95, 0x7c3aed, 0x22d3ee, 0xf8fafc],
 		categories: [
 			0x7c3aed, 0x22d3ee, 0xf472b6, 0x38bdf8, 0xa78bfa, 0x5eead4,
@@ -57,7 +52,6 @@ export const SCALE_PRESETS: Record<string, ScalePreset> = {
 		backdrop: 0x05050f,
 	},
 	nebula: {
-		label: "Nebula ✨",
 		stops: [0x0b1026, 0x7c2d92, 0xdb2777, 0xfb923c, 0xfef3c7],
 		categories: [
 			0xdb2777, 0xfb923c, 0x8b5cf6, 0x06b6d4, 0xf59e0b, 0xec4899,
@@ -67,7 +61,6 @@ export const SCALE_PRESETS: Record<string, ScalePreset> = {
 		backdrop: 0x0a0618,
 	},
 	neon: {
-		label: "Neon ✨",
 		stops: [0x0f172a, 0x0891b2, 0x22d3ee, 0x4ade80, 0xfafafa],
 		categories: [
 			0x22d3ee, 0x4ade80, 0xf0abfc, 0xfacc15, 0xfb7185, 0x60a5fa,
@@ -77,7 +70,6 @@ export const SCALE_PRESETS: Record<string, ScalePreset> = {
 		backdrop: 0x060a14,
 	},
 	solar: {
-		label: "Solar",
 		stops: [0x1e3a8a, 0x0891b2, 0xfbbf24, 0xfef08a],
 		categories: [
 			0xfbbf24, 0x0891b2, 0xf97316, 0x1e3a8a, 0xfde047, 0x0ea5e9,
@@ -85,7 +77,6 @@ export const SCALE_PRESETS: Record<string, ScalePreset> = {
 		],
 	},
 	pastel: {
-		label: "Pastel",
 		stops: [0xbfdbfe, 0xc7d2fe, 0xfbcfe8, 0xfed7aa],
 		categories: [
 			0xa5b4fc, 0xfbcfe8, 0xa7f3d0, 0xfecaca, 0xddd6fe, 0xfef08a,

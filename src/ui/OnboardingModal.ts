@@ -1,4 +1,5 @@
 import { Modal, type App } from "obsidian";
+import { t } from "../i18n";
 
 /** Three-step intro shown on the first open of the graph view. */
 export class OnboardingModal extends Modal {
@@ -7,27 +8,18 @@ export class OnboardingModal extends Modal {
 	}
 
 	onOpen(): void {
-		this.titleEl.setText("Advanced Graph View — what is different");
+		this.titleEl.setText(t("onboarding.title"));
 		const steps: [string, string][] = [
-			[
-				"1 · Nodes encode metrics",
-				"Size = PageRank (actual importance), color = edit recency. The panel on the left reassigns the channels: opens, links, age, folders, tags, clusters.",
-			],
-			[
-				"2 · Layers and filters",
-				"Layers highlight orphans, dead ends and broken links. The search bar understands path:, tag:, opened:>10, edited:<30d. Double-click a node for focus mode, Shift+drag for lasso.",
-			],
-			[
-				"3 · Clusters and 3D",
-				"Color by Cluster to see communities, switch on 3D in the bottom-right widget to fly through the graph, and pick a color scheme in the panel.",
-			],
+			[t("onboarding.step1.title"), t("onboarding.step1.body")],
+			[t("onboarding.step2.title"), t("onboarding.step2.body")],
+			[t("onboarding.step3.title"), t("onboarding.step3.body")],
 		];
 		for (const [title, body] of steps) {
 			this.contentEl.createEl("h5", { text: title });
 			this.contentEl.createEl("p", { text: body });
 		}
 		const buttons = this.contentEl.createDiv({ cls: "modal-button-container" });
-		const done = buttons.createEl("button", { text: "Got it, do not show again", cls: "mod-cta" });
+		const done = buttons.createEl("button", { text: t("onboarding.dismiss"), cls: "mod-cta" });
 		done.addEventListener("click", () => {
 			this.onDismissForever();
 			this.close();

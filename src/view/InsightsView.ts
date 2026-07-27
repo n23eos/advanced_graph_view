@@ -8,6 +8,7 @@ import { buildGraphModel, type GraphModel } from "../data/GraphStore";
 import { countOverlayMatches } from "../analysis/overlays";
 import { countRecentOpens } from "../data/UsageTracker";
 import { MetricsClient, type GraphMetrics } from "../workers/MetricsClient";
+import { t } from "../i18n";
 import type GraphInsightPlugin from "../main";
 
 export const INSIGHTS_VIEW_TYPE = "graph-insight-insights";
@@ -30,7 +31,7 @@ export class InsightsView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return "Graph insights";
+		return t("insights.title");
 	}
 
 	getIcon(): string {
@@ -54,8 +55,8 @@ export class InsightsView extends ItemView {
 		const el = this.contentEl;
 		el.empty();
 		el.addClass("graph-insight-insights");
-		el.createEl("h4", { text: "Graph insights" });
-		el.createDiv({ cls: "graph-insight-panel-hint", text: "Computing metrics…" });
+		el.createEl("h4", { text: t("insights.title") });
+		el.createDiv({ cls: "graph-insight-panel-hint", text: t("insights.computing") });
 	}
 
 	private render(metrics: GraphMetrics): void {
@@ -67,7 +68,7 @@ export class InsightsView extends ItemView {
 		const log = this.plugin.usageLog;
 		const now = Date.now();
 
-		el.createEl("h4", { text: "Graph insights" });
+		el.createEl("h4", { text: t("insights.title") });
 
 		// Totals
 		const counts = countOverlayMatches(model);
@@ -77,10 +78,10 @@ export class InsightsView extends ItemView {
 			row.createSpan({ cls: "graph-insight-insights-total-value", text: String(value) });
 			row.createSpan({ text: label });
 		};
-		totalRow("notes", model.nodes.length);
-		totalRow("links", model.edges.length);
-		totalRow("orphans", counts.orphans);
-		totalRow("broken", counts.broken);
+		totalRow(t("insights.total.notes"), model.nodes.length);
+		totalRow(t("insights.total.links"), model.edges.length);
+		totalRow(t("insights.total.orphans"), counts.orphans);
+		totalRow(t("insights.total.broken"), counts.broken);
 
 		this.renderSparkline(el);
 
@@ -90,7 +91,7 @@ export class InsightsView extends ItemView {
 			.filter((x) => x.opens > 0)
 			.sort((a, b) => b.opens - a.opens)
 			.slice(0, TOP_COUNT);
-		this.renderList(el, "Top by opens (30 days)", byOpens.map((x) => ({
+		this.renderList(el, t("insights.topOpens"), byOpens.map((x) => ({
 			path: x.node.path,
 			label: x.node.name,
 			value: String(x.opens),
@@ -101,7 +102,7 @@ export class InsightsView extends ItemView {
 			.map((node) => ({ node, rank: metrics.pagerank[node.id] }))
 			.sort((a, b) => b.rank - a.rank)
 			.slice(0, TOP_COUNT);
-		this.renderList(el, "Top by PageRank", byRank.map((x) => ({
+		this.renderList(el, t("insights.topPagerank"), byRank.map((x) => ({
 			path: x.node.path,
 			label: x.node.name,
 			value: (x.rank * 1000).toFixed(1),
@@ -121,7 +122,7 @@ export class InsightsView extends ItemView {
 				return file ? now - file.stat.mtime > COOLING_DAYS * DAY_MS : false;
 			})
 			.slice(0, TOP_COUNT);
-		this.renderList(el, `Cooling hubs (untouched ${COOLING_DAYS}+ days)`, cooling.map((x) => ({
+		this.renderList(el, t("insights.cooling", { days: COOLING_DAYS }), cooling.map((x) => ({
 			path: x.node.path,
 			label: x.node.name,
 			value: `${Math.floor((now - (files.get(x.node.path)?.stat.mtime ?? now)) / DAY_MS)}d`,

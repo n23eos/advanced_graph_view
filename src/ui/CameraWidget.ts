@@ -2,6 +2,7 @@
  * Bottom-right widget: eye (hide all UI), 3D toggle, free-layout toggle,
  * camera center X/Y sliders and a fit-all button.
  */
+import { t } from "../i18n";
 import type { View3DOptions } from "./ControlPanel";
 
 export interface CameraWidgetCallbacks {
@@ -33,7 +34,7 @@ export class CameraWidget {
 
 		const header = this.root.createDiv({ cls: "graph-insight-camera-row" });
 		const eye = header.createEl("button", { text: "👁", cls: "graph-insight-camera-eye" });
-		eye.setAttribute("aria-label", "Hide or show all panels");
+		eye.setAttribute("aria-label", t("camera.toggleUi"));
 		eye.addEventListener("click", () => {
 			this.uiHidden = !this.uiHidden;
 			eye.toggleClass("is-ui-hidden", this.uiHidden);
@@ -43,7 +44,7 @@ export class CameraWidget {
 		const label3d = header.createEl("label", { cls: "graph-insight-panel-checkbox" });
 		this.checkbox3d = label3d.createEl("input", { type: "checkbox" });
 		this.checkbox3d.checked = state3d.enabled;
-		label3d.createSpan({ text: "3D" });
+		label3d.createSpan({ text: t("camera.threeD") });
 		this.checkbox3d.addEventListener("change", () => {
 			this.callbacks.onToggle3D(this.checkbox3d.checked);
 		});
@@ -51,7 +52,7 @@ export class CameraWidget {
 		const labelFree = header.createEl("label", { cls: "graph-insight-panel-checkbox" });
 		this.checkboxFree = labelFree.createEl("input", { type: "checkbox" });
 		this.checkboxFree.checked = freeLayout;
-		labelFree.createSpan({ text: "Free" });
+		labelFree.createSpan({ text: t("camera.free") });
 		this.checkboxFree.addEventListener("change", () => {
 			this.callbacks.onToggleFreeLayout(this.checkboxFree.checked);
 		});
@@ -61,7 +62,7 @@ export class CameraWidget {
 		this.sliderX = this.offsetSlider("X");
 		this.sliderY = this.offsetSlider("Y");
 
-		const fit = this.body.createEl("button", { text: "Fit whole graph", cls: "graph-insight-camera-fit" });
+		const fit = this.body.createEl("button", { text: t("camera.fit"), cls: "graph-insight-camera-fit" });
 		fit.addEventListener("click", () => {
 			this.sliderX.value = "0";
 			this.sliderY.value = "0";

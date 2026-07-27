@@ -40,25 +40,23 @@ export type CategoricalMetricId = "folder" | "tag" | "cluster";
 
 export type MetricId = NumericMetricId | CategoricalMetricId;
 
-export const NUMERIC_METRIC_LABELS: Record<NumericMetricId, string> = {
-	"opens-total": "Opens (all time)",
-	"opens-90": "Opens (90 days)",
-	"opens-30": "Opens (30 days)",
-	"opens-7": "Opens (7 days)",
-	"recency-edit": "Edit recency",
-	"age-created": "Note age",
-	"links-in": "Inbound links",
-	"links-out": "Outbound links",
-	"links-total": "All links",
-	"file-size": "File size",
-	"pagerank": "PageRank",
-};
+/** Display order in the channel dropdowns. Labels live in the locale files —
+ *  see `metricLabels.ts`. */
+export const NUMERIC_METRIC_IDS: readonly NumericMetricId[] = [
+	"opens-total",
+	"opens-90",
+	"opens-30",
+	"opens-7",
+	"recency-edit",
+	"age-created",
+	"links-in",
+	"links-out",
+	"links-total",
+	"file-size",
+	"pagerank",
+];
 
-export const CATEGORICAL_METRIC_LABELS: Record<CategoricalMetricId, string> = {
-	folder: "Folder",
-	tag: "Tag",
-	cluster: "Cluster",
-};
+export const CATEGORICAL_METRIC_IDS: readonly CategoricalMetricId[] = ["folder", "tag", "cluster"];
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

@@ -3,6 +3,7 @@
  * A compact single row of monochrome icon buttons in the top-left corner.
  */
 import { setIcon } from "obsidian";
+import { t } from "../i18n";
 
 export type CursorTool = "open" | "links" | "path" | "hide" | "pin";
 
@@ -12,12 +13,12 @@ export interface ToolBarCallbacks {
 }
 
 /** Lucide icon names — theme-tinted, so every glyph shares one tone. */
-const TOOLS: { id: CursorTool; icon: string; label: string; hint: string }[] = [
-	{ id: "open", icon: "file-text", label: "Open", hint: "Click opens the note" },
-	{ id: "links", icon: "waypoints", label: "Links", hint: "Click reveals the neighborhood N steps out" },
-	{ id: "path", icon: "route", label: "Path", hint: "Click two notes to trace the shortest chain between them" },
-	{ id: "hide", icon: "eye-off", label: "Hide", hint: "Click removes the note from the graph" },
-	{ id: "pin", icon: "pin", label: "Pin", hint: "Click pins or releases the note" },
+const TOOLS: { id: CursorTool; icon: string }[] = [
+	{ id: "open", icon: "file-text" },
+	{ id: "links", icon: "waypoints" },
+	{ id: "path", icon: "route" },
+	{ id: "hide", icon: "eye-off" },
+	{ id: "pin", icon: "pin" },
 ];
 
 export class ToolBar {
@@ -37,8 +38,9 @@ export class ToolBar {
 		for (const item of TOOLS) {
 			const button = this.root.createEl("button", { cls: "graph-insight-tool" });
 			setIcon(button, item.icon);
-			button.setAttribute("aria-label", `${item.label} — ${item.hint}`);
-			button.setAttribute("title", `${item.label} — ${item.hint}`);
+			const description = `${t(`tool.${item.id}`)} — ${t(`tool.${item.id}.hint`)}`;
+			button.setAttribute("aria-label", description);
+			button.setAttribute("title", description);
 			button.addEventListener("click", () => this.setTool(item.id));
 			this.buttons.set(item.id, button);
 		}
@@ -50,7 +52,7 @@ export class ToolBar {
 		slider.max = "6";
 		slider.step = "1";
 		slider.value = String(depth);
-		slider.setAttribute("aria-label", "Neighborhood steps");
+		slider.setAttribute("aria-label", t("tool.depth"));
 		this.depthValue = this.depthRow.createSpan({
 			cls: "graph-insight-panel-count",
 			text: String(depth),

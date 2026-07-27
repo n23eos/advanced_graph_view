@@ -6,6 +6,7 @@ import {
 } from "obsidian";
 import { emptyLog } from "../data/UsageTracker";
 import { usageToCsv } from "../export/exporters";
+import { t } from "../i18n";
 import type GraphInsightPlugin from "../main";
 
 /** Keys addressed by the declarative settings API. */
@@ -28,11 +29,11 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 		return [
 			{
 				type: "group",
-				heading: "Tracking",
+				heading: t("settings.group.tracking"),
 				items: [
 					{
-						name: "Open threshold",
-						desc: "How many seconds a note must stay active before the open is counted.",
+						name: t("settings.openThreshold"),
+						desc: t("settings.openThreshold.desc"),
 						aliases: ["usage", "statistics", "dwell"],
 						control: {
 							type: "slider",
@@ -40,37 +41,37 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 							min: 1,
 							max: 30,
 							step: 1,
-							displayFormat: (value) => `${value} s`,
+							displayFormat: (value) => t("settings.seconds", { value }),
 						},
 					},
 					{
-						name: "Export usage as CSV",
-						desc: "Download the open-count log as a spreadsheet-friendly file.",
+						name: t("settings.exportCsv"),
+						desc: t("settings.exportCsv.desc"),
 						aliases: ["statistics", "download"],
 						action: () => {
 							downloadText("graph-insight-usage.csv", usageToCsv(this.plugin.usageLog));
 						},
 					},
 					{
-						name: "Clear usage statistics",
-						desc: "Permanently deletes the entire open-count log.",
+						name: t("settings.clearUsage"),
+						desc: t("settings.clearUsage.desc"),
 						aliases: ["reset", "statistics"],
 						action: () => {
 							this.plugin.usageLog = emptyLog();
 							void this.plugin.dataStore
 								.saveUsage(this.plugin.usageLog)
-								.then(() => new Notice("Usage statistics cleared"));
+								.then(() => new Notice(t("notice.usageCleared")));
 						},
 					},
 				],
 			},
 			{
 				type: "group",
-				heading: "Hover preview",
+				heading: t("settings.group.hover"),
 				items: [
 					{
-						name: "Show note preview on hover",
-						desc: "When hovering a node, show the first words of the note in the tooltip.",
+						name: t("settings.hoverEnabled"),
+						desc: t("settings.hoverEnabled.desc"),
 						aliases: ["tooltip", "hover", "preview"],
 						control: {
 							type: "toggle",
@@ -78,8 +79,8 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 						},
 					},
 					{
-						name: "Preview length (words)",
-						desc: "How many leading words of the note body to show in the hover preview.",
+						name: t("settings.hoverWords"),
+						desc: t("settings.hoverWords.desc"),
 						aliases: ["tooltip", "hover", "words"],
 						control: {
 							type: "number",
@@ -89,12 +90,14 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 							step: 10,
 							placeholder: "300",
 							validate: (value) =>
-								value >= 10 && value <= 500 ? undefined : "Enter a number between 10 and 500",
+								value >= 10 && value <= 500
+										? undefined
+										: t("settings.range", { min: 10, max: 500 }),
 						},
 					},
 					{
-						name: "Preview delay (ms)",
-						desc: "How long to hover a node before its preview loads. 0 shows it instantly.",
+						name: t("settings.hoverDelay"),
+						desc: t("settings.hoverDelay.desc"),
 						aliases: ["tooltip", "hover", "delay"],
 						control: {
 							type: "number",
@@ -104,18 +107,20 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 							step: 50,
 							placeholder: "350",
 							validate: (value) =>
-								value >= 0 && value <= 2000 ? undefined : "Enter a number between 0 and 2000",
+								value >= 0 && value <= 2000
+										? undefined
+										: t("settings.range", { min: 0, max: 2000 }),
 						},
 					},
 				],
 			},
 			{
 				type: "group",
-				heading: "Data",
+				heading: t("settings.group.data"),
 				items: [
 					{
-						name: "Reset all plugin data",
-						desc: "Usage statistics and node positions. Settings are kept.",
+						name: t("settings.resetAll"),
+						desc: t("settings.resetAll.desc"),
 						aliases: ["clear", "wipe"],
 						action: () => void this.resetAllData(),
 					},
@@ -171,7 +176,7 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 		this.plugin.usageLog = emptyLog();
 		await this.plugin.dataStore.saveUsage(this.plugin.usageLog);
 		await this.plugin.dataStore.savePositions({});
-		new Notice("Advanced Graph View data reset");
+		new Notice(t("notice.dataReset"));
 	}
 }
 

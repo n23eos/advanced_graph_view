@@ -8,6 +8,7 @@ import {
 	monthIndexToCutoff,
 	type MonthHistogram,
 } from "../analysis/timeline";
+import { t } from "../i18n";
 
 export type TimelineMode = "created" | "modified";
 
@@ -47,8 +48,8 @@ export class TimelineBar {
 		this.labelEl = this.root.createSpan({ cls: "graph-insight-timeline-label" });
 
 		const modeSelect = this.root.createEl("select", { cls: "dropdown" });
-		modeSelect.createEl("option", { text: "Created", value: "created" });
-		modeSelect.createEl("option", { text: "Modified", value: "modified" });
+		modeSelect.createEl("option", { text: t("timeline.created"), value: "created" });
+		modeSelect.createEl("option", { text: t("timeline.modified"), value: "modified" });
 		modeSelect.addEventListener("change", () => {
 			this.mode = modeSelect.value as TimelineMode;
 			this.callbacks.onModeChange(this.mode);

@@ -25,7 +25,10 @@ import { CameraWidget } from "../ui/CameraWidget";
 import { ToolBar, type CursorTool } from "../ui/ToolBar";
 import { graphToGexf, graphToJson } from "../export/exporters";
 import { computeGroups, depthByAge, depthByCluster } from "./layoutGrouping";
+import { presetDisplayName } from "./presetNames";
+import { t } from "../i18n";
 import type GraphInsightPlugin from "../main";
+import type { ViewPreset } from "../main";
 
 export const GRAPH_INSIGHT_VIEW_TYPE = "graph-insight-view";
 
@@ -103,7 +106,7 @@ export class GraphInsightView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return "Advanced Graph View";
+		return t("panel.title");
 	}
 
 	getIcon(): string {
@@ -154,7 +157,7 @@ export class GraphInsightView extends ItemView {
 		this.metricsClient = new MetricsClient((metrics) => this.handleMetricsResult(metrics));
 
 		this.panel = this.buildPanel(this.plugin.settings.panel);
-		this.panel.setViewPresets(this.plugin.settings.viewPresets);
+		this.panel.setViewPresets(this.presetRows(this.plugin.settings.viewPresets));
 		this.legend = new Legend(container);
 		this.cameraWidget = new CameraWidget(
 			container,
@@ -271,7 +274,7 @@ export class GraphInsightView extends ItemView {
 		if (!this.model) return;
 		if (this.pathAnchor === null || this.pathAnchor === nodeId) {
 			this.pathAnchor = nodeId;
-			new Notice(`Start: ${this.model.nodes[nodeId].name}. Click the second note.`);
+			new Notice(t("notice.pathStart", { name: this.model.nodes[nodeId].name }));
 			return;
 		}
 		const path = shortestPath(
@@ -282,7 +285,7 @@ export class GraphInsightView extends ItemView {
 		);
 		this.pathAnchor = null;
 		if (path.length === 0) {
-			new Notice("No link path between these notes");
+			new Notice(t("notice.pathNone"));
 			this.renderer?.setAlphaFactors(null);
 			this.renderer?.setHighlightMask(null);
 			return;
@@ -298,7 +301,7 @@ export class GraphInsightView extends ItemView {
 		this.renderer?.setHighlightMask(highlight);
 		this.renderer?.zoomToNodes(path);
 		const names = path.map((id) => this.model!.nodes[id].name);
-		new Notice(`Path of ${path.length} notes: ${names.join(" → ")}`, 8000);
+		new Notice(t("notice.pathFound", { count: path.length, names: names.join(" → ") }), 8000);
 	}
 
 	// ── Focus mode ────────────────────────────────────────────────────
@@ -322,7 +325,11 @@ export class GraphInsightView extends ItemView {
 		this.focusBar.empty();
 		this.focusBar.show();
 		this.focusBar.createSpan({
-			text: `Focus: ${this.model.nodes[this.focusRootId].name} · depth ${this.focusDepth} · ${visible} nodes`,
+			text: t("focus.status", {
+				name: this.model.nodes[this.focusRootId].name,
+				depth: this.focusDepth,
+				count: visible,
+			}),
 		});
 		const slider = this.focusBar.createEl("input", { type: "range" });
 		slider.min = "1";
@@ -333,7 +340,7 @@ export class GraphInsightView extends ItemView {
 			this.renderFocusBar();
 			this.recomputeVisual();
 		});
-		const exit = this.focusBar.createEl("button", { text: "Esc" });
+		const exit = this.focusBar.createEl("button", { text: t("focus.exit") });
 		exit.addEventListener("click", () => this.exitFocus());
 	}
 
@@ -459,17 +466,17 @@ export class GraphInsightView extends ItemView {
 		if (!this.model) return;
 		const node = this.model.nodes[nodeId];
 		const menu = new Menu();
-		menu.addItem((item) => item.setTitle("Open").setIcon("file-text").onClick(() => this.openNode(nodeId, false)));
-		menu.addItem((item) => item.setTitle("Open in new tab").setIcon("file-plus").onClick(() => this.openNode(nodeId, true)));
-		menu.addItem((item) => item.setTitle("Focus mode").setIcon("target").onClick(() => this.enterFocus(nodeId)));
+		menu.addItem((item) => item.setTitle(t("menu.open")).setIcon("file-text").onClick(() => this.openNode(nodeId, false)));
+		menu.addItem((item) => item.setTitle(t("menu.openNewTab")).setIcon("file-plus").onClick(() => this.openNode(nodeId, true)));
+		menu.addItem((item) => item.setTitle(t("menu.focus")).setIcon("target").onClick(() => this.enterFocus(nodeId)));
 		menu.addSeparator();
-		menu.addItem((item) => item.setTitle("Hide node").setIcon("eye-off").onClick(() => {
+		menu.addItem((item) => item.setTitle(t("menu.hide")).setIcon("eye-off").onClick(() => {
 			this.hiddenNodes.add(nodeId);
 			this.panel?.setHiddenNodeCount(this.hiddenNodes.size);
 			this.recomputeVisual();
 		}));
 		const pinned = this.explicitPins.has(nodeId) || this.pinnedNodes.has(nodeId);
-		menu.addItem((item) => item.setTitle(pinned ? "Unpin" : "Pin position").setIcon("pin").onClick(() => {
+		menu.addItem((item) => item.setTitle(pinned ? t("menu.unpin") : t("menu.pin")).setIcon("pin").onClick(() => {
 			if (pinned) {
 				this.pinnedNodes.delete(nodeId);
 				this.explicitPins.delete(nodeId);
@@ -486,31 +493,31 @@ export class GraphInsightView extends ItemView {
 			}
 		}));
 		menu.addSeparator();
-		menu.addItem((item) => item.setTitle("Copy link").setIcon("link").onClick(async () => {
+		menu.addItem((item) => item.setTitle(t("menu.copyLink")).setIcon("link").onClick(async () => {
 			// Write-only: paste-ready Obsidian wikilink for the note.
 			await navigator.clipboard.writeText(`[[${node.name}]]`);
-			new Notice(`Copied [[${node.name}]]`);
+			new Notice(t("notice.copiedLink", { name: node.name }));
 		}));
-		menu.addItem((item) => item.setTitle(`Path: ${node.path}`).setDisabled(true));
+		menu.addItem((item) => item.setTitle(t("menu.path", { path: node.path })).setDisabled(true));
 		menu.showAtMouseEvent(event);
 	}
 
 	private showLassoMenu(nodeIds: number[], event: PointerEvent): void {
 		if (!this.model) return;
 		const menu = new Menu();
-		menu.addItem((item) => item.setTitle(`Selected: ${nodeIds.length} notes`).setDisabled(true));
+		menu.addItem((item) => item.setTitle(t("menu.selected", { count: nodeIds.length })).setDisabled(true));
 		menu.addSeparator();
-		menu.addItem((item) => item.setTitle("Hide selected").setIcon("eye-off").onClick(() => {
+		menu.addItem((item) => item.setTitle(t("menu.hideSelected")).setIcon("eye-off").onClick(() => {
 			for (const id of nodeIds) this.hiddenNodes.add(id);
 			this.panel?.setHiddenNodeCount(this.hiddenNodes.size);
 			this.recomputeVisual();
 		}));
-		menu.addItem((item) => item.setTitle("Copy paths to clipboard").setIcon("copy").onClick(async () => {
+		menu.addItem((item) => item.setTitle(t("menu.copyPaths")).setIcon("copy").onClick(async () => {
 			// Write-only, and only from this explicit menu action — the plugin
 			// never reads the clipboard.
 			const paths = nodeIds.map((id) => this.model!.nodes[id].path).join("\n");
 			await navigator.clipboard.writeText(paths);
-			new Notice(`Copied ${nodeIds.length} paths`);
+			new Notice(t("notice.copiedPaths", { count: nodeIds.length }));
 		}));
 		menu.showAtMouseEvent(event);
 	}
@@ -523,11 +530,16 @@ export class GraphInsightView extends ItemView {
 		}
 	}
 
+	/** Panel rows carry the translated name; the stored preset keeps its own. */
+	private presetRows(presets: readonly ViewPreset[]): { name: string }[] {
+		return presets.map((preset) => ({ name: presetDisplayName(preset) }));
+	}
+
 	private async savePreset(query: string): Promise<void> {
 		const name = query.length > 24 ? `${query.slice(0, 24)}…` : query;
 		await this.plugin.savePresets([...this.plugin.settings.presets, { name, query }]);
 		this.searchBar?.setPresets(this.plugin.settings.presets);
-		new Notice("Filter preset saved");
+		new Notice(t("notice.filterPresetSaved"));
 	}
 
 	private async rebuildGraph(): Promise<void> {
@@ -654,10 +666,10 @@ export class GraphInsightView extends ItemView {
 			let matched = 0;
 			for (const flag of this.overlayMask) matched += flag;
 			const names: string[] = [];
-			if (state.overlays.orphans) names.push("orphans");
-			if (state.overlays.deadEnds) names.push("dead ends");
-			if (state.overlays.broken) names.push("broken links");
-			new Notice(`Highlighted ${matched} notes: ${names.join(", ")}`);
+			if (state.overlays.orphans) names.push(t("notice.layer.orphans"));
+			if (state.overlays.deadEnds) names.push(t("notice.layer.deadEnds"));
+			if (state.overlays.broken) names.push(t("notice.layer.broken"));
+			new Notice(t("notice.highlighted", { count: matched, layers: names.join(", ") }));
 		}
 	}
 
@@ -788,9 +800,15 @@ export class GraphInsightView extends ItemView {
 		this.tooltip.createDiv({ cls: "graph-insight-tooltip-title", text: node.name });
 		if (facts) {
 			const meta = this.tooltip.createDiv({ cls: "graph-insight-tooltip-meta" });
-			meta.createDiv({ text: `Opens: ${facts.opensTotal} (30d: ${facts.opens30})` });
-			meta.createDiv({ text: `Links: ← ${facts.inCount} · → ${facts.outCount}` });
-			meta.createDiv({ text: `Edited: ${new Date(facts.mtime).toLocaleDateString()}` });
+			meta.createDiv({
+				text: t("tooltip.opens", { total: facts.opensTotal, recent: facts.opens30 }),
+			});
+			meta.createDiv({
+				text: t("tooltip.links", { inbound: facts.inCount, outbound: facts.outCount }),
+			});
+			meta.createDiv({
+				text: t("tooltip.edited", { date: new Date(facts.mtime).toLocaleDateString() }),
+			});
 		}
 		this.tooltip.show();
 
@@ -861,7 +879,7 @@ export class GraphInsightView extends ItemView {
 					this.explicitPins.delete(nodeId);
 					this.pinnedNodes.delete(nodeId);
 					this.layout?.unpin(nodeId);
-					new Notice(`Unpinned: ${node.name}`);
+					new Notice(t("notice.unpinned", { name: node.name }));
 				} else {
 					const positions = this.renderer?.currentPositions;
 					if (positions) {
@@ -870,7 +888,7 @@ export class GraphInsightView extends ItemView {
 							nodeId,
 							positions[nodeId * 3], positions[nodeId * 3 + 1], positions[nodeId * 3 + 2]
 						);
-						new Notice(`Pinned: ${node.name}`);
+						new Notice(t("notice.pinned", { name: node.name }));
 					}
 				}
 				return;
@@ -897,7 +915,7 @@ export class GraphInsightView extends ItemView {
 	async exportPngFile(): Promise<void> {
 		const blob = await this.renderer?.exportPng();
 		if (!blob) {
-			new Notice("Could not create the PNG");
+			new Notice(t("notice.pngFailed"));
 			return;
 		}
 		downloadBlob("graph-insight.png", blob);
@@ -932,7 +950,7 @@ export class GraphInsightView extends ItemView {
 			onResetViewState: () => this.resetViewState(),
 			onPresetApply: (index) => void this.applyViewPreset(index),
 			onPresetSaveRequest: () => {
-				new PromptModal(this.app, "View preset name", "My view", (name) =>
+				new PromptModal(this.app, t("prompt.presetTitle"), t("prompt.presetDefault"), (name) =>
 					void this.saveViewPreset(name)
 				).open();
 			},
@@ -947,7 +965,7 @@ export class GraphInsightView extends ItemView {
 		if (!preset) return;
 		this.activePresetIndex = index;
 		await this.updatePanelState(() => preset.panel);
-		new Notice(`View "${preset.name}" applied`);
+		new Notice(t("notice.presetApplied", { name: presetDisplayName(preset) }));
 	}
 
 	private async saveViewPreset(name: string): Promise<void> {
@@ -959,8 +977,10 @@ export class GraphInsightView extends ItemView {
 			? existing.map((p, i) => (i === at ? snapshot : p))
 			: [...existing, snapshot];
 		await this.plugin.saveViewPresets(next);
-		this.panel?.setViewPresets(next);
-		new Notice(at >= 0 ? `Preset "${name}" overwritten` : `Preset "${name}" saved`);
+		this.panel?.setViewPresets(this.presetRows(next));
+		new Notice(
+			at >= 0 ? t("notice.presetOverwritten", { name }) : t("notice.presetSaved", { name })
+		);
 	}
 
 	private async deleteViewPreset(index: number): Promise<void> {
@@ -970,9 +990,9 @@ export class GraphInsightView extends ItemView {
 		const next = existing.filter((_, i) => i !== index);
 		this.activePresetIndex = null;
 		await this.plugin.saveViewPresets(next);
-		this.panel?.setViewPresets(next);
+		this.panel?.setViewPresets(this.presetRows(next));
 		this.panel?.setSelectedPreset(null);
-		new Notice(`Preset "${preset.name}" deleted`);
+		new Notice(t("notice.presetDeleted", { name: presetDisplayName(preset) }));
 	}
 
 	/** Apply every visual consequence of a panel state, in one place. */
@@ -996,7 +1016,7 @@ export class GraphInsightView extends ItemView {
 		await this.plugin.savePanelState(next);
 		this.panel?.destroy();
 		this.panel = this.buildPanel(next);
-		this.panel.setViewPresets(this.plugin.settings.viewPresets);
+		this.panel.setViewPresets(this.presetRows(this.plugin.settings.viewPresets));
 		this.panel.setSelectedPreset(this.activePresetIndex);
 		if (this.model) this.panel.setOverlayCounts(countOverlayMatches(this.model));
 		this.panel.setHiddenNodeCount(this.hiddenNodes.size);
@@ -1118,7 +1138,7 @@ export class GraphInsightView extends ItemView {
 		this.renderer?.setAlphaFactors(null);
 		this.panel?.setHiddenNodeCount(0);
 		this.recomputeVisual();
-		new Notice("View state reset");
+		new Notice(t("notice.viewStateReset"));
 	}
 
 	private resetHiddenNodes(): void {

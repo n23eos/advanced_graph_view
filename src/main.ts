@@ -1,4 +1,4 @@
-import { Plugin, TFile, debounce } from "obsidian";
+import { Plugin, TFile, debounce, getLanguage } from "obsidian";
 import { GraphInsightView, GRAPH_INSIGHT_VIEW_TYPE } from "./view/GraphView";
 import { PluginDataStore } from "./data/persistence";
 import {
@@ -15,9 +15,16 @@ import type { PanelState } from "./ui/ControlPanel";
 import type { SearchPreset } from "./ui/SearchBar";
 import { InsightsView, INSIGHTS_VIEW_TYPE } from "./view/InsightsView";
 import { GraphInsightSettingsTab } from "./settings/SettingsTab";
+import { initI18n, t } from "./i18n";
+import { migrateViewPresets, type BuiltinPresetId } from "./view/presetNames";
 
 export interface ViewPreset {
+	/** Literal name. For bundled presets this is the English original, kept so
+	 *  older installs keep matching on it; the UI shows the translated name. */
 	name: string;
+	/** Set only on bundled presets: the locale key their display name comes
+	 *  from. User presets have none and always show their literal name. */
+	builtinId?: BuiltinPresetId;
 	/** Full panel state snapshot: channels, colors, physics, 3D, layers. */
 	panel: PanelState;
 }
@@ -97,7 +104,7 @@ const DEFAULT_SETTINGS: GraphInsightSettings = {
 };
 
 /** Bump when DEFAULT_VIEW_PRESETS changes so existing installs re-seed. */
-const VIEW_PRESET_VERSION = 5;
+const VIEW_PRESET_VERSION = 6;
 /** Default preset names retired in newer versions — removed on migration. */
 const RETIRED_VIEW_PRESETS = new Set([
 	"3D галактика", "Хабы и кластеры", "Недавнее", "Мелкие ноды",
@@ -107,8 +114,9 @@ const RETIRED_VIEW_PRESETS = new Set([
 /** Bundled presets, copied from the tuned Raincoat vault. "Default 3D" first —
  *  it matches the out-of-the-box panel. */
 const DEFAULT_VIEW_PRESETS: ViewPreset[] = [
-	{ name: "Default 3D", panel: DEFAULT_3D_PANEL },
+	{ builtinId: "default-3d", name: "Default 3D", panel: DEFAULT_3D_PANEL },
 	{
+		builtinId: "default-2d",
 		name: "Default 2D",
 		panel: makePanel({
 			channels: { size: "links-in", color: "cluster", glow: null },
@@ -124,6 +132,7 @@ const DEFAULT_VIEW_PRESETS: ViewPreset[] = [
 		}),
 	},
 	{
+		builtinId: "hubs-clusters",
 		name: "Hubs and Clusters",
 		panel: makePanel({
 			channels: { size: "pagerank", color: "cluster", glow: "links-total" },
@@ -140,6 +149,7 @@ const DEFAULT_VIEW_PRESETS: ViewPreset[] = [
 		}),
 	},
 	{
+		builtinId: "recent",
 		name: "Recent",
 		panel: makePanel({
 			channels: { size: "opens-30", color: "recency-edit", glow: null },
@@ -155,6 +165,7 @@ const DEFAULT_VIEW_PRESETS: ViewPreset[] = [
 		}),
 	},
 	{
+		builtinId: "wide-range",
 		name: "Wide Range",
 		panel: makePanel({
 			channels: { size: "pagerank", color: "recency-edit", glow: null },
@@ -170,6 +181,7 @@ const DEFAULT_VIEW_PRESETS: ViewPreset[] = [
 		}),
 	},
 	{
+		builtinId: "density",
 		name: "Density",
 		panel: makePanel({
 			channels: { size: "pagerank", color: "recency-edit", glow: null },
@@ -185,6 +197,7 @@ const DEFAULT_VIEW_PRESETS: ViewPreset[] = [
 		}),
 	},
 	{
+		builtinId: "small-nodes-2d",
 		name: "Small Nodes 2D",
 		panel: makePanel({
 			channels: { size: "pagerank", color: "recency-edit", glow: null },
@@ -200,6 +213,7 @@ const DEFAULT_VIEW_PRESETS: ViewPreset[] = [
 		}),
 	},
 	{
+		builtinId: "minimalism",
 		name: "Minimalism",
 		panel: makePanel({
 			channels: { size: "pagerank", color: "recency-edit", glow: null },
@@ -230,6 +244,10 @@ export default class GraphInsightPlugin extends Plugin {
 	private saveUsageDebounced = debounce(() => this.flushUsage(), USAGE_SAVE_DEBOUNCE_MS, true);
 
 	async onload(): Promise<void> {
+		// Follow the app language. Must run before any view, command or settings
+		// tab is built — those read their labels once, at construction time.
+		initI18n(getLanguage());
+
 		const saved = (await this.loadData()) as Partial<GraphInsightSettings> | null;
 		// Deep-merge the panel so settings saved by older versions pick up
 		// newly added fields (overlays, showBubbles) from defaults.
@@ -272,16 +290,13 @@ export default class GraphInsightPlugin extends Plugin {
 		// own presets and any they still keep are preserved. The version guard
 		// means deleting a default doesn't bring it back until the set changes.
 		if ((this.settings.viewPresetsVersion ?? 0) < VIEW_PRESET_VERSION) {
-			// Refresh the bundled presets to their latest definition (so tweaks
-			// like thinner links / labels-off reach existing installs), keep the
-			// user's own presets, and drop retired defaults.
-			const defaultNames = new Set(DEFAULT_VIEW_PRESETS.map((p) => p.name));
-			const userPresets = this.settings.viewPresets.filter(
-				(p) => !defaultNames.has(p.name) && !RETIRED_VIEW_PRESETS.has(p.name)
-			);
 			this.settings = {
 				...this.settings,
-				viewPresets: [...DEFAULT_VIEW_PRESETS, ...userPresets],
+				viewPresets: migrateViewPresets(
+					this.settings.viewPresets,
+					DEFAULT_VIEW_PRESETS,
+					RETIRED_VIEW_PRESETS
+				),
 				viewPresetsVersion: VIEW_PRESET_VERSION,
 			};
 			await this.saveData(this.settings);
@@ -301,14 +316,14 @@ export default class GraphInsightPlugin extends Plugin {
 
 		this.addCommand({
 			id: "open-graph",
-			name: "Open graph view",
+			name: t("command.openView"),
 			callback: () => void this.activateView(),
 		});
-		this.addRibbonIcon("git-fork", "Open Advanced Graph View", () => void this.activateView());
+		this.addRibbonIcon("git-fork", t("command.ribbon"), () => void this.activateView());
 
 		this.addCommand({
 			id: "focus-current-note",
-			name: "Focus current note in graph",
+			name: t("command.focusNote"),
 			callback: async () => {
 				const path = this.app.workspace.getActiveFile()?.path;
 				if (!path) return;
@@ -318,7 +333,7 @@ export default class GraphInsightPlugin extends Plugin {
 		});
 		this.addCommand({
 			id: "toggle-orphan-highlight",
-			name: "Toggle orphan highlight",
+			name: t("command.toggleOrphans"),
 			callback: () => void this.getGraphView()?.updatePanelState((state) => ({
 				...state,
 				overlays: { ...state.overlays, orphans: !state.overlays.orphans },
@@ -326,7 +341,7 @@ export default class GraphInsightPlugin extends Plugin {
 		});
 		this.addCommand({
 			id: "toggle-session-trail",
-			name: "Toggle session trail",
+			name: t("command.toggleTrail"),
 			callback: () => void this.getGraphView()?.updatePanelState((state) => ({
 				...state,
 				showTrail: !state.showTrail,
@@ -334,22 +349,22 @@ export default class GraphInsightPlugin extends Plugin {
 		});
 		this.addCommand({
 			id: "open-insights",
-			name: "Open Insights dashboard",
+			name: t("command.openInsights"),
 			callback: () => void this.activateInsights(),
 		});
 		this.addCommand({
 			id: "export-png",
-			name: "Export current view as PNG",
+			name: t("command.exportPng"),
 			callback: () => void this.getGraphView()?.exportPngFile(),
 		});
 		this.addCommand({
 			id: "export-json",
-			name: "Export graph data as JSON",
+			name: t("command.exportJson"),
 			callback: () => this.getGraphView()?.exportJsonFile(),
 		});
 		this.addCommand({
 			id: "export-gexf",
-			name: "Export graph data as GEXF",
+			name: t("command.exportGexf"),
 			callback: () => this.getGraphView()?.exportGexfFile(),
 		});
 

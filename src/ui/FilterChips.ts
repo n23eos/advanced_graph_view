@@ -4,6 +4,8 @@
  * (tag:a OR tag:b is expressed as a dedicated filter, not query text).
  */
 
+import { t } from "../i18n";
+
 export interface FilterSelection {
 	tags: Set<string>;
 	folders: Set<string>;
@@ -25,8 +27,8 @@ export class FilterChips {
 
 	constructor(host: HTMLElement, private readonly callbacks: FilterChipsCallbacks) {
 		this.root = host.createDiv({ cls: "graph-insight-filters" });
-		this.tagButton = this.makeButton("Tags");
-		this.folderButton = this.makeButton("Folders");
+		this.tagButton = this.makeButton(t("filters.tags"));
+		this.folderButton = this.makeButton(t("filters.folders"));
 		this.tagButton.addEventListener("click", () => this.toggleMenu("tags"));
 		this.folderButton.addEventListener("click", () => this.toggleMenu("folders"));
 
@@ -92,8 +94,8 @@ export class FilterChips {
 		const selected = kind === "tags" ? this.selection.tags : this.selection.folders;
 
 		const header = this.menu.createDiv({ cls: "graph-insight-filter-menu-header" });
-		header.createSpan({ text: kind === "tags" ? "Vault tags" : "Vault folders" });
-		const clear = header.createEl("button", { text: "Clear", cls: "graph-insight-searchbar-btn" });
+		header.createSpan({ text: kind === "tags" ? t("filters.vaultTags") : t("filters.vaultFolders") });
+		const clear = header.createEl("button", { text: t("filters.clear"), cls: "graph-insight-searchbar-btn" });
 		clear.addEventListener("click", () => {
 			selected.clear();
 			this.emit();
@@ -101,7 +103,7 @@ export class FilterChips {
 		});
 
 		if (values.length === 0) {
-			this.menu.createDiv({ cls: "graph-insight-panel-hint", text: "Nothing found" });
+			this.menu.createDiv({ cls: "graph-insight-panel-hint", text: t("filters.empty") });
 			return;
 		}
 
@@ -130,8 +132,10 @@ export class FilterChips {
 	private refreshLabels(): void {
 		const tagCount = this.selection.tags.size;
 		const folderCount = this.selection.folders.size;
-		this.tagButton.setText(tagCount > 0 ? `Tags · ${tagCount}` : "Tags");
-		this.folderButton.setText(folderCount > 0 ? `Folders · ${folderCount}` : "Folders");
+		this.tagButton.setText(tagCount > 0 ? t("filters.tagsCount", { count: tagCount }) : t("filters.tags"));
+		this.folderButton.setText(
+			folderCount > 0 ? t("filters.foldersCount", { count: folderCount }) : t("filters.folders")
+		);
 		this.tagButton.toggleClass("is-active", tagCount > 0);
 		this.folderButton.toggleClass("is-active", folderCount > 0);
 	}

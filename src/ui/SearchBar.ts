@@ -5,6 +5,8 @@
  * suggestions (with "-" negation supported, like the core graph).
  */
 
+import { t } from "../i18n";
+
 export interface SearchPreset {
 	name: string;
 	query: string;
@@ -45,7 +47,7 @@ export class SearchBar {
 		const inputWrap = this.root.createDiv({ cls: "graph-insight-searchbar-input" });
 		this.input = inputWrap.createEl("input", {
 			type: "text",
-			placeholder: "Search: word, path: tag: content: opened:>10 -exclude…",
+			placeholder: t("search.placeholder"),
 		});
 		this.suggestBox = inputWrap.createDiv({ cls: "graph-insight-suggest" });
 		this.suggestBox.hide();
@@ -98,13 +100,13 @@ export class SearchBar {
 		});
 
 		const saveButton = this.root.createEl("button", { text: "★", cls: "graph-insight-searchbar-btn" });
-		saveButton.setAttribute("aria-label", "Save filter as preset");
+		saveButton.setAttribute("aria-label", t("search.savePreset"));
 		saveButton.addEventListener("click", () => {
 			if (this.input.value.trim()) this.callbacks.onSavePreset(this.input.value.trim());
 		});
 
 		const clearButton = this.root.createEl("button", { text: "✕", cls: "graph-insight-searchbar-btn" });
-		clearButton.setAttribute("aria-label", "Clear filter");
+		clearButton.setAttribute("aria-label", t("search.clear"));
 		clearButton.addEventListener("click", () => this.clear());
 	}
 
@@ -128,27 +130,27 @@ export class SearchBar {
 
 	private rebuildPresetSelect(): void {
 		this.presetSelect.empty();
-		const placeholder = this.presetSelect.createEl("option", { text: "Filters…", value: "" });
+		const placeholder = this.presetSelect.createEl("option", { text: t("search.filters"), value: "" });
 		placeholder.disabled = true;
 		placeholder.selected = true;
 
 		if (this.presets.length > 0) {
 			const group = this.presetSelect.createEl("optgroup");
-			group.label = "Presets";
+			group.label = t("search.group.presets");
 			for (const preset of this.presets) {
 				group.createEl("option", { text: preset.name, value: preset.query });
 			}
 		}
 		if (this.tags.length > 0) {
 			const group = this.presetSelect.createEl("optgroup");
-			group.label = "Tags";
+			group.label = t("search.group.tags");
 			for (const tag of this.tags) {
 				group.createEl("option", { text: `#${tag}`, value: `tag:${tag}` });
 			}
 		}
 		if (this.folders.length > 0) {
 			const group = this.presetSelect.createEl("optgroup");
-			group.label = "Folders";
+			group.label = t("search.group.folders");
 			for (const folder of this.folders) {
 				group.createEl("option", { text: folder, value: `path:"${folder}"` });
 			}

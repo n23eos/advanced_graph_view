@@ -3,12 +3,9 @@
  * channels, category swatches for folder/tag coloring.
  */
 import { categoryColor, resolvePreset } from "../encoding/colorScales";
-import {
-	CATEGORICAL_METRIC_LABELS,
-	NUMERIC_METRIC_LABELS,
-	isCategoricalMetric,
-	type MetricId,
-} from "../encoding/metrics";
+import { isCategoricalMetric, type MetricId } from "../encoding/metrics";
+import { metricLabel } from "../encoding/metricLabels";
+import { t } from "../i18n";
 
 const MAX_LEGEND_CATEGORIES = 8;
 
@@ -43,20 +40,20 @@ export class Legend {
 		const preset = resolvePreset(presetId);
 		this.root.createDiv({
 			cls: "graph-insight-legend-title",
-			text: NUMERIC_METRIC_LABELS[metric as keyof typeof NUMERIC_METRIC_LABELS] ?? metric,
+			text: metricLabel(metric),
 		});
 		const bar = this.root.createDiv({ cls: "graph-insight-legend-bar" });
 		bar.style.background = `linear-gradient(to right, ${preset.stops.map(toHex).join(", ")})`;
 		const range = this.root.createDiv({ cls: "graph-insight-legend-range" });
-		range.createSpan({ text: "min" });
-		range.createSpan({ text: "max" });
+		range.createSpan({ text: t("legend.min") });
+		range.createSpan({ text: t("legend.max") });
 	}
 
 	private renderCategories(metric: MetricId, categories: string[], presetId: string): void {
 		const palette = resolvePreset(presetId).categories;
 		this.root.createDiv({
 			cls: "graph-insight-legend-title",
-			text: CATEGORICAL_METRIC_LABELS[metric as keyof typeof CATEGORICAL_METRIC_LABELS] ?? metric,
+			text: metricLabel(metric),
 		});
 
 		const counts = new Map<string, number>();
@@ -76,7 +73,7 @@ export class Legend {
 		}
 		const rest = counts.size - top.length;
 		if (rest > 0) {
-			this.root.createDiv({ cls: "graph-insight-legend-more", text: `and ${rest} more…` });
+			this.root.createDiv({ cls: "graph-insight-legend-more", text: t("legend.more", { count: rest }) });
 		}
 	}
 

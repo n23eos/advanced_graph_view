@@ -75,6 +75,16 @@ Plugin data lives in `.obsidian/plugins/graph-insight/data/`:
 
 Settings → Advanced Graph View has buttons to export usage as CSV, clear statistics, or reset all plugin data.
 
+## Languages
+
+The interface follows Obsidian's own app language. Twelve locales ship with the plugin:
+
+English, Deutsch, Español, Français, Italiano, 日本語, 한국어, Polski, Português (Brasil), Русский, Українська, 简体中文.
+
+Anything else falls back to English, as does a regional variant with no file of its own (`fr-CA` → `fr`). Changing the app language takes effect after the plugin reloads.
+
+Translations live in `src/i18n/locales/`, one file per language, all typed against `en.ts` — a locale missing a key fails the build, so no release can ship a half-translated file. Only English is native; the rest are machine-translated and corrections are welcome.
+
 ## Mobile
 
 Not supported. The plugin is marked `isDesktopOnly: true`: the layout and metrics Web Workers plus a 10k-node WebGL scene are past what mobile Obsidian handles comfortably, and shipping a version that loads but crawls is worse than not loading at all.

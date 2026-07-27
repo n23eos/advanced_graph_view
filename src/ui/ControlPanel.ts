@@ -2,15 +2,16 @@
  * Floating control panel: metric-to-channel assignment, overlay toggles,
  * cluster list. Native DOM + Obsidian CSS variables, no framework.
  */
+import { t } from "../i18n";
 import type { ChannelAssignment } from "../encoding/encode";
 import type { LayoutRule } from "../workers/layoutEngine";
+import { type MetricId, type NumericMetricId } from "../encoding/metrics";
 import {
-	CATEGORICAL_METRIC_LABELS,
-	NUMERIC_METRIC_LABELS,
-	type MetricId,
-	type NumericMetricId,
-} from "../encoding/metrics";
-import { DEFAULT_PRESET_ID, SCALE_PRESETS } from "../encoding/colorScales";
+	categoricalMetricOptions,
+	numericMetricOptions,
+	scaleOptions,
+} from "../encoding/metricLabels";
+import { DEFAULT_PRESET_ID } from "../encoding/colorScales";
 import type { OverlayCounts, OverlayToggles } from "../analysis/overlays";
 import type { PhysicsParams } from "../workers/layoutEngine";
 
@@ -83,10 +84,10 @@ export interface PanelCallbacks {
 }
 
 const NONE_VALUE = "__none__";
-const OVERLAY_LABELS: Record<keyof OverlayToggles, string> = {
-	orphans: "Orphans (nothing links here)",
-	deadEnds: "Dead ends (no outgoing links)",
-	broken: "Broken links",
+const OVERLAY_KEYS: Record<keyof OverlayToggles, "layers.orphans" | "layers.deadEnds" | "layers.broken"> = {
+	orphans: "layers.orphans",
+	deadEnds: "layers.deadEnds",
+	broken: "layers.broken",
 };
 
 export class ControlPanel {
@@ -106,7 +107,7 @@ export class ControlPanel {
 		this.root = host.createDiv({ cls: "graph-insight-panel" });
 
 		const header = this.root.createDiv({ cls: "graph-insight-panel-header" });
-		header.createSpan({ text: "Advanced Graph View" });
+		header.createSpan({ text: t("panel.title") });
 		const toggle = header.createSpan({ cls: "graph-insight-panel-toggle", text: state.collapsed ? "+" : "–" });
 		header.addEventListener("click", () => {
 			this.setState({ ...this.state, collapsed: !this.state.collapsed });
@@ -132,7 +133,7 @@ export class ControlPanel {
 		this.body.empty();
 		this.overlayCountEls.clear();
 
-		const presets = this.section("View presets");
+		const presets = this.section("presets", t("panel.section.presets"));
 		const presetRow = presets.createDiv({ cls: "graph-insight-panel-row" });
 		this.presetSelect = presetRow.createEl("select", { cls: "dropdown" });
 		this.presetSelect.addEventListener("change", () => {
@@ -145,9 +146,9 @@ export class ControlPanel {
 			}
 		});
 		const presetButtons = presets.createDiv({ cls: "graph-insight-panel-row" });
-		const saveButton = presetButtons.createEl("button", { text: "Save current" });
+		const saveButton = presetButtons.createEl("button", { text: t("presets.save") });
 		saveButton.addEventListener("click", () => this.callbacks.onPresetSaveRequest());
-		const deleteButton = presetButtons.createEl("button", { text: "Delete" });
+		const deleteButton = presetButtons.createEl("button", { text: t("presets.delete") });
 		deleteButton.addEventListener("click", () => {
 			const index = Number(this.presetSelect!.value);
 			if (this.presetSelect!.value !== "" && !Number.isNaN(index)) {
@@ -156,77 +157,79 @@ export class ControlPanel {
 		});
 		this.renderPresetOptions();
 
-		const view = this.section("Appearance");
-		this.channelSelect(view, "Size", this.state.channels.size, NUMERIC_METRIC_LABELS, (value) => {
+		const view = this.section("appearance", t("panel.section.appearance"));
+		this.channelSelect(view, t("appearance.size"), this.state.channels.size, numericMetricOptions(), (value) => {
 			this.setState({ ...this.state, channels: { ...this.state.channels, size: value as NumericMetricId | null } });
 		});
 		this.channelSelect(
 			view,
-			"Color",
+			t("appearance.color"),
 			this.state.channels.color,
-			{ ...NUMERIC_METRIC_LABELS, ...CATEGORICAL_METRIC_LABELS },
+			{ ...numericMetricOptions(), ...categoricalMetricOptions() },
 			(value) => {
 				this.setState({ ...this.state, channels: { ...this.state.channels, color: value as MetricId | null } });
 			}
 		);
-		this.channelSelect(view, "Glow", this.state.channels.glow, NUMERIC_METRIC_LABELS, (value) => {
+		this.channelSelect(view, t("appearance.glow"), this.state.channels.glow, numericMetricOptions(), (value) => {
 			this.setState({ ...this.state, channels: { ...this.state.channels, glow: value as NumericMetricId | null } });
 		});
 
-		const presetLabels: Record<string, string> = {};
-		for (const [id, preset] of Object.entries(SCALE_PRESETS)) presetLabels[id] = preset.label;
-		this.channelSelect(view, "Color scheme", this.state.colorPreset, presetLabels, (value) => {
+		this.channelSelect(view, t("appearance.colorScheme"), this.state.colorPreset, scaleOptions(), (value) => {
 			this.setState({ ...this.state, colorPreset: value ?? DEFAULT_PRESET_ID });
 		}, false);
 
 		if (!this.state.channels.color) {
 			view.createDiv({
 				cls: "graph-insight-panel-hint",
-				text: "Pick a metric for the Color channel to colorize nodes.",
+				text: t("appearance.colorHint"),
 			});
 		}
 
-		this.physicsSlider(view, "Node size", 0.1, 2.5, 0.05, this.state.nodeScale, (value) => {
+		this.physicsSlider(view, t("appearance.nodeSize"), 0.1, 2.5, 0.05, this.state.nodeScale, (value) => {
 			this.setState({ ...this.state, nodeScale: value });
 		});
 
-		const textSection = this.section("Labels");
-		this.checkboxRow(textSection, "Show labels", this.state.labels.show, (value) => {
+		const textSection = this.section("labels", t("panel.section.labels"));
+		this.checkboxRow(textSection, t("labels.show"), this.state.labels.show, (value) => {
 			this.setState({ ...this.state, labels: { ...this.state.labels, show: value } });
 		});
-		this.physicsSlider(textSection, "Label size", 6, 18, 0.5, this.state.labels.fontSize, (value) => {
+		this.physicsSlider(textSection, t("labels.size"), 6, 18, 0.5, this.state.labels.fontSize, (value) => {
 			this.setState({ ...this.state, labels: { ...this.state.labels, fontSize: value } });
 		});
-		this.physicsSlider(textSection, "Show labels from zoom", 0.1, 2, 0.01, this.state.labels.zoomThreshold, (value) => {
+		this.physicsSlider(textSection, t("labels.zoom"), 0.1, 2, 0.01, this.state.labels.zoomThreshold, (value) => {
 			this.setState({ ...this.state, labels: { ...this.state.labels, zoomThreshold: value } });
 		});
-		this.physicsSlider(textSection, "Max labels", 5, 400, 5, this.state.labels.maxCount, (value) => {
+		this.physicsSlider(textSection, t("labels.max"), 5, 400, 5, this.state.labels.maxCount, (value) => {
 			this.setState({ ...this.state, labels: { ...this.state.labels, maxCount: value } });
 		});
-		this.checkboxRow(textSection, "Labels shrink with zoom", this.state.labels.scaleWithZoom, (value) => {
+		this.checkboxRow(textSection, t("labels.scaleWithZoom"), this.state.labels.scaleWithZoom, (value) => {
 			this.setState({ ...this.state, labels: { ...this.state.labels, scaleWithZoom: value } });
 		});
 
-		const edgeSection = this.section("Links");
-		this.checkboxRow(edgeSection, "Show links", this.state.edges.show, (value) => {
+		const edgeSection = this.section("links", t("panel.section.links"));
+		this.checkboxRow(edgeSection, t("edges.show"), this.state.edges.show, (value) => {
 			this.setState({ ...this.state, edges: { ...this.state.edges, show: value } });
 		});
-		this.physicsSlider(edgeSection, "Thickness", 0.05, 2, 0.05, this.state.edges.width, (value) => {
+		this.physicsSlider(edgeSection, t("edges.width"), 0.05, 2, 0.05, this.state.edges.width, (value) => {
 			this.setState({ ...this.state, edges: { ...this.state.edges, width: value } });
 		});
-		this.physicsSlider(edgeSection, "Opacity", 0.02, 1, 0.01, this.state.edges.opacity, (value) => {
+		this.physicsSlider(edgeSection, t("edges.opacity"), 0.02, 1, 0.01, this.state.edges.opacity, (value) => {
 			this.setState({ ...this.state, edges: { ...this.state.edges, opacity: value } });
 		});
 
-		const threeD = this.section("3D");
-		this.checkboxRow(threeD, "3D mode", this.state.view3d.enabled, (value) => {
+		const threeD = this.section("threeD", t("panel.section.threeD"));
+		this.checkboxRow(threeD, t("view3d.enabled"), this.state.view3d.enabled, (value) => {
 			this.setState({ ...this.state, view3d: { ...this.state.view3d, enabled: value } });
 		});
 		this.channelSelect(
 			threeD,
-			"Depth",
+			t("view3d.depth"),
 			this.state.view3d.depthSource,
-			{ physics: "Physics (sphere)", cluster: "Cluster (layers)", age: "Age" },
+			{
+				physics: t("view3d.depth.physics"),
+				cluster: t("view3d.depth.cluster"),
+				age: t("view3d.depth.age"),
+			},
 			(value) => {
 				this.setState({
 					...this.state,
@@ -235,25 +238,25 @@ export class ControlPanel {
 			},
 			false
 		);
-		this.physicsSlider(threeD, "Perspective", 300, 2500, 50, this.state.view3d.focal, (value) => {
+		this.physicsSlider(threeD, t("view3d.focal"), 300, 2500, 50, this.state.view3d.focal, (value) => {
 			this.setState({ ...this.state, view3d: { ...this.state.view3d, focal: value } });
 		});
 		threeD.createDiv({
 			cls: "graph-insight-panel-hint",
-			text: "Drag empty space to rotate. Alt+drag to pan.",
+			text: t("view3d.hint"),
 		});
 
-		const layers = this.section("Layers");
+		const layers = this.section("layers", t("panel.section.layers"));
 		layers.createDiv({
 			cls: "graph-insight-panel-hint",
-			text: "An active layer highlights matching notes and dims the rest.",
+			text: t("layers.hint"),
 		});
-		for (const key of Object.keys(OVERLAY_LABELS) as (keyof OverlayToggles)[]) {
+		for (const key of Object.keys(OVERLAY_KEYS) as (keyof OverlayToggles)[]) {
 			const row = layers.createDiv({ cls: "graph-insight-panel-row" });
 			const label = row.createEl("label", { cls: "graph-insight-panel-checkbox" });
 			const checkbox = label.createEl("input", { type: "checkbox" });
 			checkbox.checked = this.state.overlays[key];
-			label.createSpan({ text: OVERLAY_LABELS[key] });
+			label.createSpan({ text: t(OVERLAY_KEYS[key]) });
 			const count = row.createSpan({ cls: "graph-insight-panel-count", text: "" });
 			this.overlayCountEls.set(key, count);
 			checkbox.addEventListener("change", () => {
@@ -265,19 +268,19 @@ export class ControlPanel {
 		}
 
 		const hiddenRow = layers.createDiv({ cls: "graph-insight-panel-row" });
-		hiddenRow.createSpan({ cls: "graph-insight-panel-label", text: "Hidden nodes" });
+		hiddenRow.createSpan({ cls: "graph-insight-panel-label", text: t("layers.hidden") });
 		this.hiddenCountEl = hiddenRow.createSpan({ cls: "graph-insight-panel-count", text: "0" });
-		const showHidden = hiddenRow.createEl("button", { text: "Show all", cls: "graph-insight-searchbar-btn" });
+		const showHidden = hiddenRow.createEl("button", { text: t("layers.showAll"), cls: "graph-insight-searchbar-btn" });
 		showHidden.addEventListener("click", () => this.callbacks.onShowHiddenNodes());
 
-		const resetButton = layers.createEl("button", { text: "Reset highlights and hidden" });
+		const resetButton = layers.createEl("button", { text: t("layers.reset") });
 		resetButton.addEventListener("click", () => this.callbacks.onResetViewState());
 
 		const timelineRow = layers.createDiv({ cls: "graph-insight-panel-row" });
 		const timelineLabel = timelineRow.createEl("label", { cls: "graph-insight-panel-checkbox" });
 		const timelineCheckbox = timelineLabel.createEl("input", { type: "checkbox" });
 		timelineCheckbox.checked = this.state.showTimeline;
-		timelineLabel.createSpan({ text: "Timeline" });
+		timelineLabel.createSpan({ text: t("layers.timeline") });
 		timelineCheckbox.addEventListener("change", () => {
 			this.setState({ ...this.state, showTimeline: timelineCheckbox.checked });
 		});
@@ -286,61 +289,65 @@ export class ControlPanel {
 		const trailLabel = trailRow.createEl("label", { cls: "graph-insight-panel-checkbox" });
 		const trailCheckbox = trailLabel.createEl("input", { type: "checkbox" });
 		trailCheckbox.checked = this.state.showTrail;
-		trailLabel.createSpan({ text: "Session trail" });
+		trailLabel.createSpan({ text: t("layers.trail") });
 		const replay = trailRow.createEl("button", { text: "⟲", cls: "graph-insight-searchbar-btn" });
-		replay.setAttribute("aria-label", "Replay the session trail");
+		replay.setAttribute("aria-label", t("layers.trailReplay"));
 		replay.addEventListener("click", () => this.callbacks.onTrailReplay());
 		trailCheckbox.addEventListener("change", () => {
 			this.setState({ ...this.state, showTrail: trailCheckbox.checked });
 		});
 
-		const clusters = this.section("Clusters");
+		const clusters = this.section("clusters", t("panel.section.clusters"));
 		const bubbleRow = clusters.createDiv({ cls: "graph-insight-panel-row" });
 		const bubbleLabel = bubbleRow.createEl("label", { cls: "graph-insight-panel-checkbox" });
 		const bubbleCheckbox = bubbleLabel.createEl("input", { type: "checkbox" });
 		bubbleCheckbox.checked = this.state.showBubbles;
-		bubbleLabel.createSpan({ text: "Cluster bubbles" });
+		bubbleLabel.createSpan({ text: t("clusters.bubbles") });
 		bubbleCheckbox.addEventListener("change", () => {
 			this.setState({ ...this.state, showBubbles: bubbleCheckbox.checked });
 		});
-		clusters.createDiv({ cls: "graph-insight-panel-hint", text: "Color nodes by Cluster to see groups" });
+		clusters.createDiv({ cls: "graph-insight-panel-hint", text: t("clusters.hint") });
 
-		const physics = this.section("Physics");
+		const physics = this.section("physics", t("panel.section.physics"));
 		// Not part of PanelState — applies immediately on change and always
 		// shows "Связи" (the default rule) after a rebuild.
 		this.channelSelect(
 			physics,
-			"Layout rules",
+			t("physics.layoutRule"),
 			"links",
-			{ links: "Связи", tags: "Теги", folders: "Папки" },
+			{
+				links: t("physics.rule.links"),
+				tags: t("physics.rule.tags"),
+				folders: t("physics.rule.folders"),
+			},
 			(value) => this.callbacks.onLayoutRule((value ?? "links") as LayoutRule),
 			false
 		);
-		this.physicsSlider(physics, "Node spread (repulsion)", 1, 300, 1, this.state.physics.repel, (value) => {
+		this.physicsSlider(physics, t("physics.repel"), 1, 300, 1, this.state.physics.repel, (value) => {
 			this.setState({ ...this.state, physics: { ...this.state.physics, repel: value } });
 		});
-		this.physicsSlider(physics, "Link length", 5, 300, 5, this.state.physics.linkDistance, (value) => {
+		this.physicsSlider(physics, t("physics.linkDistance"), 5, 300, 5, this.state.physics.linkDistance, (value) => {
 			this.setState({ ...this.state, physics: { ...this.state.physics, linkDistance: value } });
 		});
-		this.physicsSlider(physics, "Pull to center", 0, 0.5, 0.005, this.state.physics.centering, (value) => {
+		this.physicsSlider(physics, t("physics.centering"), 0, 0.5, 0.005, this.state.physics.centering, (value) => {
 			this.setState({ ...this.state, physics: { ...this.state.physics, centering: value } });
 		});
-		this.physicsSlider(physics, "Link strength", 0.05, 2, 0.05, this.state.physics.linkStrength, (value) => {
+		this.physicsSlider(physics, t("physics.linkStrength"), 0.05, 2, 0.05, this.state.physics.linkStrength, (value) => {
 			this.setState({ ...this.state, physics: { ...this.state.physics, linkStrength: value } });
 		});
-		this.physicsSlider(physics, "Smoothness", 0.1, 0.8, 0.05, this.state.physics.velocityDecay, (value) => {
+		this.physicsSlider(physics, t("physics.velocityDecay"), 0.1, 0.8, 0.05, this.state.physics.velocityDecay, (value) => {
 			this.setState({ ...this.state, physics: { ...this.state.physics, velocityDecay: value } });
 		});
-		this.physicsSlider(physics, "Link elasticity", 0, 1, 0.05, this.state.physics.elasticity, (value) => {
+		this.physicsSlider(physics, t("physics.elasticity"), 0, 1, 0.05, this.state.physics.elasticity, (value) => {
 			this.setState({ ...this.state, physics: { ...this.state.physics, elasticity: value } });
 		});
-		this.checkboxRow(physics, "Free layout", this.state.physics.freeLayout, (value) => {
+		this.checkboxRow(physics, t("physics.freeLayout"), this.state.physics.freeLayout, (value) => {
 			this.setState({ ...this.state, physics: { ...this.state.physics, freeLayout: value } });
 		});
-		this.checkboxRow(physics, "Отключить физику", this.state.physics.disabled ?? false, (value) => {
+		this.checkboxRow(physics, t("physics.disabled"), this.state.physics.disabled ?? false, (value) => {
 			this.setState({ ...this.state, physics: { ...this.state.physics, disabled: value } });
 		});
-		const button = physics.createEl("button", { text: "Re-form the cloud" });
+		const button = physics.createEl("button", { text: t("physics.reheat") });
 		button.addEventListener("click", () => this.callbacks.onReheat());
 	}
 
@@ -406,7 +413,7 @@ export class ControlPanel {
 			this.selectedPresetIndex >= 0 &&
 			this.selectedPresetIndex < this.viewPresets.length;
 		const placeholder = this.presetSelect.createEl("option", {
-			text: this.viewPresets.length > 0 ? "Choose a preset…" : "No presets yet",
+			text: this.viewPresets.length > 0 ? t("presets.choose") : t("presets.empty"),
 			value: "",
 		});
 		placeholder.selected = !hasSelection;
@@ -425,27 +432,28 @@ export class ControlPanel {
 		this.overlayCountEls.get("broken")?.setText(String(counts.broken));
 	}
 
-	/** Sections are accordions; everything except «Вид» starts collapsed.
-	 *  Static: the set survives panel rebuilds (updatePanelState). */
-	private static openSections = new Set<string>(["View presets", "Appearance"]);
+	/** Sections are accordions; everything except the first two starts collapsed.
+	 *  Keyed by a language-independent id, so switching the app language does not
+	 *  reset which sections are open. Static: the set survives panel rebuilds. */
+	private static openSections = new Set<string>(["presets", "appearance"]);
 	private get openSections(): Set<string> {
 		return ControlPanel.openSections;
 	}
 
-	private section(title: string): HTMLElement {
+	private section(id: string, title: string): HTMLElement {
 		const section = this.body.createDiv({ cls: "graph-insight-panel-section" });
 		const header = section.createDiv({ cls: "graph-insight-panel-section-title" });
 		const chevron = header.createSpan({
-			text: this.openSections.has(title) ? "▾" : "▸",
+			text: this.openSections.has(id) ? "▾" : "▸",
 			cls: "graph-insight-panel-chevron",
 		});
 		header.createSpan({ text: title });
 		const content = section.createDiv({ cls: "graph-insight-panel-section-body" });
-		content.toggleClass("is-hidden", !this.openSections.has(title));
+		content.toggleClass("is-hidden", !this.openSections.has(id));
 		header.addEventListener("click", () => {
-			if (this.openSections.has(title)) this.openSections.delete(title);
-			else this.openSections.add(title);
-			const open = this.openSections.has(title);
+			if (this.openSections.has(id)) this.openSections.delete(id);
+			else this.openSections.add(id);
+			const open = this.openSections.has(id);
 			chevron.setText(open ? "▾" : "▸");
 			content.toggleClass("is-hidden", !open);
 		});

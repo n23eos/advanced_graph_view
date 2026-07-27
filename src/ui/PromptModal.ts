@@ -1,4 +1,5 @@
 import { Modal, Setting, type App } from "obsidian";
+import { t } from "../i18n";
 
 /** Small text-input modal — replaces window.prompt, which Obsidian forbids. */
 export class PromptModal extends Modal {
@@ -27,9 +28,9 @@ export class PromptModal extends Modal {
 
 		new Setting(this.contentEl)
 			.addButton((button) =>
-				button.setButtonText("Save").setCta().onClick(() => this.submit())
+				button.setButtonText(t("prompt.save")).setCta().onClick(() => this.submit())
 			)
-			.addButton((button) => button.setButtonText("Cancel").onClick(() => this.close()));
+			.addButton((button) => button.setButtonText(t("prompt.cancel")).onClick(() => this.close()));
 	}
 
 	private submit(): void {
