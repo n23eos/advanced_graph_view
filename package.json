@@ -1,18 +1,38 @@
 {
 	"name": "graph-insight",
 	"version": "0.2.1",
-	"description": "Advanced graph view plugin for Obsidian",
+	"description": "Advanced graph view plugin for Obsidian — explore large vaults as an interactive 3D graph with clusters, PageRank and metric-driven node encoding.",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"typecheck": "tsc -noEmit -skipLibCheck",
 		"test": "vitest run",
 		"test:watch": "vitest",
-		"lint": "eslint src/"
+		"lint": "eslint src/",
+		"verify": "npm run lint && npm run typecheck && npm test"
 	},
-	"keywords": [],
-	"author": "",
+	"keywords": [
+		"obsidian",
+		"obsidian-plugin",
+		"graph",
+		"graph-view",
+		"knowledge-graph",
+		"pagerank",
+		"webgl",
+		"pixijs",
+		"visualization"
+	],
+	"author": "n23eos",
 	"license": "MIT",
+	"homepage": "https://github.com/n23eos/advanced_graph_view#readme",
+	"bugs": {
+		"url": "https://github.com/n23eos/advanced_graph_view/issues"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/n23eos/advanced_graph_view.git"
+	},
 	"devDependencies": {
 		"@types/d3-force": "^3.0.10",
 		"@typescript-eslint/eslint-plugin": "^8.64.0",

@@ -24,9 +24,27 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # A tag that disagrees with manifest.json ships a build Obsidian will
+      # never offer as an update. Fail before anything is published.
+      - name: Check tag matches manifest version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          manifest=$(node -p "require('./manifest.json').version")
+          pkg=$(node -p "require('./package.json').version")
+          if [ "$manifest" != "$TAG" ] || [ "$pkg" != "$TAG" ]; then
+            echo "::error::tag $TAG does not match manifest.json ($manifest) / package.json ($pkg)"
+            exit 1
+          fi
+          node -e "
+            const v = require('./versions.json');
+            if (!v['$TAG']) { console.error('::error::versions.json has no entry for $TAG'); process.exit(1); }
+          "
+
       - name: Verify
         run: |
           npm run lint
+          npx tsc -noEmit -skipLibCheck
           npx vitest run
 
       - name: Build
@@ -47,7 +65,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           gh release create "$TAG" \
-            --title "Graph Insight $TAG" \
+            --title "Advanced Graph View $TAG" \
             --generate-notes \
             main.js manifest.json styles.css \
             || gh release upload "$TAG" main.js manifest.json styles.css --clobber

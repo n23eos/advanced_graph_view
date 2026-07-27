@@ -8,6 +8,31 @@
 
 An advanced replacement for Obsidian's Graph View, built for large vaults (5,000–50,000 notes) where the default graph turns into a hairball. The graph becomes an analysis tool instead of a decoration: it shows what you actually use, where your knowledge hubs are, and how your vault grew over time.
 
+> **Desktop only.** The renderer leans on WebGL and two Web Workers; the plugin declares `isDesktopOnly: true` and will not load on Obsidian mobile.
+
+## Installation
+
+Not yet in the Community Plugins directory. Two ways to install:
+
+### BRAT (recommended — gets updates automatically)
+
+1. Install the **BRAT** plugin from Community Plugins and enable it.
+2. Command palette → **BRAT: Add a beta plugin for testing**.
+3. Paste `n23eos/advanced_graph_view` and confirm.
+4. Settings → Community Plugins → enable **Advanced Graph View**.
+
+### Manual
+
+1. Download `main.js`, `manifest.json` and `styles.css` from the [latest release](https://github.com/n23eos/advanced_graph_view/releases/latest).
+2. Create `<your vault>/.obsidian/plugins/graph-insight/` and drop the three files in.
+3. Reload Obsidian, then enable **Advanced Graph View** in Settings → Community Plugins.
+
+> The folder must be named `graph-insight` — that is the plugin id, kept stable so existing installs keep their usage history.
+
+Open the graph with the ribbon icon (git-fork) or the command **Advanced Graph View: Open graph view**.
+
+Requires Obsidian **1.13.0** or newer.
+
 ## Features
 
 - **Metric-driven node encoding** — assign any metric to size, color, or glow: PageRank, open frequency (all-time / 90 / 30 / 7 days), edit recency, note age, in/out links, file size, folder, tag, or cluster. Default: size = PageRank, color = edit recency.
@@ -52,17 +77,21 @@ Settings → Advanced Graph View has buttons to export usage as CSV, clear stati
 
 ## Mobile
 
-The graph view works on mobile (WebGL via Pixi).
+Not supported. The plugin is marked `isDesktopOnly: true`: the layout and metrics Web Workers plus a 10k-node WebGL scene are past what mobile Obsidian handles comfortably, and shipping a version that loads but crawls is worse than not loading at all.
 
 ## Development
 
 ```bash
 npm install
-npm run dev     # watch build
-npm run build   # typecheck + production build
-npm test        # vitest suite
+npm run dev        # watch build
+npm run build      # typecheck + production build
+npm test           # vitest suite
+npm run typecheck
 npm run lint
+npm run verify     # lint + typecheck + tests, same gate as CI
 ```
+
+CI (`.github/workflows/ci.yml`) runs lint, typecheck, tests and a production build on every push and pull request. Tagged pushes additionally run `.github/workflows/release.yml`, which builds, attests provenance and publishes the release assets.
 
 Architecture notes: force layout (`d3-force`) and PageRank/Louvain (`graphology`) each run in their own Web Worker, inlined into `main.js` as Blob workers. Edges render as a single GPU line-list mesh — position updates write into a vertex buffer instead of rebuilding geometry.
 
