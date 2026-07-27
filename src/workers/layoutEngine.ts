@@ -104,6 +104,9 @@ export interface PhysicsParams {
 	/** Hard minimum spacing between node centers (world units). Grows with node
 	 *  size so big nodes push apart instead of overlapping. 0 = off. */
 	collideRadius?: number;
+	/** true = freeze the layout: no simulation runs, nodes stay put, and a drag
+	 *  moves only the grabbed node. */
+	disabled?: boolean;
 }
 
 export type EngineInMessage =
@@ -135,27 +138,17 @@ const BARNES_HUT_THETA = 0.6;
 // 30 Hz: settle animation stays smooth while halving main-thread work
 // (sprite sync + edge rewrite + cull run per received tick).
 const FRAME_INTERVAL_MS = 33;
-// While dragging: full-rate ticks + a warm alphaTarget so neighbors follow
-// the pointer live instead of the sluggish cooled-down crawl. The target is
-// kept LOW and damping is raised, otherwise coarse Barnes-Hut repulsion
-// noise makes the neighborhood visibly vibrate; with strong damping the
-// pull propagates as a smooth cascade that fades with graph distance.
 const DRAG_INTERVAL_MS = 16;
-// Lower energy + heavier damping while dragging: the neighborhood follows in a
-// smooth glide instead of the coarse Barnes-Hut noise vibrating every node.
-// Keep the sim lively while dragging so linked nodes actually get towed along
-// instead of sitting frozen: more warmth, light damping.
+// Dragging keeps the real physics running (like Obsidian): the grabbed node is
+// pinned to the pointer, links tow its neighbors, and the tow propagates hop by
+// hop. Forces are left at their settle values (no boost, no centering change),
+// so re-warming returns to the same equilibrium — the graph doesn't contract.
+// Only a gentle warmth is added, ramped via alphaTarget, so grabbing a settled
+// graph never jerks it.
 const DRAG_ALPHA_TARGET = 0.3;
-const DRAG_EXTRA_DAMPING = 0.05;
-const MAX_DRAG_DAMPING = 0.7;
-/** Repulsion accuracy while dragging. Kept loose enough that a big graph's
- *  Barnes-Hut tick finishes inside the 16 ms frame budget — an over-tight theta
- *  overruns it and the drag stutters. */
-const DRAG_THETA = 0.6;
-/** Links stiffen while dragging so neighbors follow the pointer harder — the
- *  dragged note tows its connections along. */
-const DRAG_LINK_BOOST = 2.6;
-const MAX_DRAG_LINK_STRENGTH = 2;
+/** Small immediate warmth on grab so the tow responds without waiting for the
+ *  alphaTarget ramp — kept low enough to not visibly kick the graph. */
+const DRAG_GRAB_ALPHA = 0.12;
 // Tuned for compactness: bounded-range repulsion + noticeable centering,
 // otherwise sparse vaults explode into a huge sparse cloud.
 const CENTERING_STRENGTH = 0.04;
@@ -189,6 +182,8 @@ export function createLayoutEngine(
 	// Cluster-by-group attraction, persisted across re-inits.
 	const cluster = createClusterForce();
 	let clusterGroups: Int32Array | null = null;
+	// true = physics off (the "Отключить физику" toggle): sim never ticks.
+	let physicsDisabled = false;
 
 	// Elastic links are simply stiffer springs; the extra alphaMin keeps a
 	// residual jiggle so a stretched graph visibly snaps back.
@@ -211,9 +206,12 @@ export function createLayoutEngine(
 		return positions;
 	};
 
+	// Bare setInterval, not self.setInterval: inside a worker they are the same
+	// function, but the bare form also resolves under the test runner, which
+	// keeps the drag/tow protocol unit-testable off the main thread.
 	const stopTimer = () => {
 		if (timer !== null) {
-			self.clearInterval(timer);
+			clearInterval(timer);
 			timer = null;
 		}
 	};
@@ -221,7 +219,7 @@ export function createLayoutEngine(
 	const startTimer = (intervalMs: number) => {
 		stopTimer();
 		running = true;
-		timer = self.setInterval(stepOnce, intervalMs);
+		timer = setInterval(stepOnce, intervalMs) as unknown as number;
 	};
 
 	const stepOnce = () => {
@@ -333,6 +331,15 @@ export function createLayoutEngine(
 			return;
 		}
 
+		// Physics disabled: show the seed layout and never tick.
+		physicsDisabled = !!params.disabled;
+		if (physicsDisabled) {
+			const positions = snapshotPositions();
+			post({ type: "tick", positions, alpha: 0 }, [positions.buffer]);
+			running = false;
+			return;
+		}
+
 		running = true;
 		if (!message.paused) {
 			startTimer(FRAME_INTERVAL_MS);
@@ -347,6 +354,17 @@ export function createLayoutEngine(
 					break;
 				case "params": {
 					params = message.params;
+					// Physics on/off toggle: stop the sim when disabled, resume
+					// (gentle reheat) when re-enabled.
+					const wasDisabled = physicsDisabled;
+					physicsDisabled = !!params.disabled;
+					if (physicsDisabled) {
+						running = false;
+						stopTimer();
+					} else if (wasDisabled && simulation) {
+						simulation.alpha(Math.max(simulation.alpha(), 0.3));
+						if (!running) startTimer(FRAME_INTERVAL_MS);
+					}
 					if (simulation) {
 						(simulation.force("charge") as ReturnType<typeof forceManyBody>)
 							.strength(-params.repel)
@@ -386,76 +404,48 @@ export function createLayoutEngine(
 						if (!running) startTimer(FRAME_INTERVAL_MS);
 					}
 					break;
-				case "drag-start":
-					if (simulation) {
-						const node = nodes[message.id];
-						if (node) {
-							// Fix the node at its current spot; drag-move follows the pointer.
-							node.fx = node.x ?? 0;
-							node.fy = node.y ?? 0;
-							if (node.z !== undefined) node.fz = node.z;
-						}
-						simulation.alphaTarget(DRAG_ALPHA_TARGET);
-						if (simulation.alpha() < DRAG_ALPHA_TARGET) simulation.alpha(DRAG_ALPHA_TARGET);
-						simulation.velocityDecay(
-							Math.min(MAX_DRAG_DAMPING, params.velocityDecay + DRAG_EXTRA_DAMPING)
-						);
-						(simulation.force("charge") as ReturnType<typeof forceManyBody>).theta(DRAG_THETA);
-						(simulation.force("link") as ReturnType<typeof forceLink>).strength(
-							Math.min(MAX_DRAG_LINK_STRENGTH, effectiveLinkStrength() * DRAG_LINK_BOOST)
-						);
-						// Kill centering during the drag: the warm sim would otherwise
-						// let it contract the whole graph toward the middle. The tow
-						// still spreads through links.
-						(simulation.force("x") as ReturnType<typeof forceX>).strength(0);
-						(simulation.force("y") as ReturnType<typeof forceY>).strength(0);
-						{
-							const zForce = simulation.force("z") as ReturnType<typeof forceZ> | null;
-							if (zForce) zForce.strength(0);
-						}
-						startTimer(DRAG_INTERVAL_MS);
-					}
-					break;
-				case "drag-move": {
+				case "drag-start": {
 					const node = nodes[message.id];
 					if (node) {
-						// Pin the grabbed node straight to the pointer — no easing,
-						// so it tracks 1:1 and never rubber-bands.
-						node.fx = message.x;
-						node.fy = message.y;
-						if (message.z !== undefined) node.fz = message.z;
-						// Keep the sim warm so the tow keeps propagating to neighbors.
-						if (simulation && simulation.alpha() < DRAG_ALPHA_TARGET) {
-							simulation.alpha(DRAG_ALPHA_TARGET);
-						}
+						node.fx = node.x ?? 0;
+						node.fy = node.y ?? 0;
+						if (node.z !== undefined) node.fz = node.z;
+					}
+					if (physicsDisabled || !simulation) break;
+					// Keep the real sim running: pin the node, add a little warmth
+					// (ramped, so no jerk). Links tow neighbors and the tow spreads
+					// hop by hop. Forces stay at settle values — no contraction.
+					simulation.alphaTarget(DRAG_ALPHA_TARGET);
+					if (simulation.alpha() < DRAG_GRAB_ALPHA) simulation.alpha(DRAG_GRAB_ALPHA);
+					if (!running) startTimer(DRAG_INTERVAL_MS);
+					break;
+				}
+				case "drag-move": {
+					const node = nodes[message.id];
+					if (!node) break;
+					node.fx = message.x;
+					node.fy = message.y;
+					if (message.z !== undefined) node.fz = message.z;
+					if (physicsDisabled || !simulation) {
+						// No physics: just reposition the grabbed node and repaint.
+						node.x = message.x;
+						node.y = message.y;
+						if (message.z !== undefined) node.z = message.z;
+						const positions = snapshotPositions();
+						post({ type: "tick", positions, alpha: 0 }, [positions.buffer]);
 					}
 					break;
 				}
-				case "drag-end":
-					if (simulation) {
-						// The node stays fixed at the last pointer position (fx set by
-						// drag-move); the host may unpin it later.
-						simulation.alphaTarget(0);
-						simulation.velocityDecay(params.velocityDecay);
-						(simulation.force("charge") as ReturnType<typeof forceManyBody>).theta(BARNES_HUT_THETA);
-						(simulation.force("link") as ReturnType<typeof forceLink>)
-							.strength(effectiveLinkStrength());
-						// Restore centering that was suppressed during the drag.
-						(simulation.force("x") as ReturnType<typeof forceX>).strength(effectiveCentering());
-						(simulation.force("y") as ReturnType<typeof forceY>).strength(effectiveCentering());
-						{
-							const zForce = simulation.force("z") as ReturnType<typeof forceZ> | null;
-							if (zForce) zForce.strength(effectiveCentering());
-						}
-						// Elastic layouts rebound after the drag instead of
-						// freezing wherever the pointer left them.
-						if (params.elasticity > 0) {
-							simulation.alpha(Math.max(simulation.alpha(), 0.15 + params.elasticity * 0.35));
-							if (!running) startTimer(FRAME_INTERVAL_MS);
-						}
-						if (running) startTimer(FRAME_INTERVAL_MS);
+				case "drag-end": {
+					if (physicsDisabled || !simulation) {
+						const positions = snapshotPositions();
+						post({ type: "end", positions }, [positions.buffer]);
+						break;
 					}
+					// Stop warming and let the sim cool where it is — no rebound.
+					simulation.alphaTarget(0);
 					break;
+				}
 				case "pin": {
 					const node = nodes[message.id];
 					if (node) {

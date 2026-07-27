@@ -9,7 +9,16 @@ import {
 import { convexHull, type Point } from "../analysis/hull";
 import { pointInPolygon } from "../analysis/geometry";
 import type { GraphModel } from "../data/GraphStore";
+import { DRAG_THRESHOLD_PX, dragTargetPosition, isDragGesture } from "./dragMath";
 import { EdgeMesh } from "./EdgeMesh";
+import { HOVER_RADIUS_PX, pickNodeAt } from "./hitTest";
+import {
+	emphasisBoost,
+	fogFactor,
+	mergeHiddenMask,
+	nodeAlpha,
+	sizeDepth,
+} from "./nodeAppearance";
 import { createNodeTexture, createStarTexture, STAR_SIZE_FACTOR } from "./NodeTexture";
 import { Camera3D } from "./projection";
 import { Viewport } from "./Viewport";
@@ -17,11 +26,6 @@ import { Viewport } from "./Viewport";
 const BASE_NODE_RADIUS = 4;
 const DEGREE_RADIUS_BOOST = 0.35; // radius grows with sqrt(degree)
 const MAX_NODE_RADIUS = 16;
-// 3D depth floors: keep far nodes legible when the camera pulls back instead of
-// letting perspective shrink them to specks and fog dim them to near-black.
-const MIN_SIZE_DEPTH = 0.5;
-const FOG_FLOOR = 0.55;
-const HOVER_RADIUS_PX = 12;
 const DEFAULT_LABEL_ZOOM_THRESHOLD = 0.9;
 const DEFAULT_LABEL_FONT_SIZE = 11;
 const LABEL_COUNT_LIMIT = 150;
@@ -30,12 +34,6 @@ const EDGE_ALPHA = 0.25;
 // Text rasterization is expensive; creating many labels in one frame causes
 // visible hitches during panning, so budget creations per frame.
 const NEW_LABELS_PER_FRAME = 4;
-const DIM_ALPHA = 0.12;
-/** Hover emphasis: sprite grows, neighbors stay lit, the rest recedes. */
-const HOVER_SIZE_BOOST = 1.9;
-/** Search/overlay matches grow a little so they read at a glance. */
-const HIGHLIGHT_SIZE_BOOST = 1.45;
-const HOVER_NEIGHBOR_ALPHA = 0.9;
 const CULL_MIN_INTERVAL_MS = 30;
 const MIN_LABEL_SCREEN_PX = 8;
 const DOUBLE_CLICK_MS = 350;
@@ -53,9 +51,6 @@ export interface RendererCallbacks {
 	onNodeDragEnd(nodeId: number): void;
 	onLassoSelect(nodeIds: number[], event: PointerEvent): void;
 }
-
-/** Pointer must travel this many pixels before a press becomes a drag. */
-const DRAG_THRESHOLD_PX = 4;
 
 interface ThemeColors {
 	node: number;
@@ -273,6 +268,20 @@ export class GraphRenderer {
 
 	/** New xyz frame from the layout worker (stride 3). */
 	updatePositions(positions3: Float32Array): void {
+		// While a drag is active the local pointer position is fresher than the
+		// worker frame (the worker echoes the previous drag-move), so keep the
+		// local coords — otherwise the grabbed node rubber-bands behind the
+		// cursor as stale frames overwrite it.
+		if (
+			this.draggingId !== null &&
+			this.positions3 &&
+			this.positions3.length === positions3.length
+		) {
+			const i = this.draggingId * 3;
+			positions3[i] = this.positions3[i];
+			positions3[i + 1] = this.positions3[i + 1];
+			positions3[i + 2] = this.positions3[i + 2];
+		}
 		this.positions3 = positions3;
 		this.reproject();
 	}
@@ -488,24 +497,13 @@ export class GraphRenderer {
 
 	private syncEdgeVisibility(): void {
 		if (!this.edgeMesh) return;
-		let mask = this.hiddenMask;
-		if (this.camera.enabled && this.depthScales) {
-			if (!this.mergedHiddenMask || this.mergedHiddenMask.length !== this.depthScales.length) {
-				this.mergedHiddenMask = new Uint8Array(this.depthScales.length);
-			}
-			const merged = this.mergedHiddenMask;
-			for (let i = 0; i < merged.length; i++) {
-				merged[i] = (mask !== null && mask[i] === 1) || this.depthScales[i] === 0 ? 1 : 0;
-			}
-			mask = merged;
-		}
+		const { mask, buffer } = mergeHiddenMask(
+			this.hiddenMask,
+			this.camera.enabled ? this.depthScales : null,
+			this.mergedHiddenMask
+		);
+		this.mergedHiddenMask = buffer;
 		this.edgeMesh.setHiddenNodes(mask);
-	}
-
-	/** Perspective depth clamped for sizing: far nodes stop shrinking below a
-	 *  floor, but nodes behind the camera (depth 0) stay hidden. */
-	private sizeDepth(depth: number): number {
-		return depth <= 0 ? 0 : Math.max(depth, MIN_SIZE_DEPTH);
 	}
 
 	/** Blow up the hovered sprite and lift it above the crowd. */
@@ -513,13 +511,11 @@ export class GraphRenderer {
 		if (!this.radii) return;
 		for (let i = 0; i < this.sprites.length; i++) {
 			const depth = this.camera.enabled && this.depthScales ? this.depthScales[i] : 1;
-			const boost =
-				i === this.hoveredId
-					? HOVER_SIZE_BOOST
-					: this.highlightMask !== null && this.highlightMask[i] === 1
-						? HIGHLIGHT_SIZE_BOOST
-						: 1;
-			this.sprites[i].setSize(this.radii[i] * 2 * this.sizeDepth(depth) * boost * this.spriteScale);
+			const boost = emphasisBoost(
+				i === this.hoveredId,
+				this.highlightMask !== null && this.highlightMask[i] === 1
+			);
+			this.sprites[i].setSize(this.radii[i] * 2 * sizeDepth(depth) * boost * this.spriteScale);
 		}
 		if (this.hoveredId !== null) {
 			// zIndex only matters when the layer is sorted (3D mode).
@@ -530,29 +526,15 @@ export class GraphRenderer {
 	private applyNodeAlpha(): void {
 		const fogged = this.camera.enabled && this.depthScales;
 		for (let i = 0; i < this.sprites.length; i++) {
-			const glow = this.encodedGlow ? this.encodedGlow[i] : 1;
-			const dimmed = this.dimMask !== null && this.dimMask[i] === 0;
-			const factor = this.alphaFactors ? this.alphaFactors[i] : 1;
-			// Far fog: distant nodes fade. Near fade: nodes streaking past
-			// the camera dissolve over the last ~200 world units instead of
-			// popping out at the near plane.
-			let fog = 1;
-			if (fogged) {
-				const depth = this.depthScales![i];
-				fog = Math.min(1, Math.max(FOG_FLOOR, (depth - 0.2) * 1.3));
-				if (depth > 1) {
-					const distance = this.camera.focal / depth;
-					fog *= Math.min(1, Math.max(0, (distance - 40) / 200));
-				}
-			}
-			let alpha = (dimmed ? glow * DIM_ALPHA : glow) * factor * fog;
-			if (this.hoveredId !== null) {
-				// Lift the hovered node and its neighbors; leave the rest of the
-				// scene at its normal brightness (no whole-scene dimming).
-				if (i === this.hoveredId) alpha = 1;
-				else if (this.hoverNeighbors.has(i)) alpha = Math.max(alpha, HOVER_NEIGHBOR_ALPHA);
-			}
-			this.sprites[i].alpha = alpha;
+			this.sprites[i].alpha = nodeAlpha({
+				glow: this.encodedGlow ? this.encodedGlow[i] : 1,
+				dimmed: this.dimMask !== null && this.dimMask[i] === 0,
+				factor: this.alphaFactors ? this.alphaFactors[i] : 1,
+				fog: fogged ? fogFactor(this.depthScales![i], this.camera.focal) : 1,
+				hoverActive: this.hoveredId !== null,
+				isHovered: i === this.hoveredId,
+				isHoverNeighbor: this.hoverNeighbors.has(i),
+			});
 		}
 	}
 
@@ -687,13 +669,11 @@ export class GraphRenderer {
 				sprite.position.set(this.positions[i * 2], this.positions[i * 2 + 1]);
 				if (threeD) {
 					const depth = threeD[i];
-					const boost =
-						i === this.hoveredId
-							? HOVER_SIZE_BOOST
-							: this.highlightMask !== null && this.highlightMask[i] === 1
-								? HIGHLIGHT_SIZE_BOOST
-								: 1;
-					sprite.setSize(this.radii[i] * 2 * this.sizeDepth(depth) * boost * this.spriteScale);
+					const boost = emphasisBoost(
+						i === this.hoveredId,
+						this.highlightMask !== null && this.highlightMask[i] === 1
+					);
+					sprite.setSize(this.radii[i] * 2 * sizeDepth(depth) * boost * this.spriteScale);
 					sprite.zIndex = i === this.hoveredId ? Number.MAX_SAFE_INTEGER : depth;
 				}
 			}
@@ -910,25 +890,16 @@ export class GraphRenderer {
 		if (!this.app || !this.positions || !this.radii || !this.viewport) return null;
 		const rect = this.app.canvas.getBoundingClientRect();
 		const point = this.viewport.toWorld(clientX - rect.left, clientY - rect.top);
-		const hitRadiusWorld = HOVER_RADIUS_PX / this.viewport.scale;
 
-		let best: number | null = null;
-		let bestDistance = Infinity;
-		for (let i = 0; i < this.radii.length; i++) {
-			if (this.hiddenMask !== null && this.hiddenMask[i] === 1) continue;
-			if (this.depthScales !== null && this.depthScales[i] === 0) continue;
-			const dx = this.positions[i * 2] - point.x;
-			const dy = this.positions[i * 2 + 1] - point.y;
-			const distance = Math.hypot(dx, dy);
-			// Visual radius includes the 3D depth scale, else near/far nodes
-			// miss clicks in 3D mode.
-			const visualRadius = this.radii[i] * (this.depthScales ? this.depthScales[i] : 1);
-			if (distance <= Math.max(visualRadius, hitRadiusWorld) && distance < bestDistance) {
-				best = i;
-				bestDistance = distance;
-			}
-		}
-		return best;
+		return pickNodeAt({
+			positions: this.positions,
+			radii: this.radii,
+			pointerX: point.x,
+			pointerY: point.y,
+			hitRadius: HOVER_RADIUS_PX / this.viewport.scale,
+			hiddenMask: this.hiddenMask,
+			depthScales: this.depthScales,
+		});
 	}
 
 	/** Node pressed but not yet moved past the drag threshold. */
@@ -998,11 +969,15 @@ export class GraphRenderer {
 			return;
 		}
 		if (this.pressedId !== null && this.pressedEvent) {
-			const travel = Math.hypot(
-				event.clientX - this.pressedEvent.clientX,
-				event.clientY - this.pressedEvent.clientY
-			);
-			if (travel >= DRAG_THRESHOLD_PX) {
+			if (
+				isDragGesture(
+					this.pressedEvent.clientX,
+					this.pressedEvent.clientY,
+					event.clientX,
+					event.clientY,
+					DRAG_THRESHOLD_PX
+				)
+			) {
 				this.draggingId = this.pressedId;
 				if (this.viewport) this.viewport.suppressPan = true;
 				this.callbacks.onNodeDragStart(this.draggingId);
@@ -1027,18 +1002,29 @@ export class GraphRenderer {
 		const point = this.viewport.toWorld(event.clientX - rect.left, event.clientY - rect.top);
 		const id = this.draggingId;
 
-		if (this.camera.enabled && this.depthScales && this.positions) {
-			// Move in the screen plane at the node's depth; z stays put.
-			const dxScreen = point.x - this.positions[id * 2];
-			const dyScreen = point.y - this.positions[id * 2 + 1];
-			const [dx, dy, dz] = this.camera.unprojectDelta(dxScreen, dyScreen, this.depthScales[id]);
-			this.positions3[id * 3] += dx;
-			this.positions3[id * 3 + 1] += dy;
-			this.positions3[id * 3 + 2] += dz;
-		} else {
-			this.positions3[id * 3] = point.x;
-			this.positions3[id * 3 + 1] = point.y;
-		}
+		// Screen-plane dragging needs a fresh projection; without one fall back to
+		// the flat path (pointer world position = node position).
+		const projected = this.camera.enabled && this.depthScales && this.positions;
+		const target = dragTargetPosition({
+			camera: projected ? this.camera : null,
+			current: {
+				x: this.positions3[id * 3],
+				y: this.positions3[id * 3 + 1],
+				z: this.positions3[id * 3 + 2],
+			},
+			pointerWorldX: point.x,
+			pointerWorldY: point.y,
+			projectedX: this.positions ? this.positions[id * 2] : 0,
+			projectedY: this.positions ? this.positions[id * 2 + 1] : 0,
+			depthScale: this.depthScales ? this.depthScales[id] : 1,
+		});
+		// null = the node is behind the camera; keep its last good position
+		// instead of writing Infinity into the layout.
+		if (!target) return;
+
+		this.positions3[id * 3] = target.x;
+		this.positions3[id * 3 + 1] = target.y;
+		this.positions3[id * 3 + 2] = target.z;
 		this.reproject();
 		this.callbacks.onNodeDrag(
 			id,

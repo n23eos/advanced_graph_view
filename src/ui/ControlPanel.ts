@@ -337,6 +337,9 @@ export class ControlPanel {
 		this.checkboxRow(physics, "Free layout", this.state.physics.freeLayout, (value) => {
 			this.setState({ ...this.state, physics: { ...this.state.physics, freeLayout: value } });
 		});
+		this.checkboxRow(physics, "Отключить физику", this.state.physics.disabled ?? false, (value) => {
+			this.setState({ ...this.state, physics: { ...this.state.physics, disabled: value } });
+		});
 		const button = physics.createEl("button", { text: "Re-form the cloud" });
 		button.addEventListener("click", () => this.callbacks.onReheat());
 	}

@@ -24,6 +24,7 @@ import { TimelineBar, type TimelineMode } from "../ui/TimelineBar";
 import { CameraWidget } from "../ui/CameraWidget";
 import { ToolBar, type CursorTool } from "../ui/ToolBar";
 import { graphToGexf, graphToJson } from "../export/exporters";
+import { computeGroups, depthByAge, depthByCluster } from "./layoutGrouping";
 import type GraphInsightPlugin from "../main";
 
 export const GRAPH_INSIGHT_VIEW_TYPE = "graph-insight-view";
@@ -1030,26 +1031,13 @@ export class GraphInsightView extends ItemView {
 
 	private computeDepthOverride(state: PanelState): Float32Array | null {
 		if (!state.view3d.enabled || state.view3d.depthSource === "physics" || !this.model) return null;
-		const count = this.model.nodes.length;
-		const depths = new Float32Array(count);
-		const SPREAD = 700;
 		if (state.view3d.depthSource === "cluster" && this.metrics) {
-			const layers = Math.max(this.metrics.communityCount, 1);
-			for (let i = 0; i < count; i++) {
-				depths[i] = ((this.metrics.community[i] + 0.5) / layers - 0.5) * SPREAD;
-			}
-		} else if (state.view3d.depthSource === "age") {
-			let min = Infinity, max = -Infinity;
-			for (const f of this.facts) {
-				if (f.ctime < min) min = f.ctime;
-				if (f.ctime > max) max = f.ctime;
-			}
-			const range = Math.max(max - min, 1);
-			for (let i = 0; i < count; i++) {
-				depths[i] = ((this.facts[i].ctime - min) / range - 0.5) * SPREAD;
-			}
+			return depthByCluster(this.metrics.community, this.metrics.communityCount);
 		}
-		return depths;
+		if (state.view3d.depthSource === "age") {
+			return depthByAge(this.facts);
+		}
+		return new Float32Array(this.model.nodes.length);
 	}
 
 	private lastPhysics = "";
@@ -1065,6 +1053,9 @@ export class GraphInsightView extends ItemView {
 		if (key === this.lastPhysics) return;
 		this.lastPhysics = key;
 		this.layout?.setParams({ ...state.physics, collideRadius });
+
+		// Physics off: the worker freezes itself; don't reheat it back to life.
+		if (state.physics.disabled) return;
 
 		// Toggling «Свободно» re-forms the whole layout: drop the temporary
 		// pins left by dragging (explicit pins stay) and run the simulation
@@ -1092,29 +1083,8 @@ export class GraphInsightView extends ItemView {
 	 *  a shared tag / folder clustering them into clumps. */
 	private applyLayoutRule(rule: LayoutRule): void {
 		if (!this.layout) return;
-		this.layout.setCluster(rule === "links" ? null : this.computeGroups(rule));
+		this.layout.setCluster(rule === "links" ? null : computeGroups(rule, this.facts));
 		this.layout.reheat(0.6);
-	}
-
-	/** Group id per node: same tag (primary) or same folder share an id; nodes
-	 *  with no tag / at the vault root are ungrouped (-1). */
-	private computeGroups(rule: LayoutRule): Int32Array {
-		const count = this.model?.nodes.length ?? 0;
-		const groups = new Int32Array(count).fill(-1);
-		const ids = new Map<string, number>();
-		for (let i = 0; i < count; i++) {
-			const facts = this.facts[i];
-			if (!facts) continue;
-			const key = rule === "tags" ? facts.tags[0] ?? "" : facts.folder;
-			if (!key || key === "/") continue;
-			let g = ids.get(key);
-			if (g === undefined) {
-				g = ids.size;
-				ids.set(key, g);
-			}
-			groups[i] = g;
-		}
-		return groups;
 	}
 
 	/** True when there is any temporary visual state Esc could clear. */

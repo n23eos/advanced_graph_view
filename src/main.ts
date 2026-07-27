@@ -47,24 +47,46 @@ interface HoverPreviewSettings {
 	delayMs: number;
 }
 
-const DEFAULT_SETTINGS: GraphInsightSettings = {
-	panel: {
-		channels: { size: "pagerank", color: "recency-edit", glow: null },
-		colorPreset: "recency",
+/** Fixed fields shared by every bundled panel snapshot, so each preset only
+ *  spells out what actually differs. */
+type PanelSpec = Pick<
+	PanelState,
+	"channels" | "colorPreset" | "physics" | "labels" | "edges" | "nodeScale" | "view3d"
+> & { showBubbles?: boolean };
+
+function makePanel(spec: PanelSpec): PanelState {
+	return {
+		channels: spec.channels,
+		colorPreset: spec.colorPreset,
 		collapsed: false,
 		overlays: { orphans: false, deadEnds: false, broken: false },
-		showBubbles: false,
+		showBubbles: spec.showBubbles ?? false,
 		showTimeline: false,
 		showTrail: false,
-		physics: {
-			repel: 30, linkDistance: 25, centering: 0.09,
-			linkStrength: 0.15, velocityDecay: 0.55, elasticity: 0.4, freeLayout: false,
-		},
-		labels: { show: true, fontSize: 11, zoomThreshold: 0.9, maxCount: 100, scaleWithZoom: true },
-		edges: { show: true, width: 1, opacity: 0.25 },
-		nodeScale: 1,
-		view3d: { enabled: false, depthSource: "physics", focal: 900 },
+		physics: spec.physics,
+		labels: spec.labels,
+		edges: spec.edges,
+		nodeScale: spec.nodeScale,
+		view3d: spec.view3d,
+	};
+}
+
+/** The out-of-the-box view: a 3D galaxy. Also seeded as the "Default 3D" preset. */
+const DEFAULT_3D_PANEL = makePanel({
+	channels: { size: "links-out", color: "cluster", glow: null },
+	colorPreset: "galaxy",
+	physics: {
+		repel: 112, linkDistance: 205, centering: 0.245,
+		linkStrength: 0.08, velocityDecay: 0.45, elasticity: 0.35, freeLayout: true, disabled: false,
 	},
+	labels: { show: true, fontSize: 11, zoomThreshold: 1.53, maxCount: 140, scaleWithZoom: true },
+	edges: { show: true, width: 0.4, opacity: 0.21 },
+	nodeScale: 1.2,
+	view3d: { enabled: true, depthSource: "physics", focal: 900 },
+});
+
+const DEFAULT_SETTINGS: GraphInsightSettings = {
+	panel: DEFAULT_3D_PANEL,
 	openDwellSeconds: 5,
 	hoverPreview: { enabled: true, words: 300, delayMs: 350 },
 	chipFilter: { tags: [], folders: [] },
@@ -74,78 +96,122 @@ const DEFAULT_SETTINGS: GraphInsightSettings = {
 	onboardingShown: false,
 };
 
-/** Build a full panel snapshot from the defaults with a few fields overridden,
- *  cloning nested objects so presets never share references with the base. */
-function presetPanel(overrides: Partial<PanelState>): PanelState {
-	const base = DEFAULT_SETTINGS.panel;
-	return {
-		...base,
-		...overrides,
-		channels: { ...base.channels, ...(overrides.channels ?? {}) },
-		overlays: { ...base.overlays, ...(overrides.overlays ?? {}) },
-		physics: { ...base.physics, ...(overrides.physics ?? {}) },
-		// Shared baseline from the user's "Default" preset — every built-in
-		// preset inherits its node size, thin links, low edge opacity and
-		// labels-off unless it explicitly overrides them.
-		nodeScale: overrides.nodeScale ?? 1.25,
-		labels: { ...base.labels, show: false, ...(overrides.labels ?? {}) },
-		edges: { ...base.edges, width: 0.2, opacity: 0.16, ...(overrides.edges ?? {}) },
-		view3d: { ...base.view3d, ...(overrides.view3d ?? {}) },
-	};
-}
-
 /** Bump when DEFAULT_VIEW_PRESETS changes so existing installs re-seed. */
-const VIEW_PRESET_VERSION = 4;
+const VIEW_PRESET_VERSION = 5;
 /** Default preset names retired in newer versions — removed on migration. */
-const RETIRED_VIEW_PRESETS = new Set(["3D галактика"]);
+const RETIRED_VIEW_PRESETS = new Set([
+	"3D галактика", "Хабы и кластеры", "Недавнее", "Мелкие ноды",
+	"Широкий разброс", "Плотный клубок", "Минимализм",
+]);
 
-/** Ready-made views seeded so the panel isn't empty out of the box. */
+/** Bundled presets, copied from the tuned Raincoat vault. "Default 3D" first —
+ *  it matches the out-of-the-box panel. */
 const DEFAULT_VIEW_PRESETS: ViewPreset[] = [
+	{ name: "Default 3D", panel: DEFAULT_3D_PANEL },
 	{
-		name: "Хабы и кластеры",
-		panel: presetPanel({
+		name: "Default 2D",
+		panel: makePanel({
+			channels: { size: "links-in", color: "cluster", glow: null },
+			colorPreset: "galaxy",
+			physics: {
+				repel: 157, linkDistance: 90, centering: 0.355,
+				linkStrength: 0.08, velocityDecay: 0.55, elasticity: 0.4, freeLayout: true,
+			},
+			labels: { show: false, fontSize: 11, zoomThreshold: 0.9, maxCount: 100, scaleWithZoom: true },
+			edges: { show: true, width: 0.2, opacity: 0.16 },
+			nodeScale: 2.05,
+			view3d: { enabled: false, depthSource: "physics", focal: 900 },
+		}),
+	},
+	{
+		name: "Hubs and Clusters",
+		panel: makePanel({
 			channels: { size: "pagerank", color: "cluster", glow: "links-total" },
 			colorPreset: "galaxy",
 			showBubbles: true,
+			physics: {
+				repel: 30, linkDistance: 25, centering: 0.09,
+				linkStrength: 0.15, velocityDecay: 0.55, elasticity: 0.4, freeLayout: false,
+			},
+			labels: { show: false, fontSize: 11, zoomThreshold: 0.9, maxCount: 100, scaleWithZoom: true },
+			edges: { show: true, width: 0.2, opacity: 0.16 },
+			nodeScale: 0.8,
+			view3d: { enabled: false, depthSource: "physics", focal: 900 },
 		}),
 	},
 	{
-		name: "Недавнее",
-		panel: presetPanel({
+		name: "Recent",
+		panel: makePanel({
 			channels: { size: "opens-30", color: "recency-edit", glow: null },
 			colorPreset: "heat",
+			physics: {
+				repel: 30, linkDistance: 25, centering: 0.09,
+				linkStrength: 0.15, velocityDecay: 0.55, elasticity: 0.4, freeLayout: false,
+			},
+			labels: { show: false, fontSize: 11, zoomThreshold: 0.9, maxCount: 100, scaleWithZoom: true },
+			edges: { show: true, width: 0.2, opacity: 0.16 },
+			nodeScale: 1.25,
+			view3d: { enabled: false, depthSource: "physics", focal: 900 },
 		}),
 	},
 	{
-		name: "Мелкие ноды",
-		panel: presetPanel({
+		name: "Wide Range",
+		panel: makePanel({
 			channels: { size: "pagerank", color: "recency-edit", glow: null },
-			nodeScale: 0.4,
-		}),
-	},
-	{
-		name: "Широкий разброс",
-		panel: presetPanel({
+			colorPreset: "recency",
 			physics: {
-				repel: 150, linkDistance: 120, centering: 0.02,
-				linkStrength: 0.08, velocityDecay: 0.55, elasticity: 0.4, freeLayout: false,
+				repel: 158, linkDistance: 120, centering: 0.355,
+				linkStrength: 0.08, velocityDecay: 0.55, elasticity: 0.4, freeLayout: true,
 			},
+			labels: { show: true, fontSize: 11, zoomThreshold: 0.73, maxCount: 40, scaleWithZoom: true },
+			edges: { show: true, width: 0.2, opacity: 0.16 },
+			nodeScale: 2.5,
+			view3d: { enabled: false, depthSource: "physics", focal: 900 },
 		}),
 	},
 	{
-		name: "Плотный клубок",
-		panel: presetPanel({
+		name: "Density",
+		panel: makePanel({
+			channels: { size: "pagerank", color: "recency-edit", glow: null },
+			colorPreset: "recency",
 			physics: {
-				repel: 15, linkDistance: 12, centering: 0.25,
-				linkStrength: 0.3, velocityDecay: 0.55, elasticity: 0.4, freeLayout: false,
+				repel: 5, linkDistance: 125, centering: 0.265,
+				linkStrength: 0.15, velocityDecay: 0.55, elasticity: 0.55, freeLayout: true,
 			},
+			labels: { show: false, fontSize: 11, zoomThreshold: 0.9, maxCount: 100, scaleWithZoom: true },
+			edges: { show: true, width: 0.15, opacity: 0.18 },
+			nodeScale: 0.95,
+			view3d: { enabled: false, depthSource: "physics", focal: 900 },
 		}),
 	},
 	{
-		name: "Минимализм",
-		panel: presetPanel({
+		name: "Small Nodes 2D",
+		panel: makePanel({
+			channels: { size: "pagerank", color: "recency-edit", glow: null },
+			colorPreset: "recency",
+			physics: {
+				repel: 30, linkDistance: 25, centering: 0.09,
+				linkStrength: 0.15, velocityDecay: 0.55, elasticity: 0.4, freeLayout: false,
+			},
+			labels: { show: true, fontSize: 10, zoomThreshold: 1.78, maxCount: 100, scaleWithZoom: true },
+			edges: { show: true, width: 0.2, opacity: 0.15 },
+			nodeScale: 0.55,
+			view3d: { enabled: false, depthSource: "physics", focal: 900 },
+		}),
+	},
+	{
+		name: "Minimalism",
+		panel: makePanel({
 			channels: { size: "pagerank", color: "recency-edit", glow: null },
 			colorPreset: "mono",
+			physics: {
+				repel: 30, linkDistance: 25, centering: 0.09,
+				linkStrength: 0.15, velocityDecay: 0.55, elasticity: 0.4, freeLayout: false,
+			},
+			labels: { show: false, fontSize: 11, zoomThreshold: 0.9, maxCount: 100, scaleWithZoom: true },
+			edges: { show: true, width: 0.2, opacity: 0.16 },
+			nodeScale: 1.25,
+			view3d: { enabled: false, depthSource: "physics", focal: 900 },
 		}),
 	},
 ];
