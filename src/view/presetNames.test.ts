@@ -63,8 +63,9 @@ describe("migrateViewPresets", () => {
 describe("presetDisplayName", () => {
 	it("translates a bundled preset by its id", () => {
 		initI18n("en");
+		// The stored `name` stays the original literal — it is the migration key.
 		expect(presetDisplayName({ builtinId: "hubs-clusters", name: "Hubs and Clusters" })).toBe(
-			"Hubs and Clusters"
+			"Hubs and clusters"
 		);
 	});
 

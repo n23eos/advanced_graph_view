@@ -20,6 +20,8 @@ export interface SearchCallbacks {
 }
 
 const SUGGESTION_LIMIT = 12;
+/** Blur-to-hide delay: long enough for a click on a suggestion to land first. */
+const SUGGEST_HIDE_DELAY_MS = 150;
 
 interface Suggestion {
 	label: string;
@@ -37,6 +39,8 @@ export class SearchBar {
 	private folders: string[] = [];
 	private activeSuggestion = -1;
 	private suggestions: Suggestion[] = [];
+	/** Pending blur-delay timer, cleared on destroy so it can never outlive the bar. */
+	private blurTimer: number | null = null;
 	/** Mount point for the standalone tag/folder dropdowns. */
 	readonly filtersHost: HTMLElement;
 
@@ -58,7 +62,11 @@ export class SearchBar {
 		});
 		this.input.addEventListener("blur", () => {
 			// Delay so a click on a suggestion lands before the box hides.
-			window.setTimeout(() => this.suggestBox.hide(), 150);
+			if (this.blurTimer !== null) window.clearTimeout(this.blurTimer);
+			this.blurTimer = window.setTimeout(() => {
+				this.blurTimer = null;
+				this.suggestBox.hide();
+			}, SUGGEST_HIDE_DELAY_MS);
 		});
 		this.input.addEventListener("keydown", (event) => {
 			if (this.suggestions.length > 0 && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
@@ -244,6 +252,10 @@ export class SearchBar {
 	}
 
 	destroy(): void {
+		if (this.blurTimer !== null) {
+			window.clearTimeout(this.blurTimer);
+			this.blurTimer = null;
+		}
 		this.root.remove();
 	}
 }

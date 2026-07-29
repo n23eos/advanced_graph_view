@@ -26,11 +26,11 @@ export const en = {
 	// Bundled preset names, addressed by their stable builtinId.
 	"preset.default-3d": "Default 3D",
 	"preset.default-2d": "Default 2D",
-	"preset.hubs-clusters": "Hubs and Clusters",
+	"preset.hubs-clusters": "Hubs and clusters",
 	"preset.recent": "Recent",
-	"preset.wide-range": "Wide Range",
+	"preset.wide-range": "Wide range",
 	"preset.density": "Density",
-	"preset.small-nodes-2d": "Small Nodes 2D",
+	"preset.small-nodes-2d": "Small nodes 2D",
 	"preset.minimalism": "Minimalism",
 
 	// ── Appearance ────────────────────────────────────────────────────
@@ -236,7 +236,7 @@ export const en = {
 	"command.toggleOrphans": "Toggle orphan highlight",
 	"command.toggleTrail": "Toggle session trail",
 	"command.toggleExplore": "Toggle explore mode",
-	"command.openInsights": "Open Insights dashboard",
+	"command.openInsights": "Open insights dashboard",
 	"command.exportPng": "Export current view as PNG",
 	"command.exportJson": "Export graph data as JSON",
 	"command.exportGexf": "Export graph data as GEXF",
