@@ -385,6 +385,15 @@ export class GraphInsightView extends ItemView {
 		this.recomputeVisual();
 	}
 
+	get isFocused(): boolean {
+		return this.focusRootId !== null;
+	}
+
+	/** Leave focus mode from outside the view — the command palette. */
+	leaveFocus(): void {
+		if (this.focusRootId !== null) this.exitFocus();
+	}
+
 	private renderFocusBar(): void {
 		if (!this.focusBar || !this.model || this.focusRootId === null) return;
 		const distances = this.currentFocusDistances();

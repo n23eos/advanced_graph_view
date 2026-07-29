@@ -341,21 +341,53 @@ export default class GraphInsightPlugin extends Plugin {
 				await (view.isExploring ? view.exitExplore() : view.enterExplore());
 			},
 		});
+		// Panel toggles. Each one only makes sense with the graph on screen, so
+		// they stay out of the palette while it is closed rather than silently
+		// doing nothing.
+		this.addPanelToggle("toggle-orphan-highlight", "command.toggleOrphans", (state) => ({
+			...state,
+			overlays: { ...state.overlays, orphans: !state.overlays.orphans },
+		}));
+		this.addPanelToggle("toggle-dead-ends", "command.toggleDeadEnds", (state) => ({
+			...state,
+			overlays: { ...state.overlays, deadEnds: !state.overlays.deadEnds },
+		}));
+		this.addPanelToggle("toggle-broken-links", "command.toggleBroken", (state) => ({
+			...state,
+			overlays: { ...state.overlays, broken: !state.overlays.broken },
+		}));
+		this.addPanelToggle("toggle-session-trail", "command.toggleTrail", (state) => ({
+			...state,
+			showTrail: !state.showTrail,
+		}));
+		this.addPanelToggle("toggle-timeline", "command.toggleTimeline", (state) => ({
+			...state,
+			showTimeline: !state.showTimeline,
+		}));
+		this.addPanelToggle("toggle-cluster-bubbles", "command.toggleBubbles", (state) => ({
+			...state,
+			showBubbles: !state.showBubbles,
+		}));
+		this.addPanelToggle("toggle-physics", "command.togglePhysics", (state) => ({
+			...state,
+			physics: { ...state.physics, disabled: !state.physics.disabled },
+		}));
+		this.addPanelToggle("toggle-3d", "command.toggle3d", (state) => ({
+			...state,
+			view3d: { ...state.view3d, enabled: !state.view3d.enabled },
+		}));
+
 		this.addCommand({
-			id: "toggle-orphan-highlight",
-			name: t("command.toggleOrphans"),
-			callback: () => void this.getGraphView()?.updatePanelState((state) => ({
-				...state,
-				overlays: { ...state.overlays, orphans: !state.overlays.orphans },
-			})),
-		});
-		this.addCommand({
-			id: "toggle-session-trail",
-			name: t("command.toggleTrail"),
-			callback: () => void this.getGraphView()?.updatePanelState((state) => ({
-				...state,
-				showTrail: !state.showTrail,
-			})),
+			id: "exit-focus-mode",
+			name: t("command.exitFocus"),
+			// Offered only while focus mode is actually on: otherwise the palette
+			// lists an action with nothing to undo.
+			checkCallback: (checking) => {
+				const view = this.getGraphView();
+				if (!view?.isFocused) return false;
+				if (!checking) view.leaveFocus();
+				return true;
+			},
 		});
 		this.addCommand({
 			id: "open-insights",
@@ -445,6 +477,25 @@ export default class GraphInsightPlugin extends Plugin {
 	async saveViewPresets(viewPresets: ViewPreset[]): Promise<void> {
 		this.settings = { ...this.settings, viewPresets };
 		await this.saveData(this.settings);
+	}
+
+	/** Register a command that flips one field of the panel state. Hidden from
+	 *  the palette while the graph view is closed — there is nothing to flip. */
+	private addPanelToggle(
+		id: string,
+		nameKey: Parameters<typeof t>[0],
+		mutate: (state: PanelState) => PanelState
+	): void {
+		this.addCommand({
+			id,
+			name: t(nameKey),
+			checkCallback: (checking) => {
+				const view = this.getGraphView();
+				if (!view) return false;
+				if (!checking) void view.updatePanelState(mutate);
+				return true;
+			},
+		});
 	}
 
 	getGraphView(): GraphInsightView | null {
