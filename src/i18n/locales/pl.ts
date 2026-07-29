@@ -163,6 +163,8 @@ export const pl: Translation = {
 
 	"menu.open": "Otwórz",
 	"menu.openNewTab": "Otwórz w nowej karcie",
+	"menu.openRight": "Otwórz po prawej",
+	"menu.reveal": "Pokaż w eksploratorze plików",
 	"menu.focus": "Tryb fokusu",
 	"menu.explore": "Eksploruj stąd",
 	"menu.hide": "Ukryj węzeł",

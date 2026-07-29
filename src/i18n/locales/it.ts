@@ -163,6 +163,8 @@ export const it: Translation = {
 
 	"menu.open": "Apri",
 	"menu.openNewTab": "Apri in una nuova scheda",
+	"menu.openRight": "Apri a destra",
+	"menu.reveal": "Mostra nell'esploratore file",
 	"menu.focus": "Modalità focus",
 	"menu.explore": "Esplora da qui",
 	"menu.hide": "Nascondi nodo",

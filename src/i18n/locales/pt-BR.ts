@@ -163,6 +163,8 @@ export const ptBR: Translation = {
 
 	"menu.open": "Abrir",
 	"menu.openNewTab": "Abrir em nova aba",
+	"menu.openRight": "Abrir à direita",
+	"menu.reveal": "Mostrar no explorador de arquivos",
 	"menu.focus": "Modo foco",
 	"menu.explore": "Explorar a partir daqui",
 	"menu.hide": "Ocultar nó",

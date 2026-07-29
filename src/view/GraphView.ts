@@ -1,4 +1,15 @@
-import { ItemView, Keymap, Menu, Notice, TFile, debounce, getAllTags, type WorkspaceLeaf } from "obsidian";
+import {
+	ItemView,
+	Keymap,
+	Menu,
+	Notice,
+	TFile,
+	debounce,
+	getAllTags,
+	type TAbstractFile,
+	type View,
+	type WorkspaceLeaf,
+} from "obsidian";
 import { buildAdjacency, computeDistances, shortestPath } from "../analysis/focus";
 import { nameClusters, type ClusterContent } from "../analysis/clusterNames";
 import { computeOverlayMask, countOverlayMatches } from "../analysis/overlays";
@@ -717,6 +728,11 @@ export class GraphInsightView extends ItemView {
 		const menu = new Menu();
 		menu.addItem((item) => item.setTitle(t("menu.open")).setIcon("file-text").onClick(() => this.openNode(nodeId, false)));
 		menu.addItem((item) => item.setTitle(t("menu.openNewTab")).setIcon("file-plus").onClick(() => this.openNode(nodeId, true)));
+		menu.addItem((item) => item.setTitle(t("menu.openRight")).setIcon("separator-vertical").onClick(() => this.openNodeInSplit(nodeId)));
+		// Only offered when the core file explorer is actually loaded.
+		if (this.fileExplorer()) {
+			menu.addItem((item) => item.setTitle(t("menu.reveal")).setIcon("folder-open").onClick(() => this.revealNode(nodeId)));
+		}
 		menu.addItem((item) => item.setTitle(t("menu.focus")).setIcon("target").onClick(() => this.enterFocus(nodeId)));
 		menu.addItem((item) => item.setTitle(t("menu.explore")).setIcon("compass").onClick(() => void this.enterExplore(nodeId)));
 		menu.addSeparator();
@@ -773,11 +789,38 @@ export class GraphInsightView extends ItemView {
 	}
 
 	private openNode(nodeId: number, newTab: boolean): void {
-		if (!this.model) return;
-		const file = this.app.vault.getAbstractFileByPath(this.model.nodes[nodeId].path);
-		if (file instanceof TFile) {
-			void this.app.workspace.getLeaf(newTab ? "tab" : false).openFile(file);
+		const file = this.nodeFile(nodeId);
+		if (file) void this.app.workspace.getLeaf(newTab ? "tab" : false).openFile(file);
+	}
+
+	private openNodeInSplit(nodeId: number): void {
+		const file = this.nodeFile(nodeId);
+		if (file) void this.app.workspace.getLeaf("split").openFile(file);
+	}
+
+	/** Show the note in the file explorer's tree, the way the core graph does. */
+	private revealNode(nodeId: number): void {
+		const file = this.nodeFile(nodeId);
+		const explorer = this.fileExplorer();
+		if (!file || !explorer) return;
+		void this.app.workspace.revealLeaf(explorer.leaf);
+		explorer.view.revealInFolder(file);
+	}
+
+	private nodeFile(nodeId: number): TFile | null {
+		const path = this.model?.nodes[nodeId]?.path;
+		if (!path) return null;
+		const file = this.app.vault.getAbstractFileByPath(path);
+		return file instanceof TFile ? file : null;
+	}
+
+	/** The core file explorer, if it is loaded and still exposes revealInFolder. */
+	private fileExplorer(): { leaf: WorkspaceLeaf; view: FileExplorerView } | null {
+		for (const leaf of this.app.workspace.getLeavesOfType("file-explorer")) {
+			const view = asFileExplorer(leaf.view);
+			if (view) return { leaf, view };
 		}
+		return null;
 	}
 
 	/** Panel rows carry the translated name; the stored preset keeps its own. */
@@ -1489,6 +1532,18 @@ export class GraphInsightView extends ItemView {
 		this.renderer = null;
 		this.model = null;
 	}
+}
+
+/** The core file explorer reveals a file through `revealInFolder`, which is not
+ *  part of the public typings. Probed for at runtime rather than assumed: a
+ *  future Obsidian may drop it, and a missing menu item beats a crash. */
+interface FileExplorerView extends View {
+	revealInFolder(file: TAbstractFile): void;
+}
+
+function asFileExplorer(view: View): FileExplorerView | null {
+	const candidate = view as Partial<FileExplorerView>;
+	return typeof candidate.revealInFolder === "function" ? (view as FileExplorerView) : null;
 }
 
 function downloadBlob(fileName: string, blob: Blob): void {

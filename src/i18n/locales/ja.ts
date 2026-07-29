@@ -163,6 +163,8 @@ export const ja: Translation = {
 
 	"menu.open": "開く",
 	"menu.openNewTab": "新しいタブで開く",
+	"menu.openRight": "右側に開く",
+	"menu.reveal": "ファイルエクスプローラーで表示",
 	"menu.focus": "フォーカスモード",
 	"menu.explore": "ここから探索",
 	"menu.hide": "ノードを隠す",

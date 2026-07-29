@@ -163,6 +163,8 @@ export const uk: Translation = {
 
 	"menu.open": "Відкрити",
 	"menu.openNewTab": "Відкрити в новій вкладці",
+	"menu.openRight": "Відкрити праворуч",
+	"menu.reveal": "Показати в провіднику файлів",
 	"menu.focus": "Режим фокуса",
 	"menu.explore": "Досліджувати звідси",
 	"menu.hide": "Приховати вузол",

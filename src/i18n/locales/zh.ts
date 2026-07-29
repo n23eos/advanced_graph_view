@@ -163,6 +163,8 @@ export const zh: Translation = {
 
 	"menu.open": "打开",
 	"menu.openNewTab": "在新标签页打开",
+	"menu.openRight": "在右侧打开",
+	"menu.reveal": "在文件浏览器中显示",
 	"menu.focus": "聚焦模式",
 	"menu.explore": "从此处探索",
 	"menu.hide": "隐藏节点",

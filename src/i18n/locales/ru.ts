@@ -163,6 +163,8 @@ export const ru: Translation = {
 
 	"menu.open": "Открыть",
 	"menu.openNewTab": "Открыть в новой вкладке",
+	"menu.openRight": "Открыть справа",
+	"menu.reveal": "Показать в проводнике файлов",
 	"menu.focus": "Режим фокуса",
 	"menu.explore": "Исследовать отсюда",
 	"menu.hide": "Скрыть ноду",

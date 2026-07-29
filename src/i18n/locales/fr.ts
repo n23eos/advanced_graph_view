@@ -163,6 +163,8 @@ export const fr: Translation = {
 
 	"menu.open": "Ouvrir",
 	"menu.openNewTab": "Ouvrir dans un nouvel onglet",
+	"menu.openRight": "Ouvrir à droite",
+	"menu.reveal": "Afficher dans l'explorateur de fichiers",
 	"menu.focus": "Mode focus",
 	"menu.explore": "Explorer depuis ici",
 	"menu.hide": "Masquer le nœud",

@@ -164,6 +164,8 @@ export const de: Translation = {
 
 	"menu.open": "Öffnen",
 	"menu.openNewTab": "In neuem Tab öffnen",
+	"menu.openRight": "Rechts daneben öffnen",
+	"menu.reveal": "Im Dateibaum anzeigen",
 	"menu.focus": "Fokusmodus",
 	"menu.explore": "Von hier erkunden",
 	"menu.hide": "Knoten verstecken",

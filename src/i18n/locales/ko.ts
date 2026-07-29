@@ -163,6 +163,8 @@ export const ko: Translation = {
 
 	"menu.open": "열기",
 	"menu.openNewTab": "새 탭에서 열기",
+	"menu.openRight": "오른쪽에 열기",
+	"menu.reveal": "파일 탐색기에서 보기",
 	"menu.focus": "포커스 모드",
 	"menu.explore": "여기서 탐험",
 	"menu.hide": "노드 숨기기",

@@ -187,6 +187,8 @@ export const en = {
 	// ── Context menu ──────────────────────────────────────────────────
 	"menu.open": "Open",
 	"menu.openNewTab": "Open in new tab",
+	"menu.openRight": "Open to the right",
+	"menu.reveal": "Reveal in file explorer",
 	"menu.focus": "Focus mode",
 	"menu.explore": "Explore from here",
 	"menu.hide": "Hide node",
