@@ -43,6 +43,9 @@ Requires Obsidian **1.13.0** or newer.
 - **Search & filters** — native graph syntax (`path:`, `tag:`, `file:`, `-exclude`) plus new operators: `opened:>10`, `opened:30d>5`, `edited:<30d`, `created:>2024-01-01`, `links:>5`, `inlinks:0`, `unresolved:>0`, `cluster:"name"`. Live highlight while typing, Enter to hard-filter, saved presets.
 - **Focus mode** — double-click a node to see only its N-hop neighborhood (depth 1–4) with distance-based fading. Esc to exit.
 - **Explore mode** — travel the graph one link at a time, No Man's Sky style: the camera sits on a note, you point the mouse down one of its links, it lights up and names the note it leads to, and a click flies you there. Only the notes you can reach are lit and named; everything else fades to a backdrop. Backspace retraces, Esc leaves, and "Let go" keeps the mode running while you pick the next note anywhere in the vault. Wheel-zoom carries across hops as a ratio, so the framing follows you without ever parking the camera inside a hub. Aiming is by direction, not by pixel, so a hub with fifty links is still navigable. Turns 3D on and pauses physics while it runs — at runtime only, your saved settings are never touched.
+- **Follow active note** — a toolbar toggle: open a note anywhere in the vault and the camera moves to it and marks it. It stands aside while explore mode is flying the camera, and when the note is filtered out it leaves your filter alone rather than clearing it. In focus mode it rebuilds the neighborhood around the new note instead of panning.
+- **Pins** — hold a note in place against the physics. Pinned notes are ringed, survive graph rebuilds and restarts, and a lasso selection can be pinned or released in one go.
+- **Commands for everything** — every layer, the timeline, cluster bubbles, physics, 3D, explore and focus mode have command-palette entries, so you can bind whichever ones you use to your own hotkeys.
 - **Color schemes** — categorical palettes for folders/tags/clusters and gradient scales for metrics, plus glowing "galaxy" schemes with additive blending.
 - **Timeline** — watch your vault grow month by month with a play button and an activity sparkline.
 - **Session trail** — animated arrows retrace your navigation path through the vault, with replay.
@@ -72,7 +75,7 @@ Plugin data lives in `.obsidian/plugins/graph-insight/data/`:
 | File | Contents |
 |------|----------|
 | `usage.json` | aggregated open counts |
-| `positions.json` | saved node positions |
+| `positions.json` | saved node positions and pinned notes |
 
 Settings → Advanced Graph View has buttons to export usage as CSV, clear statistics, or reset all plugin data.
 
