@@ -134,6 +134,8 @@ export const fr: Translation = {
 	"tool.hide.hint": "Un clic retire la note du graphe",
 	"tool.pin": "Épingler",
 	"tool.pin.hint": "Un clic épingle ou libère la note",
+	"tool.follow": "Suivre",
+	"tool.follow.hint": "La caméra rejoint la note que vous ouvrez ailleurs dans le coffre",
 	"tool.depth": "Pas de voisinage",
 
 	"camera.toggleUi": "Masquer ou afficher tous les panneaux",
@@ -220,6 +222,7 @@ export const fr: Translation = {
 	"command.togglePhysics": "Basculer la physique",
 	"command.toggle3d": "Basculer le mode 3D",
 	"command.exitFocus": "Quitter le mode focus",
+	"command.toggleFollow": "Basculer le suivi de la note active",
 	"command.openInsights": "Ouvrir le tableau de bord Insights",
 	"command.exportPng": "Exporter la vue courante en PNG",
 	"command.exportJson": "Exporter les données du graphe en JSON",

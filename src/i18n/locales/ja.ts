@@ -134,6 +134,8 @@ export const ja: Translation = {
 	"tool.hide.hint": "クリックでノートをグラフから外す",
 	"tool.pin": "固定",
 	"tool.pin.hint": "クリックでノートを固定／解除",
+	"tool.follow": "追従",
+	"tool.follow.hint": "保管庫のどこかでノートを開くと、カメラがそこへ移動します",
 	"tool.depth": "近傍のステップ数",
 
 	"camera.toggleUi": "すべてのパネルを表示／非表示",
@@ -220,6 +222,7 @@ export const ja: Translation = {
 	"command.togglePhysics": "物理演算を切り替え",
 	"command.toggle3d": "3D モードを切り替え",
 	"command.exitFocus": "フォーカスモードを終了",
+	"command.toggleFollow": "アクティブなノートへの追従を切り替え",
 	"command.openInsights": "Insights ダッシュボードを開く",
 	"command.exportPng": "現在のビューを PNG で書き出す",
 	"command.exportJson": "グラフデータを JSON で書き出す",

@@ -134,6 +134,8 @@ export const it: Translation = {
 	"tool.hide.hint": "Il clic rimuove la nota dal grafo",
 	"tool.pin": "Fissa",
 	"tool.pin.hint": "Il clic fissa o libera la nota",
+	"tool.follow": "Segui",
+	"tool.follow.hint": "La telecamera raggiunge la nota che apri altrove nel vault",
 	"tool.depth": "Passi del vicinato",
 
 	"camera.toggleUi": "Nascondi o mostra tutti i pannelli",
@@ -220,6 +222,7 @@ export const it: Translation = {
 	"command.togglePhysics": "Attiva/disattiva la fisica",
 	"command.toggle3d": "Attiva/disattiva la modalità 3D",
 	"command.exitFocus": "Esci dalla modalità focus",
+	"command.toggleFollow": "Attiva/disattiva il seguito della nota attiva",
 	"command.openInsights": "Apri il pannello Insights",
 	"command.exportPng": "Esporta la vista corrente in PNG",
 	"command.exportJson": "Esporta i dati del grafo in JSON",

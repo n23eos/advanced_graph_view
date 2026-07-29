@@ -611,7 +611,8 @@
 	box-shadow: var(--shadow-s);
 }
 
-.graph-insight-toolbar-depth {
+.graph-insight-toolbar-depth,
+.graph-insight-toolbar-group {
 	display: flex;
 	align-items: center;
 	gap: 4px;

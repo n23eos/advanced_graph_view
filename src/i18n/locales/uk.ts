@@ -134,6 +134,8 @@ export const uk: Translation = {
 	"tool.hide.hint": "Клік прибирає нотатку з графа",
 	"tool.pin": "Закріпити",
 	"tool.pin.hint": "Клік закріплює або відпускає нотатку",
+	"tool.follow": "Слідувати",
+	"tool.follow.hint": "Камера переходить до нотатки, яку ви відкрили будь-де у сховищі",
 	"tool.depth": "Кроків оточення",
 
 	"camera.toggleUi": "Сховати або показати всі панелі",
@@ -220,6 +222,7 @@ export const uk: Translation = {
 	"command.togglePhysics": "Перемкнути фізику",
 	"command.toggle3d": "Перемкнути режим 3D",
 	"command.exitFocus": "Вийти з режиму фокуса",
+	"command.toggleFollow": "Перемкнути слідування за активною нотаткою",
 	"command.openInsights": "Відкрити панель Insights",
 	"command.exportPng": "Експортувати поточний вигляд у PNG",
 	"command.exportJson": "Експортувати дані графа у JSON",

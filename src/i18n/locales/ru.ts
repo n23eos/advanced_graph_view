@@ -134,6 +134,8 @@ export const ru: Translation = {
 	"tool.hide.hint": "Клик убирает заметку с графа",
 	"tool.pin": "Закрепить",
 	"tool.pin.hint": "Клик закрепляет или отпускает заметку",
+	"tool.follow": "Следовать",
+	"tool.follow.hint": "Камера переходит к заметке, которую вы открыли в любом месте хранилища",
 	"tool.depth": "Шагов окружения",
 
 	"camera.toggleUi": "Скрыть или показать все панели",
@@ -220,6 +222,7 @@ export const ru: Translation = {
 	"command.togglePhysics": "Переключить физику",
 	"command.toggle3d": "Переключить режим 3D",
 	"command.exitFocus": "Выйти из режима фокуса",
+	"command.toggleFollow": "Переключить следование за активной заметкой",
 	"command.openInsights": "Открыть панель Insights",
 	"command.exportPng": "Экспортировать текущий вид в PNG",
 	"command.exportJson": "Экспортировать данные графа в JSON",

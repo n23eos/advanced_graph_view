@@ -134,6 +134,8 @@ export const zh: Translation = {
 	"tool.hide.hint": "点击将笔记从图中移除",
 	"tool.pin": "固定",
 	"tool.pin.hint": "点击固定或释放笔记",
+	"tool.follow": "跟随",
+	"tool.follow.hint": "在库中任何地方打开笔记，镜头都会移动过去",
 	"tool.depth": "邻域步数",
 
 	"camera.toggleUi": "隐藏或显示所有面板",
@@ -220,6 +222,7 @@ export const zh: Translation = {
 	"command.togglePhysics": "切换物理",
 	"command.toggle3d": "切换 3D 模式",
 	"command.exitFocus": "退出聚焦模式",
+	"command.toggleFollow": "切换跟随当前笔记",
 	"command.openInsights": "打开 Insights 面板",
 	"command.exportPng": "将当前视图导出为 PNG",
 	"command.exportJson": "将图谱数据导出为 JSON",

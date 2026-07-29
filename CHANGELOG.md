@@ -22,6 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Pins survive a restart.** Pinned notes are marked with a ring, kept through
   graph rebuilds, and stored in `positions.json`. A lasso selection can be
   pinned or released in one go.
+- **Follow active note** — a toolbar toggle that moves the camera to whichever
+  note you open elsewhere in the vault and marks it as selected. It stands
+  aside when explore mode is driving the camera, when the note is filtered out,
+  and when the graph itself opened the note; in focus mode it rebuilds the
+  neighborhood around the new note instead of panning.
 - Every panel toggle now has a command: dead ends, broken links, timeline,
   cluster bubbles, physics, 3D, and an explicit exit from focus mode. No
   default hotkeys — assign your own in Obsidian's settings.

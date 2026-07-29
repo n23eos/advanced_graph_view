@@ -153,6 +153,8 @@ export const en = {
 	"tool.hide.hint": "Click removes the note from the graph",
 	"tool.pin": "Pin",
 	"tool.pin.hint": "Click pins or releases the note",
+	"tool.follow": "Follow",
+	"tool.follow.hint": "The camera moves to whichever note you open elsewhere in the vault",
 	"tool.depth": "Neighborhood steps",
 
 	// ── Camera widget ─────────────────────────────────────────────────
@@ -247,6 +249,7 @@ export const en = {
 	"command.togglePhysics": "Toggle physics",
 	"command.toggle3d": "Toggle 3D mode",
 	"command.exitFocus": "Exit focus mode",
+	"command.toggleFollow": "Toggle follow active note",
 	"command.openInsights": "Open insights dashboard",
 	"command.exportPng": "Export current view as PNG",
 	"command.exportJson": "Export graph data as JSON",

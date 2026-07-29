@@ -134,6 +134,8 @@ export const pl: Translation = {
 	"tool.hide.hint": "Kliknięcie usuwa notatkę z grafu",
 	"tool.pin": "Przypnij",
 	"tool.pin.hint": "Kliknięcie przypina lub zwalnia notatkę",
+	"tool.follow": "Podążaj",
+	"tool.follow.hint": "Kamera przechodzi do notatki otwartej gdziekolwiek w skarbcu",
 	"tool.depth": "Kroki sąsiedztwa",
 
 	"camera.toggleUi": "Ukryj lub pokaż wszystkie panele",
@@ -220,6 +222,7 @@ export const pl: Translation = {
 	"command.togglePhysics": "Przełącz fizykę",
 	"command.toggle3d": "Przełącz tryb 3D",
 	"command.exitFocus": "Wyjdź z trybu fokusu",
+	"command.toggleFollow": "Przełącz podążanie za aktywną notatką",
 	"command.openInsights": "Otwórz panel Insights",
 	"command.exportPng": "Eksportuj bieżący widok do PNG",
 	"command.exportJson": "Eksportuj dane grafu do JSON",

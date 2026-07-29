@@ -10,6 +10,7 @@ export type CursorTool = "open" | "links" | "path" | "hide" | "pin";
 export interface ToolBarCallbacks {
 	onToolChange(tool: CursorTool): void;
 	onDepthChange(depth: number): void;
+	onToggleFollow(enabled: boolean): void;
 }
 
 /** Lucide icon names — theme-tinted, so every glyph shares one tone. */
@@ -26,11 +27,13 @@ export class ToolBar {
 	private buttons = new Map<CursorTool, HTMLElement>();
 	private depthRow: HTMLElement;
 	private depthValue: HTMLElement;
+	private followButton!: HTMLElement;
 
 	constructor(
 		host: HTMLElement,
 		private tool: CursorTool,
 		depth: number,
+		private following: boolean,
 		private readonly callbacks: ToolBarCallbacks
 	) {
 		this.root = host.createDiv({ cls: "graph-insight-toolbar" });
@@ -44,6 +47,19 @@ export class ToolBar {
 			button.addEventListener("click", () => this.setTool(item.id));
 			this.buttons.set(item.id, button);
 		}
+
+		// Not a cursor tool but a standing mode, so it sits in its own group
+		// rather than joining the row of click behaviours.
+		const followGroup = this.root.createDiv({ cls: "graph-insight-toolbar-group" });
+		this.followButton = followGroup.createEl("button", { cls: "graph-insight-tool" });
+		setIcon(this.followButton, "locate-fixed");
+		const followDescription = `${t("tool.follow")} — ${t("tool.follow.hint")}`;
+		this.followButton.setAttribute("aria-label", followDescription);
+		this.followButton.setAttribute("title", followDescription);
+		this.followButton.addEventListener("click", () => {
+			this.setFollowing(!this.following);
+			this.callbacks.onToggleFollow(this.following);
+		});
 
 		// Depth control lives inline; only meaningful in the neighborhood mode.
 		this.depthRow = this.root.createDiv({ cls: "graph-insight-toolbar-depth" });
@@ -65,6 +81,13 @@ export class ToolBar {
 		this.applyActive();
 	}
 
+	/** Reflect the state without firing the callback — for the command palette,
+	 *  which flips the setting and then tells the bar about it. */
+	setFollowing(following: boolean): void {
+		this.following = following;
+		this.applyActive();
+	}
+
 	private setTool(tool: CursorTool): void {
 		this.tool = tool;
 		this.applyActive();
@@ -76,6 +99,7 @@ export class ToolBar {
 			button.toggleClass("is-active", id === this.tool);
 		}
 		this.depthRow.toggleClass("is-hidden", this.tool !== "links");
+		this.followButton?.toggleClass("is-active", this.following);
 	}
 
 	setStatus(text: string): void {

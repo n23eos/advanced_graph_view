@@ -134,6 +134,8 @@ export const ko: Translation = {
 	"tool.hide.hint": "클릭하면 노트를 그래프에서 뺍니다",
 	"tool.pin": "고정",
 	"tool.pin.hint": "클릭하면 노트를 고정하거나 풉니다",
+	"tool.follow": "따라가기",
+	"tool.follow.hint": "보관소 어디서든 노트를 열면 카메라가 그곳으로 이동합니다",
 	"tool.depth": "이웃 단계 수",
 
 	"camera.toggleUi": "모든 패널 숨기기/보이기",
@@ -220,6 +222,7 @@ export const ko: Translation = {
 	"command.togglePhysics": "물리 전환",
 	"command.toggle3d": "3D 모드 전환",
 	"command.exitFocus": "포커스 모드 종료",
+	"command.toggleFollow": "활성 노트 따라가기 전환",
 	"command.openInsights": "Insights 대시보드 열기",
 	"command.exportPng": "현재 보기를 PNG로 내보내기",
 	"command.exportJson": "그래프 데이터를 JSON으로 내보내기",

@@ -134,6 +134,8 @@ export const es: Translation = {
 	"tool.hide.hint": "El clic quita la nota del grafo",
 	"tool.pin": "Fijar",
 	"tool.pin.hint": "El clic fija o libera la nota",
+	"tool.follow": "Seguir",
+	"tool.follow.hint": "La cámara va a la nota que abras en cualquier parte de la bóveda",
 	"tool.depth": "Pasos del vecindario",
 
 	"camera.toggleUi": "Ocultar o mostrar todos los paneles",
@@ -220,6 +222,7 @@ export const es: Translation = {
 	"command.togglePhysics": "Alternar la física",
 	"command.toggle3d": "Alternar el modo 3D",
 	"command.exitFocus": "Salir del modo foco",
+	"command.toggleFollow": "Alternar el seguimiento de la nota activa",
 	"command.openInsights": "Abrir el panel Insights",
 	"command.exportPng": "Exportar la vista actual como PNG",
 	"command.exportJson": "Exportar los datos del grafo como JSON",

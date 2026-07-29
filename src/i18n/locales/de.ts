@@ -135,6 +135,8 @@ export const de: Translation = {
 	"tool.hide.hint": "Klick entfernt die Notiz aus dem Graphen",
 	"tool.pin": "Anheften",
 	"tool.pin.hint": "Klick heftet die Notiz an oder löst sie",
+	"tool.follow": "Folgen",
+	"tool.follow.hint": "Die Kamera springt zu der Notiz, die du anderswo im Tresor öffnest",
 	"tool.depth": "Nachbarschaftsschritte",
 
 	"camera.toggleUi": "Alle Panels aus- oder einblenden",
@@ -221,6 +223,7 @@ export const de: Translation = {
 	"command.togglePhysics": "Physik umschalten",
 	"command.toggle3d": "3D-Modus umschalten",
 	"command.exitFocus": "Fokusmodus verlassen",
+	"command.toggleFollow": "Aktiver Notiz folgen umschalten",
 	"command.openInsights": "Insights-Dashboard öffnen",
 	"command.exportPng": "Aktuelle Ansicht als PNG exportieren",
 	"command.exportJson": "Graphdaten als JSON exportieren",

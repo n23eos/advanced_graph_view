@@ -43,6 +43,9 @@ interface GraphInsightSettings {
 	hoverPreview: HoverPreviewSettings;
 	/** Last tag/folder filter, restored on the next session. */
 	chipFilter: { tags: string[]; folders: string[] };
+	/** Camera follows the note you open elsewhere in the vault. Not part of
+	 *  PanelState: it is how the view behaves, not what a view preset looks like. */
+	followActiveNote: boolean;
 }
 
 interface HoverPreviewSettings {
@@ -97,6 +100,7 @@ const DEFAULT_SETTINGS: GraphInsightSettings = {
 	openDwellSeconds: 5,
 	hoverPreview: { enabled: true, words: 300, delayMs: 350 },
 	chipFilter: { tags: [], folders: [] },
+	followActiveNote: false,
 	presets: [],
 	viewPresets: [],
 	viewPresetsVersion: 0,
@@ -378,6 +382,17 @@ export default class GraphInsightPlugin extends Plugin {
 		}));
 
 		this.addCommand({
+			id: "toggle-follow-active-note",
+			name: t("command.toggleFollow"),
+			checkCallback: (checking) => {
+				const view = this.getGraphView();
+				if (!view) return false;
+				if (!checking) view.setFollowActiveNote(!this.settings.followActiveNote);
+				return true;
+			},
+		});
+
+		this.addCommand({
 			id: "exit-focus-mode",
 			name: t("command.exitFocus"),
 			// Offered only while focus mode is actually on: otherwise the palette
@@ -461,6 +476,11 @@ export default class GraphInsightPlugin extends Plugin {
 
 	async savePanelState(panel: PanelState): Promise<void> {
 		this.settings = { ...this.settings, panel };
+		await this.saveData(this.settings);
+	}
+
+	async setFollowActiveNote(followActiveNote: boolean): Promise<void> {
+		this.settings = { ...this.settings, followActiveNote };
 		await this.saveData(this.settings);
 	}
 

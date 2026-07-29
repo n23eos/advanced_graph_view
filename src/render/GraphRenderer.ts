@@ -719,6 +719,19 @@ export class GraphRenderer {
 
 	/** Node drawn closest to the middle of the view — where explore mode
 	 *  starts when the user has not picked a node itself. */
+	/** Pan so one node sits in the middle of the pane, at the current zoom.
+	 *  Works off projected coordinates, so 3D follows along with 2D. */
+	centerOnNode(nodeId: number): void {
+		if (!this.app || !this.viewport || !this.positions) return;
+		if (nodeId * 2 + 1 >= this.positions.length) return;
+		this.viewport.centerOn(
+			this.positions[nodeId * 2],
+			this.positions[nodeId * 2 + 1],
+			this.app.canvas.clientWidth,
+			this.app.canvas.clientHeight
+		);
+	}
+
 	nodeNearestToViewCenter(): number | null {
 		if (!this.app || !this.positions || !this.viewport) return null;
 		const canvas = this.app.canvas;

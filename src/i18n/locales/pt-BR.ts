@@ -134,6 +134,8 @@ export const ptBR: Translation = {
 	"tool.hide.hint": "O clique remove a nota do grafo",
 	"tool.pin": "Fixar",
 	"tool.pin.hint": "O clique fixa ou solta a nota",
+	"tool.follow": "Seguir",
+	"tool.follow.hint": "A câmera vai até a nota que você abrir em qualquer lugar do cofre",
 	"tool.depth": "Passos da vizinhança",
 
 	"camera.toggleUi": "Ocultar ou mostrar todos os painéis",
@@ -220,6 +222,7 @@ export const ptBR: Translation = {
 	"command.togglePhysics": "Alternar a física",
 	"command.toggle3d": "Alternar o modo 3D",
 	"command.exitFocus": "Sair do modo foco",
+	"command.toggleFollow": "Alternar o seguimento da nota ativa",
 	"command.openInsights": "Abrir o painel Insights",
 	"command.exportPng": "Exportar a visão atual como PNG",
 	"command.exportJson": "Exportar os dados do grafo como JSON",

@@ -38,6 +38,7 @@ import { ToolBar, type CursorTool } from "../ui/ToolBar";
 import { graphToGexf, graphToJson } from "../export/exporters";
 import { computeGroups, depthByAge, depthByCluster } from "./layoutGrouping";
 import { presetDisplayName } from "./presetNames";
+import { resolveFollowAction } from "./followActiveNote";
 import { t } from "../i18n";
 import type GraphInsightPlugin from "../main";
 import type { ViewPreset } from "../main";
@@ -70,6 +71,11 @@ export class GraphInsightView extends ItemView {
 	private pinnedNodes = new Set<number>();
 	/** Explicit «Закрепить позицию» pins — survive regrouping. */
 	private explicitPins = new Set<number>();
+	/** Last mask handed to the renderer: 1 = filtered out. Read by the follow
+	 *  handler, which must not chase a note the user has filtered away. */
+	private hiddenMask: Uint8Array | null = null;
+	/** Path the graph itself just opened, so following can skip its own moves. */
+	private selfOpenedPath: string | null = null;
 	private tooltip: HTMLElement | null = null;
 	/** Node the tooltip currently describes; guards async preview reads and
 	 *  avoids rebuilding the tooltip on every same-node pointermove. */
@@ -254,20 +260,27 @@ export class GraphInsightView extends ItemView {
 			this.filterChips.setSelection(this.chipFilter);
 		}
 
-		this.toolBar = new ToolBar(container, this.cursorTool, this.focusDepth, {
-			onToolChange: (tool) => {
-				this.cursorTool = tool;
-				this.pathAnchor = null;
-				if (tool !== "links" && this.focusRootId !== null) this.exitFocus();
-			},
-			onDepthChange: (depth) => {
-				this.focusDepth = depth;
-				if (this.focusRootId !== null) {
-					this.renderFocusBar();
-					this.recomputeVisual();
-				}
-			},
-		});
+		this.toolBar = new ToolBar(
+			container,
+			this.cursorTool,
+			this.focusDepth,
+			this.plugin.settings.followActiveNote,
+			{
+				onToolChange: (tool) => {
+					this.cursorTool = tool;
+					this.pathAnchor = null;
+					if (tool !== "links" && this.focusRootId !== null) this.exitFocus();
+				},
+				onDepthChange: (depth) => {
+					this.focusDepth = depth;
+					if (this.focusRootId !== null) {
+						this.renderFocusBar();
+						this.recomputeVisual();
+					}
+				},
+				onToggleFollow: (enabled) => void this.plugin.setFollowActiveNote(enabled),
+			}
+		);
 
 		this.focusBar = container.createDiv({ cls: "graph-insight-focusbar" });
 		this.focusBar.hide();
@@ -298,6 +311,9 @@ export class GraphInsightView extends ItemView {
 		await this.rebuildGraph();
 
 		this.registerEvent(this.app.metadataCache.on("resolved", () => this.rebuildDebounced()));
+		this.registerEvent(
+			this.app.workspace.on("file-open", (file) => this.handleActiveNoteChanged(file))
+		);
 
 		if (!this.plugin.settings.onboardingShown) {
 			new OnboardingModal(this.app, () => void this.plugin.markOnboardingShown()).open();
@@ -398,6 +414,45 @@ export class GraphInsightView extends ItemView {
 
 	get isFocused(): boolean {
 		return this.focusRootId !== null;
+	}
+
+	// ── Follow active note ────────────────────────────────────────────
+
+	/**
+	 * The active note changed somewhere in the vault. What the graph does about
+	 * it — if anything — is decided by resolveFollowAction; this only gathers
+	 * the state that decision needs and carries out the verdict.
+	 */
+	private handleActiveNoteChanged(file: TFile | null): void {
+		// One shot: whichever event this flag was set for is the one it answers.
+		const openedByGraph = file !== null && file.path === this.selfOpenedPath;
+		this.selfOpenedPath = null;
+		if (!file || !this.model) return;
+
+		const id = this.model.pathToId.get(file.path);
+		const action = resolveFollowAction({
+			enabled: this.plugin.settings.followActiveNote,
+			graphVisible: this.containerEl.isShown(),
+			exploring: this.isExploring,
+			focused: this.isFocused,
+			openedByGraph,
+			inGraph: id !== undefined,
+			filteredOut: id !== undefined && this.hiddenMask?.[id] === 1,
+		});
+		if (id === undefined || action === "ignore") return;
+		if (action === "refocus") {
+			this.enterFocus(id);
+			return;
+		}
+		// Selection outlives the pan on purpose: it marks where you are, which
+		// is the whole point of following.
+		this.renderer?.setSelected(id);
+		this.renderer?.centerOnNode(id);
+	}
+
+	setFollowActiveNote(enabled: boolean): void {
+		void this.plugin.setFollowActiveNote(enabled);
+		this.toolBar?.setFollowing(enabled);
 	}
 
 	// ── Pins ──────────────────────────────────────────────────────────
@@ -697,6 +752,7 @@ export class GraphInsightView extends ItemView {
 			}
 		}
 		for (const id of this.hiddenNodes) ensureHidden()[id] = 1;
+		this.hiddenMask = hidden;
 		this.renderer.setHiddenMask(hidden);
 
 		let factors: Float32Array | null = null;
@@ -837,12 +893,16 @@ export class GraphInsightView extends ItemView {
 
 	private openNode(nodeId: number, newTab: boolean): void {
 		const file = this.nodeFile(nodeId);
-		if (file) void this.app.workspace.getLeaf(newTab ? "tab" : false).openFile(file);
+		if (!file) return;
+		this.selfOpenedPath = file.path;
+		void this.app.workspace.getLeaf(newTab ? "tab" : false).openFile(file);
 	}
 
 	private openNodeInSplit(nodeId: number): void {
 		const file = this.nodeFile(nodeId);
-		if (file) void this.app.workspace.getLeaf("split").openFile(file);
+		if (!file) return;
+		this.selfOpenedPath = file.path;
+		void this.app.workspace.getLeaf("split").openFile(file);
 	}
 
 	/** Show the note in the file explorer's tree, the way the core graph does. */
