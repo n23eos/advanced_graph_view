@@ -174,6 +174,8 @@ export const uk: Translation = {
 	"menu.path": "Шлях: {path}",
 	"menu.selected": "Вибрано нотаток: {count}",
 	"menu.hideSelected": "Приховати вибрані",
+	"menu.pinSelected": "Закріпити виділені",
+	"menu.unpinSelected": "Відкріпити виділені",
 	"menu.copyPaths": "Скопіювати шляхи",
 
 	"notice.pathStart": "Старт: {name}. Клікніть другу нотатку.",

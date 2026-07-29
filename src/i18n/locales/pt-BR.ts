@@ -174,6 +174,8 @@ export const ptBR: Translation = {
 	"menu.path": "Caminho: {path}",
 	"menu.selected": "Selecionadas: {count} notas",
 	"menu.hideSelected": "Ocultar a seleção",
+	"menu.pinSelected": "Fixar a seleção",
+	"menu.unpinSelected": "Soltar a seleção",
 	"menu.copyPaths": "Copiar os caminhos",
 
 	"notice.pathStart": "Início: {name}. Clique na segunda nota.",

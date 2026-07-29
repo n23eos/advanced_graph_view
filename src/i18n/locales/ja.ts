@@ -174,6 +174,8 @@ export const ja: Translation = {
 	"menu.path": "パス：{path}",
 	"menu.selected": "{count} 件のノートを選択中",
 	"menu.hideSelected": "選択を隠す",
+	"menu.pinSelected": "選択をピン留め",
+	"menu.unpinSelected": "選択のピンを外す",
 	"menu.copyPaths": "パスをクリップボードにコピー",
 
 	"notice.pathStart": "起点：{name}。2 つ目のノートをクリックしてください。",

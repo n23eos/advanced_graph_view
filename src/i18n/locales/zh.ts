@@ -174,6 +174,8 @@ export const zh: Translation = {
 	"menu.path": "路径：{path}",
 	"menu.selected": "已选择 {count} 篇笔记",
 	"menu.hideSelected": "隐藏所选",
+	"menu.pinSelected": "固定所选",
+	"menu.unpinSelected": "取消固定所选",
 	"menu.copyPaths": "复制路径到剪贴板",
 
 	"notice.pathStart": "起点：{name}。请点击第二篇笔记。",

@@ -9,6 +9,33 @@ import type { UsageLog } from "./UsageTracker";
 /** [x, y] in old saves, [x, y, z] since the pseudo-3D update. */
 export type PositionMap = Record<string, [number, number] | [number, number, number]>;
 
+/** What positions.json holds since pins became persistent. Pins are stored as
+ *  note paths, not node ids: ids are assigned per build and shift whenever the
+ *  vault gains or loses a note. */
+export interface SavedPositions {
+	positions: PositionMap;
+	pins: string[];
+}
+
+/**
+ * Accept both shapes positions.json has ever had: the current envelope, and the
+ * bare path→coords map written before pins existed. Returns null for anything
+ * that is not a usable object, so a corrupt file starts the plugin clean.
+ */
+export function normalizeSavedPositions(raw: unknown): SavedPositions | null {
+	if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
+
+	const candidate = raw as { positions?: unknown; pins?: unknown };
+	if (typeof candidate.positions !== "object" || candidate.positions === null) {
+		// Legacy file: the whole object is the position map.
+		return { positions: raw as PositionMap, pins: [] };
+	}
+	const pins = Array.isArray(candidate.pins)
+		? candidate.pins.filter((path): path is string => typeof path === "string")
+		: [];
+	return { positions: candidate.positions as PositionMap, pins };
+}
+
 export class PluginDataStore {
 	constructor(
 		private readonly app: App,
@@ -49,11 +76,11 @@ export class PluginDataStore {
 		return this.writeJson("usage.json", log);
 	}
 
-	loadPositions(): Promise<PositionMap | null> {
-		return this.readJson<PositionMap>("positions.json");
+	async loadPositions(): Promise<SavedPositions | null> {
+		return normalizeSavedPositions(await this.readJson<unknown>("positions.json"));
 	}
 
-	savePositions(positions: PositionMap): Promise<void> {
-		return this.writeJson("positions.json", positions);
+	savePositions(saved: SavedPositions): Promise<void> {
+		return this.writeJson("positions.json", saved);
 	}
 }

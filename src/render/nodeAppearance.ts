@@ -23,6 +23,17 @@ export const DIM_ALPHA = 0.12;
 /** Nodes dissolve over the last stretch before the near plane (world units). */
 const NEAR_FADE_START = 40;
 const NEAR_FADE_LENGTH = 200;
+/** World-unit clearance between a pinned node's sprite and its ring. */
+export const PIN_RING_GAP = 3;
+
+/**
+ * Radius of the ring marking a pinned node. Tracks the sprite it wraps: the
+ * same depth scaling the sprite gets, the same glow-scheme size factor, plus a
+ * fixed gap so the ring reads as an outline rather than a halo.
+ */
+export function pinRingRadius(baseRadius: number, depth: number, spriteScale: number): number {
+	return baseRadius * sizeDepth(depth) * spriteScale + PIN_RING_GAP;
+}
 
 /**
  * Depth clamped for sizing. Nodes behind the camera keep depth 0 so they stay

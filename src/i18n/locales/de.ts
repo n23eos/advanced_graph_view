@@ -175,6 +175,8 @@ export const de: Translation = {
 	"menu.path": "Pfad: {path}",
 	"menu.selected": "Ausgewählt: {count} Notizen",
 	"menu.hideSelected": "Auswahl verstecken",
+	"menu.pinSelected": "Auswahl anheften",
+	"menu.unpinSelected": "Auswahl lösen",
 	"menu.copyPaths": "Pfade kopieren",
 
 	"notice.pathStart": "Start: {name}. Zweite Notiz anklicken.",

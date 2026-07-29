@@ -6,10 +6,12 @@ import {
 	HOVER_NEIGHBOR_ALPHA,
 	HOVER_SIZE_BOOST,
 	MIN_SIZE_DEPTH,
+	PIN_RING_GAP,
 	emphasisBoost,
 	fogFactor,
 	mergeHiddenMask,
 	nodeAlpha,
+	pinRingRadius,
 	sizeDepth,
 } from "./nodeAppearance";
 
@@ -156,5 +158,33 @@ describe("mergeHiddenMask", () => {
 		const second = mergeHiddenMask(null, new Float32Array([1, 0, 1, 0]), first.buffer);
 		expect(second.buffer).not.toBe(first.buffer);
 		expect(second.buffer).toHaveLength(4);
+	});
+});
+
+describe("pinRingRadius", () => {
+	test("clears the sprite edge by a constant gap in 2D", () => {
+		// Arrange: depth 1 means "no perspective scaling", the flat case.
+		const radius = pinRingRadius(10, 1, 1);
+
+		// Assert
+		expect(radius).toBe(10 + PIN_RING_GAP);
+	});
+
+	test("shrinks with the sprite as the node recedes", () => {
+		const near = pinRingRadius(10, 1, 1);
+		const far = pinRingRadius(10, 0.6, 1);
+
+		expect(far).toBeLessThan(near);
+	});
+
+	test("follows the glow schemes' larger sprites", () => {
+		const plain = pinRingRadius(10, 1, 1);
+		const glowing = pinRingRadius(10, 1, 2);
+
+		expect(glowing).toBeGreaterThan(plain);
+	});
+
+	test("never floors below the gap, so a speck still shows a ring", () => {
+		expect(pinRingRadius(0, 1, 1)).toBe(PIN_RING_GAP);
 	});
 });

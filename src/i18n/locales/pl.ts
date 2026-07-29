@@ -174,6 +174,8 @@ export const pl: Translation = {
 	"menu.path": "Ścieżka: {path}",
 	"menu.selected": "Zaznaczono notatek: {count}",
 	"menu.hideSelected": "Ukryj zaznaczone",
+	"menu.pinSelected": "Przypnij zaznaczone",
+	"menu.unpinSelected": "Odepnij zaznaczone",
 	"menu.copyPaths": "Kopiuj ścieżki",
 
 	"notice.pathStart": "Start: {name}. Kliknij drugą notatkę.",

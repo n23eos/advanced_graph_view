@@ -174,6 +174,8 @@ export const ru: Translation = {
 	"menu.path": "Путь: {path}",
 	"menu.selected": "Выбрано заметок: {count}",
 	"menu.hideSelected": "Скрыть выбранные",
+	"menu.pinSelected": "Закрепить выделенные",
+	"menu.unpinSelected": "Открепить выделенные",
 	"menu.copyPaths": "Скопировать пути в буфер",
 
 	"notice.pathStart": "Старт: {name}. Кликните вторую заметку.",

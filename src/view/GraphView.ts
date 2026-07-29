@@ -400,6 +400,58 @@ export class GraphInsightView extends ItemView {
 		return this.focusRootId !== null;
 	}
 
+	// ── Pins ──────────────────────────────────────────────────────────
+
+	/** Explicit pins and the temporary ones a drag leaves behind both count:
+	 *  either way the node is holding still and the action is to release it. */
+	private isPinned(nodeId: number): boolean {
+		return this.explicitPins.has(nodeId) || this.pinnedNodes.has(nodeId);
+	}
+
+	/** Pin a node where it currently sits, or release it. Returns the state it
+	 *  ended up in, so callers can word their own feedback. */
+	private togglePin(nodeId: number): boolean {
+		if (this.isPinned(nodeId)) {
+			this.pinnedNodes.delete(nodeId);
+			this.explicitPins.delete(nodeId);
+			this.layout?.unpin(nodeId);
+			this.afterPinChange();
+			return false;
+		}
+		const positions = this.renderer?.currentPositions;
+		if (!positions) return false;
+		this.explicitPins.add(nodeId);
+		this.layout?.pin(
+			nodeId,
+			positions[nodeId * 3], positions[nodeId * 3 + 1], positions[nodeId * 3 + 2]
+		);
+		this.afterPinChange();
+		return true;
+	}
+
+	private setSelectionPinned(nodeIds: readonly number[], pinned: boolean): void {
+		const positions = this.renderer?.currentPositions;
+		if (!positions) return;
+		for (const id of nodeIds) {
+			if (pinned) {
+				this.explicitPins.add(id);
+				this.layout?.pin(id, positions[id * 3], positions[id * 3 + 1], positions[id * 3 + 2]);
+			} else {
+				this.explicitPins.delete(id);
+				this.pinnedNodes.delete(id);
+				this.layout?.unpin(id);
+			}
+		}
+		this.afterPinChange();
+	}
+
+	/** Drag pins stay out of the rings: every dragged node becomes one, and a
+	 *  graph full of rings says nothing. Only deliberate pins are marked. */
+	private afterPinChange(): void {
+		this.renderer?.setPinned(new Set(this.explicitPins));
+		this.savePositionsDebounced();
+	}
+
 	/** Leave focus mode from outside the view — the command palette. */
 	leaveFocus(): void {
 		if (this.focusRootId !== null) this.exitFocus();
@@ -741,22 +793,9 @@ export class GraphInsightView extends ItemView {
 			this.panel?.setHiddenNodeCount(this.hiddenNodes.size);
 			this.recomputeVisual();
 		}));
-		const pinned = this.explicitPins.has(nodeId) || this.pinnedNodes.has(nodeId);
+		const pinned = this.isPinned(nodeId);
 		menu.addItem((item) => item.setTitle(pinned ? t("menu.unpin") : t("menu.pin")).setIcon("pin").onClick(() => {
-			if (pinned) {
-				this.pinnedNodes.delete(nodeId);
-				this.explicitPins.delete(nodeId);
-				this.layout?.unpin(nodeId);
-			} else {
-				const positions = this.renderer?.currentPositions;
-				if (positions) {
-					this.explicitPins.add(nodeId);
-					this.layout?.pin(
-						nodeId,
-						positions[nodeId * 3], positions[nodeId * 3 + 1], positions[nodeId * 3 + 2]
-					);
-				}
-			}
+			this.togglePin(nodeId);
 		}));
 		menu.addSeparator();
 		menu.addItem((item) => item.setTitle(t("menu.copyLink")).setIcon("link").onClick(async () => {
@@ -778,6 +817,14 @@ export class GraphInsightView extends ItemView {
 			this.panel?.setHiddenNodeCount(this.hiddenNodes.size);
 			this.recomputeVisual();
 		}));
+		// One decision for the whole selection: a mixed lasso pins everything,
+		// an already-pinned one releases it. Toggling each node separately just
+		// swaps which half is pinned.
+		const allPinned = nodeIds.every((id) => this.isPinned(id));
+		menu.addItem((item) => item
+			.setTitle(allPinned ? t("menu.unpinSelected") : t("menu.pinSelected"))
+			.setIcon("pin")
+			.onClick(() => this.setSelectionPinned(nodeIds, !allPinned)));
 		menu.addItem((item) => item.setTitle(t("menu.copyPaths")).setIcon("copy").onClick(async () => {
 			// Write-only, and only from this explicit menu action — the plugin
 			// never reads the clipboard.
@@ -852,7 +899,7 @@ export class GraphInsightView extends ItemView {
 		if (this.model && sameModelShape(this.model, model)) return;
 		this.rebuilding = true;
 
-		const seed = await this.buildSeedPositions(model);
+		const { seed, pinnedPaths } = await this.buildSeedPositions(model);
 		this.model = model;
 		this.facts = this.buildFacts(model, files);
 		this.metrics = null;
@@ -860,6 +907,7 @@ export class GraphInsightView extends ItemView {
 		const view3d = this.plugin.settings.panel.view3d;
 		const dims = view3d.enabled && view3d.depthSource === "physics" ? 3 : 2;
 		this.layout.start(model, seed, dims);
+		this.restorePins(model, seed, pinnedPaths);
 		this.apply3D(this.plugin.settings.panel, false);
 		this.lastPhysics = "";
 		this.applyPhysics(this.plugin.settings.panel);
@@ -990,11 +1038,20 @@ export class GraphInsightView extends ItemView {
 		this.renderer.drawClusterHulls(groups);
 	}
 
-	/** Prefer live coordinates from the previous model, else saved positions. */
-	private async buildSeedPositions(model: GraphModel): Promise<Float32Array | undefined> {
+	/** Prefer live coordinates from the previous model, else saved positions.
+	 *  Also reports which notes are pinned, by path: a rebuild reassigns node
+	 *  ids, so the pins held in memory have to be re-resolved either way. */
+	private async buildSeedPositions(
+		model: GraphModel
+	): Promise<{ seed: Float32Array | undefined; pinnedPaths: string[] }> {
 		const previous = this.renderer?.currentPositions;
 		const saved = previous ? null : await this.plugin.dataStore.loadPositions();
-		if (!previous && !saved) return undefined;
+		const pinnedPaths = saved
+			? saved.pins
+			: [...this.explicitPins]
+					.map((id) => this.model?.nodes[id]?.path)
+					.filter((path): path is string => path !== undefined);
+		if (!previous && !saved) return { seed: undefined, pinnedPaths };
 
 		const seed = new Float32Array(model.nodes.length * 3);
 		for (const node of model.nodes) {
@@ -1009,7 +1066,7 @@ export class GraphInsightView extends ItemView {
 					z = previous[oldId * 3 + 2];
 				}
 			} else if (saved) {
-				const stored = saved[node.path];
+				const stored = saved.positions[node.path];
 				// Older files stored [x, y]; new ones store [x, y, z].
 				if (stored) [x, y, z = 0] = stored;
 			}
@@ -1018,7 +1075,30 @@ export class GraphInsightView extends ItemView {
 			seed[node.id * 3 + 1] = y ?? ((node.id * 7) % 20) - 10;
 			seed[node.id * 3 + 2] = z;
 		}
-		return seed;
+		return { seed, pinnedPaths };
+	}
+
+	/**
+	 * Re-apply pins against the freshly built model. Node ids are assigned per
+	 * build, so both sets are rebuilt from scratch: paths that no longer resolve
+	 * belong to notes that have since been deleted or renamed away.
+	 */
+	private restorePins(
+		model: GraphModel,
+		seed: Float32Array | undefined,
+		pinnedPaths: readonly string[]
+	): void {
+		this.explicitPins.clear();
+		// Drag pins are per-session and the fresh simulation has none of them.
+		this.pinnedNodes.clear();
+		if (!seed) return;
+		for (const path of pinnedPaths) {
+			const id = model.pathToId.get(path);
+			if (id === undefined) continue;
+			this.explicitPins.add(id);
+			this.layout?.pin(id, seed[id * 3], seed[id * 3 + 1], seed[id * 3 + 2]);
+		}
+		this.renderer?.setPinned(new Set(this.explicitPins));
 	}
 
 	private buildFacts(model: GraphModel, files: TFile[]): NodeFacts[] {
@@ -1073,7 +1153,13 @@ export class GraphInsightView extends ItemView {
 				Math.round(positions[node.id * 3 + 2] * 10) / 10,
 			];
 		}
-		await this.plugin.dataStore.savePositions(map);
+		// Pins travel as paths so they survive the id reshuffle of a rebuild.
+		const pins: string[] = [];
+		for (const id of this.explicitPins) {
+			const path = this.model.nodes[id]?.path;
+			if (path) pins.push(path);
+		}
+		await this.plugin.dataStore.savePositions({ positions: map, pins });
 	}
 
 	private showTooltip(nodeId: number | null, clientX: number, clientY: number): void {
@@ -1182,22 +1268,8 @@ export class GraphInsightView extends ItemView {
 				this.recomputeVisual();
 				return;
 			case "pin": {
-				if (this.explicitPins.has(nodeId)) {
-					this.explicitPins.delete(nodeId);
-					this.pinnedNodes.delete(nodeId);
-					this.layout?.unpin(nodeId);
-					new Notice(t("notice.unpinned", { name: node.name }));
-				} else {
-					const positions = this.renderer?.currentPositions;
-					if (positions) {
-						this.explicitPins.add(nodeId);
-						this.layout?.pin(
-							nodeId,
-							positions[nodeId * 3], positions[nodeId * 3 + 1], positions[nodeId * 3 + 2]
-						);
-						new Notice(t("notice.pinned", { name: node.name }));
-					}
-				}
+				const key = this.togglePin(nodeId) ? "notice.pinned" : "notice.unpinned";
+				new Notice(t(key, { name: node.name }));
 				return;
 			}
 			case "open":

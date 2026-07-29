@@ -175,7 +175,7 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 	private async resetAllData(): Promise<void> {
 		this.plugin.usageLog = emptyLog();
 		await this.plugin.dataStore.saveUsage(this.plugin.usageLog);
-		await this.plugin.dataStore.savePositions({});
+		await this.plugin.dataStore.savePositions({ positions: {}, pins: [] });
 		new Notice(t("notice.dataReset"));
 	}
 }

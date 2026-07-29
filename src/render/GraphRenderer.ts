@@ -18,6 +18,7 @@ import {
 	fogFactor,
 	mergeHiddenMask,
 	nodeAlpha,
+	pinRingRadius,
 	sizeDepth,
 } from "./nodeAppearance";
 import { createNodeTexture, createStarTexture, STAR_SIZE_FACTOR } from "./NodeTexture";
@@ -40,6 +41,9 @@ const MIN_LABEL_SCREEN_PX = 8;
 const DOUBLE_CLICK_MS = 350;
 const HULL_FILL_ALPHA = 0.1;
 const HULL_PADDING = 18;
+/** Pin rings: present enough to spot, quiet enough not to compete with nodes. */
+const PIN_RING_ALPHA = 0.8;
+const PIN_RING_WIDTH = 1.2;
 // Explore mode draws its own links on top of the edge mesh: travellable links
 // brighter than the graph behind them, the armed one brighter still.
 const EXPLORE_LINK_ALPHA = 0.45;
@@ -149,6 +153,8 @@ export class GraphRenderer {
 	private trailProgress = 1;
 	private exploreGraphics = new Graphics();
 	private explore: ExploreOverlay | null = null;
+	private pinGraphics = new Graphics();
+	private pinnedIds: ReadonlySet<number> = new Set();
 	private nodeLayer = new Container();
 	private labelLayer = new Container();
 	private sprites: Sprite[] = [];
@@ -216,6 +222,7 @@ export class GraphRenderer {
 		this.world.addChild(
 			this.hullGraphics,
 			this.nodeLayer,
+			this.pinGraphics,
 			this.labelLayer,
 			this.trailGraphics,
 			this.exploreGraphics
@@ -648,6 +655,31 @@ export class GraphRenderer {
 		}
 	}
 
+	/** Nodes the user has pinned in place. Drawn as rings so a pin is visible
+	 *  without a tooltip — otherwise a node that ignores physics looks broken. */
+	setPinned(ids: ReadonlySet<number>): void {
+		this.pinnedIds = ids;
+		this.redrawPins();
+	}
+
+	private redrawPins(): void {
+		const g = this.pinGraphics;
+		g.clear();
+		if (this.pinnedIds.size === 0 || !this.positions || !this.radii || !this.colors) return;
+		for (const id of this.pinnedIds) {
+			if (id >= this.radii.length) continue;
+			const depth = this.depthScales ? this.depthScales[id] : 1;
+			// Behind the camera: the sprite is hidden, so the ring must be too.
+			if (depth <= 0) continue;
+			g.circle(
+				this.positions[id * 2],
+				this.positions[id * 2 + 1],
+				pinRingRadius(this.radii[id], depth, this.spriteScale)
+			);
+			g.stroke({ color: this.colors.nodeSelected, alpha: PIN_RING_ALPHA, width: PIN_RING_WIDTH });
+		}
+	}
+
 	/** Explore mode: what to draw around the node under the camera; null off. */
 	setExploreOverlay(overlay: ExploreOverlay | null): void {
 		const wasExploring = this.explore !== null;
@@ -830,6 +862,7 @@ export class GraphRenderer {
 			this.edgeMesh?.updatePositions(this.positions, this.camera.enabled ? this.depthScales : null);
 			this.redrawTrail();
 			this.redrawExplore();
+			this.redrawPins();
 		}
 		if (this.cullDirty) {
 			const now = performance.now();

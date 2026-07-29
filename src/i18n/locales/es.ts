@@ -174,6 +174,8 @@ export const es: Translation = {
 	"menu.path": "Ruta: {path}",
 	"menu.selected": "Seleccionadas: {count} notas",
 	"menu.hideSelected": "Ocultar la selección",
+	"menu.pinSelected": "Fijar la selección",
+	"menu.unpinSelected": "Soltar la selección",
 	"menu.copyPaths": "Copiar las rutas",
 
 	"notice.pathStart": "Inicio: {name}. Haz clic en la segunda nota.",

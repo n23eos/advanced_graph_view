@@ -174,6 +174,8 @@ export const it: Translation = {
 	"menu.path": "Percorso: {path}",
 	"menu.selected": "Selezionate: {count} note",
 	"menu.hideSelected": "Nascondi selezionate",
+	"menu.pinSelected": "Fissa la selezione",
+	"menu.unpinSelected": "Libera la selezione",
 	"menu.copyPaths": "Copia i percorsi",
 
 	"notice.pathStart": "Inizio: {name}. Clicca la seconda nota.",

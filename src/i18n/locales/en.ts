@@ -198,6 +198,8 @@ export const en = {
 	"menu.path": "Path: {path}",
 	"menu.selected": "Selected: {count} notes",
 	"menu.hideSelected": "Hide selected",
+	"menu.pinSelected": "Pin selected",
+	"menu.unpinSelected": "Unpin selected",
 	"menu.copyPaths": "Copy paths to clipboard",
 
 	// ── Notices ───────────────────────────────────────────────────────

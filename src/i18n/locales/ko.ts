@@ -174,6 +174,8 @@ export const ko: Translation = {
 	"menu.path": "경로: {path}",
 	"menu.selected": "노트 {count}개 선택됨",
 	"menu.hideSelected": "선택 항목 숨기기",
+	"menu.pinSelected": "선택 고정",
+	"menu.unpinSelected": "선택 고정 해제",
 	"menu.copyPaths": "경로를 클립보드에 복사",
 
 	"notice.pathStart": "시작: {name}. 두 번째 노트를 클릭하세요.",

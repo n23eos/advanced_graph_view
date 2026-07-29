@@ -174,6 +174,8 @@ export const fr: Translation = {
 	"menu.path": "Chemin : {path}",
 	"menu.selected": "Sélection : {count} notes",
 	"menu.hideSelected": "Masquer la sélection",
+	"menu.pinSelected": "Épingler la sélection",
+	"menu.unpinSelected": "Détacher la sélection",
 	"menu.copyPaths": "Copier les chemins",
 
 	"notice.pathStart": "Départ : {name}. Cliquez la deuxième note.",

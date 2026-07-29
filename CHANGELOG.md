@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Localisation into 12 languages** — the whole UI follows the Obsidian app
   language: English, German, Spanish, French, Italian, Japanese, Korean,
   Polish, Portuguese (Brazil), Russian, Ukrainian, Chinese.
+- **Pins survive a restart.** Pinned notes are marked with a ring, kept through
+  graph rebuilds, and stored in `positions.json`. A lasso selection can be
+  pinned or released in one go.
+- Every panel toggle now has a command: dead ends, broken links, timeline,
+  cluster bubbles, physics, 3D, and an explicit exit from focus mode. No
+  default hotkeys — assign your own in Obsidian's settings.
+- Context menu: **Open to the right** and **Reveal in file explorer**.
 
 ### Fixed
 
@@ -28,6 +35,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - English UI strings moved to sentence case, matching the Obsidian style guide.
+- `positions.json` gained an envelope around the coordinate map so it can carry
+  pins. Files written by earlier versions are read as before; a file written by
+  0.4.0 and read by an older version loses its saved positions.
 
 ## [0.3.0] — 2026-07-27
 
