@@ -9,6 +9,7 @@ import type { PositionMap } from "../data/persistence";
 import { buildEncoding, type NodeEncoding } from "../encoding/encode";
 import { categoryColor, resolvePreset } from "../encoding/colorScales";
 import type { NodeFacts } from "../encoding/metrics";
+import { ExploreSession } from "../explore/ExploreSession";
 import { GraphRenderer } from "../render/GraphRenderer";
 import { ControlPanel, type PanelState } from "../ui/ControlPanel";
 import { Legend } from "../ui/Legend";
@@ -36,6 +37,10 @@ const POSITION_SAVE_DEBOUNCE_MS = 5000;
 /** World-unit collision radius at nodeScale 1. 0 = no size-based repulsion
  *  (nodes may overlap; layout spacing comes from charge + links only). */
 const COLLIDE_BASE_RADIUS = 0;
+/** How dim the rest of the graph goes while explore mode is running. Low
+ *  enough to read as backdrop: the notes you can travel to must be the only
+ *  thing competing for attention. */
+const EXPLORE_BACKGROUND_ALPHA = 0.05;
 
 export class GraphInsightView extends ItemView {
 	private renderer: GraphRenderer | null = null;
@@ -87,6 +92,18 @@ export class GraphInsightView extends ItemView {
 	private timelineCutoff: number | null = null;
 	private timelineMode: TimelineMode = "created";
 	private trailReplayFrame: number | null = null;
+	/** Explore mode: null when off. */
+	private exploreSession: ExploreSession | null = null;
+	/** Node under the camera + its links, so the rest of the graph can dim. */
+	private exploreFocus: { centerId: number; neighbors: readonly number[] } | null = null;
+	/** Explore mode is forcing 3D on and physics off — at runtime only, never
+	 *  written to the saved settings. */
+	private exploreOverride = false;
+	/** Explore mode is running but not anchored to a node: the whole graph is
+	 *  readable again and a click picks the next place to explore from. */
+	private exploreDetached = false;
+	/** A vault change arrived while exploring; rebuild once the mode ends. */
+	private rebuildDeferred = false;
 
 	private rebuildDebounced = debounce(() => void this.rebuildGraph(), 2000, true);
 	private rebuilding = false;
@@ -124,7 +141,11 @@ export class GraphInsightView extends ItemView {
 		this.renderer = new GraphRenderer({
 			onNodeHover: (nodeId, clientX, clientY) => this.showTooltip(nodeId, clientX, clientY),
 			onNodeClick: (nodeId, event) => this.handleNodeClick(nodeId, event),
-			onNodeDoubleClick: (nodeId) => this.openNode(nodeId, false),
+			// While explore mode is detached a click re-anchors it, so the
+			// second half of a double-click must not also open the note.
+			onNodeDoubleClick: (nodeId) => {
+				if (!this.exploreDetached) this.openNode(nodeId, false);
+			},
 			onNodeMiddleClick: (nodeId) => this.openNode(nodeId, true),
 			onNodeContextMenu: (nodeId, event) => this.showNodeMenu(nodeId, event),
 			onLassoSelect: (nodeIds, event) => this.showLassoMenu(nodeIds, event),
@@ -139,6 +160,11 @@ export class GraphInsightView extends ItemView {
 				this.layout?.dragEnd();
 				this.savePositionsDebounced();
 			},
+			onExploreAim: (nodeId, clientX, clientY) => {
+				this.exploreSession?.aimAt(nodeId);
+				this.showExploreTarget(nodeId, clientX, clientY);
+			},
+			onExploreJump: () => this.exploreSession?.jump(),
 		});
 		await this.renderer.init(container);
 		// The pane may not have its final size during onOpen; resize once the
@@ -175,6 +201,7 @@ export class GraphInsightView extends ItemView {
 				onOffsetChange: (x, y) => this.renderer?.setViewCenterOffset(x, y),
 				onFit: () => this.renderer?.fitAll(),
 				onToggleUI: (hidden) => this.contentEl.toggleClass("graph-insight-ui-hidden", hidden),
+				onToggleExplore: () => void (this.exploreSession ? this.exitExplore() : this.enterExplore()),
 			}
 		);
 
@@ -245,20 +272,17 @@ export class GraphInsightView extends ItemView {
 			},
 		});
 
-		this.registerDomEvent(document, "keydown", (event) => {
-			if (event.key !== "Escape" || !this.contentEl.isShown()) return;
-			const target = event.target as HTMLElement | null;
-			// Don't hijack Esc while the user is editing the search box etc.
-			if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
-				return;
-			}
-			// First Esc leaves focus mode; a second clears any remaining filters.
-			if (this.focusRootId !== null) {
-				this.exitFocus();
-			} else if (this.hasActiveViewState()) {
-				this.resetViewState();
-			}
-		});
+		// Capture phase, and the explore keys are swallowed outright.
+		// `preventDefault` alone is not enough: Obsidian's own key handling is
+		// registered on the document before any plugin's, so a bubbling
+		// listener runs *after* the app has already acted on Esc — which is
+		// why Esc used to look like it closed the whole view.
+		this.registerDomEvent(
+			document,
+			"keydown",
+			(event) => this.handleKeyDown(event),
+			{ capture: true }
+		);
 
 		await this.rebuildGraph();
 
@@ -266,6 +290,49 @@ export class GraphInsightView extends ItemView {
 
 		if (!this.plugin.settings.onboardingShown) {
 			new OnboardingModal(this.app, () => void this.plugin.markOnboardingShown()).open();
+		}
+	}
+
+	private handleKeyDown(event: KeyboardEvent): void {
+		if (!this.contentEl.isShown()) return;
+		const target = event.target as HTMLElement | null;
+		// Don't hijack keys while the user is editing the search box etc.
+		if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
+			return;
+		}
+
+		/** Take the key away from Obsidian entirely. */
+		const claim = () => {
+			event.preventDefault();
+			event.stopImmediatePropagation();
+		};
+
+		if (this.isExploring) {
+			switch (event.key) {
+				case "Escape":
+					claim();
+					void this.exitExplore();
+					return;
+				case "Backspace":
+					claim();
+					this.exploreSession?.back();
+					return;
+				case " ":
+					// Space = let go: stay in the mode, pick the next note
+					// anywhere. It has to be its own key — Esc leaving the mode
+					// is the one thing that must never be ambiguous.
+					claim();
+					this.detachExplore();
+					return;
+			}
+			return;
+		}
+
+		if (event.key !== "Escape") return;
+		if (this.focusRootId !== null) {
+			this.exitFocus();
+		} else if (this.hasActiveViewState()) {
+			this.resetViewState();
 		}
 	}
 
@@ -342,6 +409,166 @@ export class GraphInsightView extends ItemView {
 		});
 		const exit = this.focusBar.createEl("button", { text: t("focus.exit") });
 		exit.addEventListener("click", () => this.exitFocus());
+	}
+
+	// ── Explore mode ──────────────────────────────────────────────────
+
+	/**
+	 * Hop the camera from node to node down the links, No Man's Sky style.
+	 *
+	 * Two settings are forced for the duration and restored on exit: 3D,
+	 * because hopping a flat picture has nothing to hop through, and physics,
+	 * because a node that drifts while the camera flies towards it means the
+	 * camera lands next to it instead of on it.
+	 */
+	async enterExplore(startId?: number): Promise<void> {
+		if (!this.renderer || !this.model || this.exploreSession) return;
+		const centerId = startId ?? this.renderer.nodeNearestToViewCenter();
+		if (centerId === null) {
+			new Notice(t("notice.exploreNoNode"));
+			return;
+		}
+
+		const reanchoring = this.exploreDetached;
+		if (!this.exploreOverride) {
+			this.exploreOverride = true;
+			this.applyExploreOverride();
+		}
+		this.exploreDetached = false;
+
+		if (this.focusRootId !== null) this.exitFocus();
+		// The pointer stops picking nodes now, so a tooltip left over from the
+		// last hover would hang there for the rest of the session.
+		this.clearPreviewTimer();
+		this.tooltip?.hide();
+		this.exploreSession = new ExploreSession(
+			this.renderer,
+			buildAdjacency(this.model),
+			centerId,
+			{
+				onFocusChanged: (id, neighbors) => {
+					this.exploreFocus = { centerId: id, neighbors };
+					this.recomputeVisual();
+					this.renderExploreBar();
+				},
+			}
+		);
+		this.cameraWidget?.setExploring(true);
+		if (!reanchoring) new Notice(t("notice.exploreStart"), 5000);
+	}
+
+	/**
+	 * Let go of the current node without leaving the mode: the graph lights
+	 * back up and the pointer picks nodes again, so the next leg of the trip
+	 * can start anywhere instead of only where the links reach.
+	 */
+	private detachExplore(): void {
+		if (!this.exploreSession) return;
+		this.exploreSession.stop();
+		this.exploreSession = null;
+		this.exploreFocus = null;
+		this.exploreDetached = true;
+		this.focusBar?.hide();
+		this.showExploreTarget(null, 0, 0);
+		this.recomputeVisual();
+		new Notice(t("notice.exploreDetached"), 5000);
+	}
+
+	/**
+	 * Force 3D on and physics off for the duration — on the renderer and the
+	 * layout worker only.
+	 *
+	 * Deliberately NOT through `updatePanelState`: that writes to the saved
+	 * settings, and a crash or a plugin reload mid-session then leaves the
+	 * vault permanently frozen with the simulation switched off and nothing to
+	 * explain it. Mode state does not belong in user settings.
+	 */
+	private applyExploreOverride(): void {
+		const saved = this.plugin.settings.panel;
+		const forced: PanelState = {
+			...saved,
+			view3d: { ...saved.view3d, enabled: true },
+			physics: { ...saved.physics, disabled: true },
+		};
+		this.applyAllPanelState(forced);
+	}
+
+	async exitExplore(): Promise<void> {
+		if (!this.exploreSession && !this.exploreDetached) return;
+		this.exploreSession?.stop();
+		this.exploreSession = null;
+		this.exploreFocus = null;
+		this.exploreDetached = false;
+		this.focusBar?.hide();
+		this.cameraWidget?.setExploring(false);
+		this.showExploreTarget(null, 0, 0);
+
+		if (this.exploreOverride) {
+			this.exploreOverride = false;
+			// The saved settings were never touched, so putting them back is
+			// just re-applying them.
+			this.applyAllPanelState(this.plugin.settings.panel);
+		}
+		this.recomputeVisual();
+
+		if (this.rebuildDeferred) {
+			this.rebuildDeferred = false;
+			await this.rebuildGraph();
+		}
+	}
+
+	/** Name the note a link leads to, right at the pointer. */
+	private showExploreTarget(nodeId: number | null, clientX: number, clientY: number): void {
+		if (!this.tooltip || !this.model) return;
+		if (nodeId === null) {
+			this.tooltipNodeId = null;
+			this.tooltip.hide();
+			return;
+		}
+		const rect = this.contentEl.getBoundingClientRect();
+		this.tooltip.style.left = `${clientX - rect.left + 14}px`;
+		this.tooltip.style.top = `${clientY - rect.top + 14}px`;
+		this.tooltip.show();
+		if (nodeId === this.tooltipNodeId) return;
+		this.tooltipNodeId = nodeId;
+		// Just the name: this is a signpost read mid-sweep, not the hover card.
+		this.tooltip.empty();
+		this.tooltip.createDiv({
+			cls: "graph-insight-tooltip-title",
+			text: this.model.nodes[nodeId].name,
+		});
+	}
+
+	/** True for the whole mode, anchored to a node or not. */
+	get isExploring(): boolean {
+		return this.exploreSession !== null || this.exploreDetached;
+	}
+
+	/** Reuses the focus bar to show where the camera is and how to leave. */
+	private renderExploreBar(): void {
+		if (!this.focusBar || !this.model || !this.exploreFocus) return;
+		const { centerId, neighbors } = this.exploreFocus;
+		this.focusBar.empty();
+		this.focusBar.show();
+		this.focusBar.createSpan({
+			text: t("explore.status", {
+				name: this.model.nodes[centerId].name,
+				count: neighbors.length,
+			}),
+		});
+		// Opening goes to a new tab on purpose: reusing the active one would
+		// replace whatever the trip started from, and the graph is still mid-
+		// exploration behind it.
+		const open = this.focusBar.createEl("button", { text: t("explore.open") });
+		open.setAttribute("title", t("explore.open.hint"));
+		open.addEventListener("click", () => this.openNode(centerId, true));
+		const back = this.focusBar.createEl("button", { text: t("explore.back") });
+		back.addEventListener("click", () => this.exploreSession?.back());
+		const detach = this.focusBar.createEl("button", { text: t("explore.detach") });
+		detach.setAttribute("title", t("explore.detach.hint"));
+		detach.addEventListener("click", () => this.detachExplore());
+		const exit = this.focusBar.createEl("button", { text: t("explore.exit") });
+		exit.addEventListener("click", () => void this.exitExplore());
 	}
 
 	private currentFocusDistances(): Int16Array | null {
@@ -437,6 +664,19 @@ export class GraphInsightView extends ItemView {
 				factors[i] *= d >= 0 ? falloff[Math.min(d, falloff.length - 1)] : 0.04;
 			}
 		}
+		// Explore mode leaves only the node you are on and the ones you can
+		// travel to readable — everything else is the sky you fly through.
+		if (this.exploreFocus) {
+			factors ??= new Float32Array(count).fill(1);
+			const reachable = new Set(this.exploreFocus.neighbors);
+			highlight ??= new Uint8Array(count);
+			for (let i = 0; i < count; i++) {
+				const isHere = i === this.exploreFocus.centerId;
+				factors[i] *= isHere || reachable.has(i) ? 1 : EXPLORE_BACKGROUND_ALPHA;
+				if (isHere) highlight[i] = 1;
+			}
+			this.renderer.setHighlightMask(highlight);
+		}
 		this.renderer.setAlphaFactors(factors);
 	}
 
@@ -469,6 +709,7 @@ export class GraphInsightView extends ItemView {
 		menu.addItem((item) => item.setTitle(t("menu.open")).setIcon("file-text").onClick(() => this.openNode(nodeId, false)));
 		menu.addItem((item) => item.setTitle(t("menu.openNewTab")).setIcon("file-plus").onClick(() => this.openNode(nodeId, true)));
 		menu.addItem((item) => item.setTitle(t("menu.focus")).setIcon("target").onClick(() => this.enterFocus(nodeId)));
+		menu.addItem((item) => item.setTitle(t("menu.explore")).setIcon("compass").onClick(() => void this.enterExplore(nodeId)));
 		menu.addSeparator();
 		menu.addItem((item) => item.setTitle(t("menu.hide")).setIcon("eye-off").onClick(() => {
 			this.hiddenNodes.add(nodeId);
@@ -544,6 +785,13 @@ export class GraphInsightView extends ItemView {
 
 	private async rebuildGraph(): Promise<void> {
 		if (!this.renderer || !this.layout) return;
+		// A rebuild renumbers nodes, and explore mode holds node ids: an
+		// adjacency list from the old model would fly the camera to whatever
+		// note inherited the number. Hold the rebuild until the mode ends.
+		if (this.exploreSession) {
+			this.rebuildDeferred = true;
+			return;
+		}
 		const files = this.app.vault.getMarkdownFiles();
 		const cache = this.app.metadataCache;
 		const model = buildGraphModel(files.map((f) => f.path), cache.resolvedLinks, cache.unresolvedLinks);
@@ -859,6 +1107,13 @@ export class GraphInsightView extends ItemView {
 
 	private handleNodeClick(nodeId: number, event: PointerEvent): void {
 		if (!this.model) return;
+		// Explore mode let go of its node: the click picks where to carry on
+		// from, whatever the cursor tool would normally do.
+		if (this.exploreDetached) {
+			this.renderer?.setSelected(nodeId);
+			void this.enterExplore(nodeId);
+			return;
+		}
 		const node = this.model.nodes[nodeId];
 		this.renderer?.setSelected(nodeId);
 
@@ -1197,6 +1452,10 @@ export class GraphInsightView extends ItemView {
 
 	async onClose(): Promise<void> {
 		this.clearPreviewTimer();
+		this.exploreSession?.stop();
+		this.exploreSession = null;
+		this.exploreDetached = false;
+		this.exploreOverride = false;
 		await this.savePositions();
 		this.layout?.stop();
 		this.layout = null;

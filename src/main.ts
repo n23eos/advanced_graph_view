@@ -332,6 +332,16 @@ export default class GraphInsightPlugin extends Plugin {
 			},
 		});
 		this.addCommand({
+			id: "toggle-explore-mode",
+			name: t("command.toggleExplore"),
+			callback: async () => {
+				await this.activateView();
+				const view = this.getGraphView();
+				if (!view) return;
+				await (view.isExploring ? view.exitExplore() : view.enterExplore());
+			},
+		});
+		this.addCommand({
 			id: "toggle-orphan-highlight",
 			name: t("command.toggleOrphans"),
 			callback: () => void this.getGraphView()?.updatePanelState((state) => ({

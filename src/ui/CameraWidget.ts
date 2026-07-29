@@ -11,6 +11,7 @@ export interface CameraWidgetCallbacks {
 	onOffsetChange(x: number, y: number): void;
 	onFit(): void;
 	onToggleUI(hidden: boolean): void;
+	onToggleExplore(): void;
 }
 
 const OFFSET_RANGE = 600;
@@ -22,6 +23,7 @@ export class CameraWidget {
 	private checkboxFree: HTMLInputElement;
 	private sliderX: HTMLInputElement;
 	private sliderY: HTMLInputElement;
+	private exploreButton: HTMLElement;
 	private uiHidden = false;
 
 	constructor(
@@ -68,6 +70,20 @@ export class CameraWidget {
 			this.sliderY.value = "0";
 			this.callbacks.onFit();
 		});
+
+		this.exploreButton = this.body.createEl("button", {
+			text: t("camera.explore"),
+			cls: "graph-insight-camera-fit",
+		});
+		this.exploreButton.setAttribute("aria-label", t("camera.explore.hint"));
+		this.exploreButton.setAttribute("title", t("camera.explore.hint"));
+		this.exploreButton.addEventListener("click", () => this.callbacks.onToggleExplore());
+	}
+
+	/** Light up the button while the mode is running, so it reads as a state
+	 *  and not as a one-shot action. */
+	setExploring(active: boolean): void {
+		this.exploreButton.toggleClass("is-active", active);
 	}
 
 	private offsetSlider(label: string): HTMLInputElement {

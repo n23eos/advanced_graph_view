@@ -517,6 +517,12 @@
 	margin-top: 2px;
 }
 
+/* Explore mode is a state, not an action — the button stays lit while it runs. */
+.graph-insight-camera-fit.is-active {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
 .graph-insight-panel-section-title {
 	cursor: pointer;
 	user-select: none;

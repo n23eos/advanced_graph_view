@@ -160,6 +160,8 @@ export const en = {
 	"camera.threeD": "3D",
 	"camera.free": "Free",
 	"camera.fit": "Fit whole graph",
+	"camera.explore": "Explore",
+	"camera.explore.hint": "Hop the camera from note to note along links",
 
 	// ── Legend ────────────────────────────────────────────────────────
 	"legend.min": "min",
@@ -174,11 +176,19 @@ export const en = {
 	// ── Focus mode ────────────────────────────────────────────────────
 	"focus.status": "Focus: {name} · depth {depth} · {count} nodes",
 	"focus.exit": "Esc",
+	"explore.status": "Explore: {name} · {count} links",
+	"explore.open": "Open",
+	"explore.open.hint": "Open this note in a new tab, without leaving the graph",
+	"explore.back": "Back",
+	"explore.detach": "Let go",
+	"explore.detach.hint": "Space — keep exploring, but pick the next note anywhere in the vault",
+	"explore.exit": "Exit",
 
 	// ── Context menu ──────────────────────────────────────────────────
 	"menu.open": "Open",
 	"menu.openNewTab": "Open in new tab",
 	"menu.focus": "Focus mode",
+	"menu.explore": "Explore from here",
 	"menu.hide": "Hide node",
 	"menu.pin": "Pin position",
 	"menu.unpin": "Unpin",
@@ -192,6 +202,9 @@ export const en = {
 	"notice.pathStart": "Start: {name}. Click the second note.",
 	"notice.pathNone": "No link path between these notes",
 	"notice.pathFound": "Path of {count} notes: {names}",
+	"notice.exploreStart": "Explore mode: hover a link to see where it goes, click to travel. Backspace = back, Space = let go, Esc = leave.",
+	"notice.exploreDetached": "Let go. Click any note to explore from there, Esc to leave the mode.",
+	"notice.exploreNoNode": "Nothing to explore — the graph is empty",
 	"notice.copiedLink": "Copied [[{name}]]",
 	"notice.copiedPaths": "Copied {count} paths",
 	"notice.filterPresetSaved": "Filter preset saved",
@@ -222,6 +235,7 @@ export const en = {
 	"command.focusNote": "Focus current note in graph",
 	"command.toggleOrphans": "Toggle orphan highlight",
 	"command.toggleTrail": "Toggle session trail",
+	"command.toggleExplore": "Toggle explore mode",
 	"command.openInsights": "Open Insights dashboard",
 	"command.exportPng": "Export current view as PNG",
 	"command.exportJson": "Export graph data as JSON",

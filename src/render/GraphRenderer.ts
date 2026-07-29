@@ -11,6 +11,7 @@ import { pointInPolygon } from "../analysis/geometry";
 import type { GraphModel } from "../data/GraphStore";
 import { DRAG_THRESHOLD_PX, dragTargetPosition, isDragGesture } from "./dragMath";
 import { EdgeMesh } from "./EdgeMesh";
+import { DEAD_ZONE_PX, MAX_AIM_ANGLE, pickAimedNeighbor } from "../explore/aiming";
 import { HOVER_RADIUS_PX, pickNodeAt } from "./hitTest";
 import {
 	emphasisBoost,
@@ -39,6 +40,22 @@ const MIN_LABEL_SCREEN_PX = 8;
 const DOUBLE_CLICK_MS = 350;
 const HULL_FILL_ALPHA = 0.1;
 const HULL_PADDING = 18;
+// Explore mode draws its own links on top of the edge mesh: travellable links
+// brighter than the graph behind them, the armed one brighter still.
+const EXPLORE_LINK_ALPHA = 0.45;
+const EXPLORE_LINK_WIDTH = 1.2;
+const EXPLORE_CANDIDATE_ALPHA = 1;
+const EXPLORE_CANDIDATE_WIDTH = 3.5;
+/** Share of its normal opacity the rest of the link web keeps in explore mode. */
+const EXPLORE_BACKGROUND_EDGE_DIM = 0.12;
+
+/** What explore mode wants drawn: the node under the camera, the links it can
+ *  travel down, and which one the pointer is aiming at. */
+export interface ExploreOverlay {
+	centerId: number;
+	neighbors: readonly number[];
+	candidateId: number | null;
+}
 
 export interface RendererCallbacks {
 	onNodeHover(nodeId: number | null, clientX: number, clientY: number): void;
@@ -50,6 +67,11 @@ export interface RendererCallbacks {
 	onNodeDrag(nodeId: number, worldX: number, worldY: number, worldZ: number): void;
 	onNodeDragEnd(nodeId: number): void;
 	onLassoSelect(nodeIds: number[], event: PointerEvent): void;
+	/** Explore mode: which link the pointer is aiming down (null = none), and
+	 *  where the pointer is, so the note it leads to can be named there. */
+	onExploreAim(nodeId: number | null, clientX: number, clientY: number): void;
+	/** Explore mode: a click on the armed link — depart now. */
+	onExploreJump(): void;
 }
 
 interface ThemeColors {
@@ -125,6 +147,8 @@ export class GraphRenderer {
 	private trailGraphics = new Graphics();
 	private trailNodeIds: number[] = [];
 	private trailProgress = 1;
+	private exploreGraphics = new Graphics();
+	private explore: ExploreOverlay | null = null;
 	private nodeLayer = new Container();
 	private labelLayer = new Container();
 	private sprites: Sprite[] = [];
@@ -189,7 +213,13 @@ export class GraphRenderer {
 		);
 		this.nodeTexture = createNodeTexture(app.renderer);
 		this.starTexture = createStarTexture(app.renderer);
-		this.world.addChild(this.hullGraphics, this.nodeLayer, this.labelLayer, this.trailGraphics);
+		this.world.addChild(
+			this.hullGraphics,
+			this.nodeLayer,
+			this.labelLayer,
+			this.trailGraphics,
+			this.exploreGraphics
+		);
 		app.stage.addChild(this.world);
 		this.world.position.set(host.clientWidth / 2, host.clientHeight / 2);
 
@@ -618,6 +648,121 @@ export class GraphRenderer {
 		}
 	}
 
+	/** Explore mode: what to draw around the node under the camera; null off. */
+	setExploreOverlay(overlay: ExploreOverlay | null): void {
+		const wasExploring = this.explore !== null;
+		this.explore = overlay;
+		// The rest of the vault's links are the loudest thing on screen once
+		// the nodes are dimmed, so fade the whole edge mesh while the mode
+		// draws its own links on top of it.
+		if (wasExploring !== (overlay !== null)) {
+			this.edgeMesh?.setAlpha(overlay ? this.edgeOpacity * EXPLORE_BACKGROUND_EDGE_DIM : this.edgeOpacity);
+		}
+		// The pointer stops picking nodes in explore mode, so whatever was
+		// hovered when it started would stay swollen and tinted for good.
+		if (overlay && this.hoveredId !== null) {
+			this.hoveredId = null;
+			this.updateHoverNeighbors();
+			this.applyNodeTints();
+			this.applyNodeAlpha();
+			this.applyHoverSize();
+		}
+		this.redrawExplore();
+	}
+
+	/** Whether explore mode is currently driving the pointer. */
+	get isExploring(): boolean {
+		return this.explore !== null;
+	}
+
+	/** World position of a node, or null while no layout has arrived. */
+	nodePosition(id: number): { x: number; y: number; z: number } | null {
+		if (!this.positions3 || id * 3 + 2 >= this.positions3.length) return null;
+		return {
+			x: this.positions3[id * 3],
+			y: this.positions3[id * 3 + 1],
+			z: this.positions3[id * 3 + 2],
+		};
+	}
+
+	/** Node drawn closest to the middle of the view — where explore mode
+	 *  starts when the user has not picked a node itself. */
+	nodeNearestToViewCenter(): number | null {
+		if (!this.app || !this.positions || !this.viewport) return null;
+		const canvas = this.app.canvas;
+		const center = this.viewport.toWorld(canvas.clientWidth / 2, canvas.clientHeight / 2);
+
+		let best: number | null = null;
+		let bestDistance = Infinity;
+		for (let i = 0; i < this.positions.length / 2; i++) {
+			if (this.hiddenMask !== null && this.hiddenMask[i] === 1) continue;
+			if (this.depthScales !== null && this.depthScales[i] === 0) continue;
+			const distance = Math.hypot(
+				this.positions[i * 2] - center.x,
+				this.positions[i * 2 + 1] - center.y
+			);
+			if (distance < bestDistance) {
+				best = i;
+				bestDistance = distance;
+			}
+		}
+		return best;
+	}
+
+	/** Camera position in world space — the start point of an explore flight. */
+	get cameraPosition(): { x: number; y: number; z: number } {
+		return { x: this.camera.px, y: this.camera.py, z: this.camera.pz };
+	}
+
+	/**
+	 * Put the camera at `position` looking at `pivot`, keeping its angle.
+	 * The pivot matters beyond the picture: orbiting spins around it, so after
+	 * a hop the graph turns around the node you landed on, not around wherever
+	 * the camera started the session.
+	 */
+	placeCamera(
+		position: { x: number; y: number; z: number },
+		pivot: { x: number; y: number; z: number }
+	): void {
+		this.camera.px = position.x;
+		this.camera.py = position.y;
+		this.camera.pz = position.z;
+		this.camera.tx = pivot.x;
+		this.camera.ty = pivot.y;
+		this.camera.tz = pivot.z;
+		this.reproject();
+	}
+
+	private redrawExplore(): void {
+		const g = this.exploreGraphics;
+		g.clear();
+		const overlay = this.explore;
+		if (!overlay || !this.positions || !this.colors) return;
+
+		const centerX = this.positions[overlay.centerId * 2];
+		const centerY = this.positions[overlay.centerId * 2 + 1];
+
+		for (const id of overlay.neighbors) {
+			if (this.hiddenMask !== null && this.hiddenMask[id] === 1) continue;
+			if (this.depthScales !== null && this.depthScales[id] === 0) continue;
+			const x = this.positions[id * 2];
+			const y = this.positions[id * 2 + 1];
+			const isCandidate = id === overlay.candidateId;
+
+			g.moveTo(centerX, centerY);
+			g.lineTo(x, y);
+			g.stroke({
+				color: isCandidate ? this.colors.nodeSelected : this.colors.edge,
+				alpha: isCandidate ? EXPLORE_CANDIDATE_ALPHA : EXPLORE_LINK_ALPHA,
+				width: isCandidate ? EXPLORE_CANDIDATE_WIDTH : EXPLORE_LINK_WIDTH,
+			});
+
+			// An arrow on the aimed link says which way the trip would go —
+			// with two notes lit up, the direction is the missing half.
+			if (isCandidate) drawArrowHead(g, centerX, centerY, x, y, this.colors.nodeSelected, 1);
+		}
+	}
+
 	/** Current viewport rendered at 2x into a PNG blob. */
 	async exportPng(): Promise<Blob | null> {
 		if (!this.app) return null;
@@ -684,6 +829,7 @@ export class GraphRenderer {
 			this.edgesDirty = false;
 			this.edgeMesh?.updatePositions(this.positions, this.camera.enabled ? this.depthScales : null);
 			this.redrawTrail();
+			this.redrawExplore();
 		}
 		if (this.cullDirty) {
 			const now = performance.now();
@@ -744,6 +890,43 @@ export class GraphRenderer {
 		let creationSkipped = false;
 		const labeled = new Set<number>();
 
+		/** Show node `i`'s label, respecting the per-frame creation budget.
+		 *  Returns false when it had to be deferred to a later frame. */
+		const takeLabel = (i: number): boolean => {
+			if (!this.labels.has(i) && creationBudget <= 0) {
+				creationSkipped = true;
+				return false;
+			}
+			if (!this.labels.has(i)) creationBudget--;
+			labeled.add(i);
+			this.ensureLabel(i, this.positions![i * 2], this.positions![i * 2 + 1]);
+			return true;
+		};
+
+		// Explore mode names the node you are on and everything you can travel
+		// to, whatever the zoom threshold and the label budget say: those names
+		// are the choice you are being asked to make, not decoration.
+		if (this.explore) {
+			for (const i of [this.explore.centerId, ...this.explore.neighbors]) {
+				if (labeled.has(i)) continue;
+				if (this.hiddenMask !== null && this.hiddenMask[i] === 1) continue;
+				if (this.depthScales !== null && this.depthScales[i] === 0) continue;
+				if (!isOnScreen(i)) continue;
+				takeLabel(i);
+			}
+		}
+
+		// …and nothing else gets named. A field of labels from notes you cannot
+		// travel to reads as clutter over the two things that matter: where you
+		// are and where you can go.
+		if (this.explore) {
+			for (const [i, label] of this.labels) {
+				if (!labeled.has(i)) label.visible = false;
+			}
+			if (creationSkipped) this.cullDirty = true;
+			return;
+		}
+
 		// In 3D the labels belong to whatever is closest to the camera —
 		// that's what the eye reads as "the foreground".
 		let order: readonly number[] = this.labelPriority;
@@ -754,6 +937,7 @@ export class GraphRenderer {
 		if (labelBudget > 0) {
 			for (const i of order) {
 				if (labelBudget <= 0) break;
+				if (labeled.has(i)) continue;
 				const hidden =
 					(this.hiddenMask !== null && this.hiddenMask[i] === 1) ||
 					(this.depthScales !== null && this.depthScales[i] === 0) ||
@@ -761,18 +945,7 @@ export class GraphRenderer {
 				// No node-size gate: priority order already favors important
 				// nodes, and a small «Размер узлов» must not kill every label.
 				if (hidden || !isOnScreen(i)) continue;
-				if (this.labels.has(i)) {
-					labelBudget--;
-					labeled.add(i);
-					this.ensureLabel(i, this.positions[i * 2], this.positions[i * 2 + 1]);
-				} else if (creationBudget > 0) {
-					labelBudget--;
-					creationBudget--;
-					labeled.add(i);
-					this.ensureLabel(i, this.positions[i * 2], this.positions[i * 2 + 1]);
-				} else {
-					creationSkipped = true;
-				}
+				if (takeLabel(i)) labelBudget--;
 			}
 		}
 		for (const [i, label] of this.labels) {
@@ -985,6 +1158,17 @@ export class GraphRenderer {
 				return;
 			}
 		}
+		if (this.explore) {
+			// In explore mode the pointer aims down links instead of picking
+			// nodes; running the hover pipeline too would fight the overlay for
+			// which node looks selected.
+			this.callbacks.onExploreAim(
+				this.aimFromPointer(event.clientX, event.clientY),
+				event.clientX,
+				event.clientY
+			);
+			return;
+		}
 		const nodeId = this.findNodeAt(event.clientX, event.clientY);
 		if (nodeId !== this.hoveredId) {
 			this.hoveredId = nodeId;
@@ -995,6 +1179,26 @@ export class GraphRenderer {
 		}
 		this.callbacks.onNodeHover(nodeId, event.clientX, event.clientY);
 	};
+
+	/** Which link the pointer is aiming down, in explore mode. */
+	private aimFromPointer(clientX: number, clientY: number): number | null {
+		const overlay = this.explore;
+		if (!overlay || !this.app || !this.positions || !this.viewport) return null;
+		const rect = this.app.canvas.getBoundingClientRect();
+		const point = this.viewport.toWorld(clientX - rect.left, clientY - rect.top);
+
+		return pickAimedNeighbor({
+			positions: this.positions,
+			centerId: overlay.centerId,
+			neighbors: overlay.neighbors,
+			pointerX: point.x,
+			pointerY: point.y,
+			deadZone: DEAD_ZONE_PX / this.viewport.scale,
+			maxAngle: MAX_AIM_ANGLE,
+			hiddenMask: this.hiddenMask,
+			depthScales: this.depthScales,
+		});
+	}
 
 	private moveDraggedNode(event: PointerEvent): void {
 		if (this.draggingId === null || !this.app || !this.positions3 || !this.viewport) return;
@@ -1056,21 +1260,28 @@ export class GraphRenderer {
 			return;
 		}
 		if (event.button !== 0) return;
+		if (this.explore) {
+			// A click on an armed link skips the wait; a click on nothing still
+			// orbits, so the view stays steerable without leaving the mode.
+			if (this.explore.candidateId !== null) {
+				// Suppress the pan the viewport would otherwise start: the
+				// click means "go there", and sliding the picture at the same
+				// time would fight the flight. Released on pointer-up.
+				if (this.viewport) this.viewport.suppressPan = true;
+				this.callbacks.onExploreJump();
+				return;
+			}
+			this.startOrbit(event);
+			return;
+		}
 		if (event.shiftKey) {
 			this.startLasso(event);
 			return;
 		}
 		const nodeId = this.findNodeAt(event.clientX, event.clientY);
 		if (nodeId === null) {
-			if (this.camera.enabled) {
-				// Empty-area drag rotates the 3D view; hold Alt to pan instead.
-				if (!event.altKey) {
-					this.orbiting = true;
-					this.orbitLastX = event.clientX;
-					this.orbitLastY = event.clientY;
-					if (this.viewport) this.viewport.suppressPan = true;
-				}
-			}
+			// Empty-area drag rotates the 3D view; hold Alt to pan instead.
+			if (!event.altKey) this.startOrbit(event);
 			return;
 		}
 		this.pressedId = nodeId;
@@ -1079,6 +1290,16 @@ export class GraphRenderer {
 		// gesture is either a click or a node drag, never a camera pan.
 		if (this.viewport) this.viewport.suppressPan = true;
 	};
+
+	/** Begin an orbit drag; a no-op in flat mode, where there is nothing to
+	 *  orbit around. */
+	private startOrbit(event: PointerEvent): void {
+		if (!this.camera.enabled) return;
+		this.orbiting = true;
+		this.orbitLastX = event.clientX;
+		this.orbitLastY = event.clientY;
+		if (this.viewport) this.viewport.suppressPan = true;
+	}
 
 	private handlePointerUp = (event: PointerEvent): void => {
 		if (this.rmbPanning && event.button === 2) {
