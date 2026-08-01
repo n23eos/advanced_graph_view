@@ -7,6 +7,9 @@ import {
 import { emptyLog } from "../data/UsageTracker";
 import { usageToCsv } from "../export/exporters";
 import { t } from "../i18n";
+import { ConfirmModal } from "../ui/ConfirmModal";
+import { buildProfile, mergeProfile } from "./profile";
+import { DEFAULT_SETTINGS } from "./schema";
 import type GraphInsightPlugin from "../main";
 
 /** Keys addressed by the declarative settings API. */
@@ -116,17 +119,84 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 			},
 			{
 				type: "group",
+				heading: t("settings.group.profile"),
+				items: [
+					{
+						name: t("settings.exportProfile"),
+						desc: t("settings.exportProfile.desc"),
+						aliases: ["backup", "profile", "share"],
+						action: () => {
+							const profile = buildProfile(this.plugin.settings);
+							downloadText(
+								"advanced-graph-view-settings.json",
+								JSON.stringify(profile, null, 2)
+							);
+						},
+					},
+					{
+						name: t("settings.importProfile"),
+						desc: t("settings.importProfile.desc"),
+						aliases: ["restore", "profile", "load"],
+						action: () => pickJsonFile((raw) => void this.importProfile(raw)),
+					},
+					{
+						name: t("settings.resetSettings"),
+						desc: t("settings.resetSettings.desc"),
+						aliases: ["defaults", "restore"],
+						action: () =>
+							this.confirm(t("settings.resetSettings.confirm"), () =>
+								void this.resetSettings()
+							),
+					},
+				],
+			},
+			{
+				type: "group",
 				heading: t("settings.group.data"),
 				items: [
 					{
 						name: t("settings.resetAll"),
 						desc: t("settings.resetAll.desc"),
 						aliases: ["clear", "wipe"],
-						action: () => void this.resetAllData(),
+						action: () =>
+							this.confirm(t("settings.resetAll.confirm"), () => void this.resetAllData()),
 					},
 				],
 			},
 		];
+	}
+
+	private confirm(message: string, onConfirm: () => void): void {
+		new ConfirmModal(this.app, message, onConfirm).open();
+	}
+
+	private async importProfile(raw: string): Promise<void> {
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(raw);
+		} catch {
+			new Notice(t("notice.profileInvalid"));
+			return;
+		}
+		const merged = mergeProfile(this.plugin.settings, parsed);
+		if (!merged) {
+			new Notice(t("notice.profileInvalid"));
+			return;
+		}
+		await this.plugin.replaceSettings(merged);
+		new Notice(t("notice.profileImported"));
+		this.display();
+	}
+
+	/**
+	 * Back to defaults, with the bundled view presets re-seeded — zeroing the
+	 * preset version is what makes the next load rebuild them. Usage history is
+	 * a separate concern and is deliberately left alone.
+	 */
+	private async resetSettings(): Promise<void> {
+		await this.plugin.replaceSettings({ ...DEFAULT_SETTINGS, viewPresetsVersion: 0 });
+		new Notice(t("notice.settingsReset"));
+		this.display();
 	}
 
 	getControlValue(key: string): unknown {
@@ -178,6 +248,17 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 		await this.plugin.dataStore.savePositions({ positions: {}, pins: [] });
 		new Notice(t("notice.dataReset"));
 	}
+}
+
+/** Opens the OS file picker and hands back the file's text. */
+function pickJsonFile(onLoad: (raw: string) => void): void {
+	const input = createEl("input", { attr: { type: "file", accept: "application/json,.json" } });
+	input.addEventListener("change", () => {
+		const file = input.files?.[0];
+		if (!file) return;
+		void file.text().then(onLoad);
+	});
+	input.click();
 }
 
 function downloadText(fileName: string, content: string): void {

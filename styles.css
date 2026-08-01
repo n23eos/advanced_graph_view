@@ -752,3 +752,45 @@
 .graph-insight-filter-row:hover {
 	background: var(--background-modifier-hover);
 }
+
+/* Action button inside a Notice — failure notices stay open until acted on. */
+.agv-notice-action {
+	margin-top: 8px;
+	padding: 4px 10px;
+	font-size: var(--font-ui-small);
+	cursor: pointer;
+	border-radius: var(--radius-s);
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	border: none;
+}
+
+.agv-notice-action:hover {
+	background: var(--interactive-accent-hover);
+}
+
+/* Shown instead of a blank canvas when the vault holds no notes. */
+.graph-insight-empty {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	padding: 24px;
+	text-align: center;
+	pointer-events: none;
+}
+
+.graph-insight-empty-title {
+	font-size: var(--font-ui-large);
+	color: var(--text-normal);
+}
+
+.graph-insight-empty-body {
+	max-width: 32em;
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+	line-height: 1.5;
+}

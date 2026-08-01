@@ -76,7 +76,6 @@ export class CameraWidget {
 			cls: "graph-insight-camera-fit",
 		});
 		this.exploreButton.setAttribute("aria-label", t("camera.explore.hint"));
-		this.exploreButton.setAttribute("title", t("camera.explore.hint"));
 		this.exploreButton.addEventListener("click", () => this.callbacks.onToggleExplore());
 	}
 

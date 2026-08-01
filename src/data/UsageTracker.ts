@@ -27,6 +27,45 @@ export function emptyLog(): UsageLog {
 	return {};
 }
 
+/**
+ * Validate a usage.json that was written by an older version, edited by hand,
+ * or truncated by a crash. A single bad entry must not take the whole history
+ * with it, so entries are repaired where possible and dropped where not;
+ * `null` means the file is not a log at all and should be replaced.
+ */
+export function normalizeUsageLog(raw: unknown): UsageLog | null {
+	if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
+
+	const log: UsageLog = {};
+	for (const [path, value] of Object.entries(raw)) {
+		if (typeof value !== "object" || value === null || Array.isArray(value)) continue;
+		const usage = value as Partial<PathUsage>;
+		log[path] = {
+			total: countOrZero(usage.total),
+			days: numericBuckets(usage.days),
+			months: numericBuckets(usage.months),
+			years: numericBuckets(usage.years),
+		};
+	}
+	return log;
+}
+
+/** Counts must be finite non-negative numbers — anything else reads as zero. */
+function countOrZero(value: unknown): number {
+	return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
+/** Keeps only the date→count pairs that survive `countOrZero` unchanged. */
+function numericBuckets(raw: unknown): Record<string, number> {
+	if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return {};
+	const buckets: Record<string, number> = {};
+	for (const [key, value] of Object.entries(raw)) {
+		const count = countOrZero(value);
+		if (count > 0) buckets[key] = count;
+	}
+	return buckets;
+}
+
 function dayKey(ts: number): string {
 	return new Date(ts).toISOString().slice(0, 10); // YYYY-MM-DD
 }

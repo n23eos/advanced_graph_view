@@ -11,6 +11,7 @@ export interface ToolBarCallbacks {
 	onToolChange(tool: CursorTool): void;
 	onDepthChange(depth: number): void;
 	onToggleFollow(enabled: boolean): void;
+	onToggleSidePane(enabled: boolean): void;
 }
 
 /** Lucide icon names — theme-tinted, so every glyph shares one tone. */
@@ -28,12 +29,14 @@ export class ToolBar {
 	private depthRow: HTMLElement;
 	private depthValue: HTMLElement;
 	private followButton!: HTMLElement;
+	private sidePaneButton!: HTMLElement;
 
 	constructor(
 		host: HTMLElement,
 		private tool: CursorTool,
 		depth: number,
 		private following: boolean,
+		private sidePane: boolean,
 		private readonly callbacks: ToolBarCallbacks
 	) {
 		this.root = host.createDiv({ cls: "graph-insight-toolbar" });
@@ -42,8 +45,9 @@ export class ToolBar {
 			const button = this.root.createEl("button", { cls: "graph-insight-tool" });
 			setIcon(button, item.icon);
 			const description = `${t(`tool.${item.id}`)} — ${t(`tool.${item.id}.hint`)}`;
+			// aria-label only: Obsidian renders its own tooltip from it, and a
+			// `title` on top of that would stack the OS tooltip under it.
 			button.setAttribute("aria-label", description);
-			button.setAttribute("title", description);
 			button.addEventListener("click", () => this.setTool(item.id));
 			this.buttons.set(item.id, button);
 		}
@@ -55,10 +59,18 @@ export class ToolBar {
 		setIcon(this.followButton, "locate-fixed");
 		const followDescription = `${t("tool.follow")} — ${t("tool.follow.hint")}`;
 		this.followButton.setAttribute("aria-label", followDescription);
-		this.followButton.setAttribute("title", followDescription);
 		this.followButton.addEventListener("click", () => {
 			this.setFollowing(!this.following);
 			this.callbacks.onToggleFollow(this.following);
+		});
+
+		this.sidePaneButton = followGroup.createEl("button", { cls: "graph-insight-tool" });
+		setIcon(this.sidePaneButton, "panel-right");
+		const sidePaneDescription = `${t("tool.sidePane")} — ${t("tool.sidePane.hint")}`;
+		this.sidePaneButton.setAttribute("aria-label", sidePaneDescription);
+		this.sidePaneButton.addEventListener("click", () => {
+			this.setSidePane(!this.sidePane);
+			this.callbacks.onToggleSidePane(this.sidePane);
 		});
 
 		// Depth control lives inline; only meaningful in the neighborhood mode.
@@ -88,6 +100,11 @@ export class ToolBar {
 		this.applyActive();
 	}
 
+	setSidePane(sidePane: boolean): void {
+		this.sidePane = sidePane;
+		this.applyActive();
+	}
+
 	private setTool(tool: CursorTool): void {
 		this.tool = tool;
 		this.applyActive();
@@ -100,6 +117,7 @@ export class ToolBar {
 		}
 		this.depthRow.toggleClass("is-hidden", this.tool !== "links");
 		this.followButton?.toggleClass("is-active", this.following);
+		this.sidePaneButton?.toggleClass("is-active", this.sidePane);
 	}
 
 	setStatus(text: string): void {

@@ -51,6 +51,10 @@ export class EdgeMesh {
 		this.mesh.alpha = alpha;
 	}
 
+	setColor(color: number): void {
+		this.mesh.tint = color;
+	}
+
 	setVisible(visible: boolean): void {
 		this.mesh.visible = visible;
 	}

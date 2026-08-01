@@ -2,7 +2,8 @@
  * Legend chip in the bottom-right corner: gradient bar for numeric color
  * channels, category swatches for folder/tag coloring.
  */
-import { categoryColor, resolvePreset } from "../encoding/colorScales";
+import { categoryColor } from "../encoding/colorScales";
+import { activePreset } from "../render/theme";
 import { isCategoricalMetric, type MetricId } from "../encoding/metrics";
 import { metricLabel } from "../encoding/metricLabels";
 import { t } from "../i18n";
@@ -37,7 +38,7 @@ export class Legend {
 	}
 
 	private renderGradient(metric: MetricId, presetId: string): void {
-		const preset = resolvePreset(presetId);
+		const preset = activePreset(presetId);
 		this.root.createDiv({
 			cls: "graph-insight-legend-title",
 			text: metricLabel(metric),
@@ -50,7 +51,7 @@ export class Legend {
 	}
 
 	private renderCategories(metric: MetricId, categories: string[], presetId: string): void {
-		const palette = resolvePreset(presetId).categories;
+		const palette = activePreset(presetId).categories;
 		this.root.createDiv({
 			cls: "graph-insight-legend-title",
 			text: metricLabel(metric),

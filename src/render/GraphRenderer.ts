@@ -76,6 +76,9 @@ export interface RendererCallbacks {
 	onExploreAim(nodeId: number | null, clientX: number, clientY: number): void;
 	/** Explore mode: a click on the armed link — depart now. */
 	onExploreJump(): void;
+	/** The GPU dropped the WebGL context (driver reset, sleep, another app
+	 *  taking the GPU). Nothing renders until the view is rebuilt. */
+	onContextLost(): void;
 }
 
 interface ThemeColors {
@@ -199,6 +202,8 @@ export class GraphRenderer {
 	/** Neighbors of the hovered node (undirected), for hover emphasis. */
 	private hoverNeighbors = new Set<number>();
 	private selectedId: number | null = null;
+	/** Set once the GPU context is gone; every draw call after that is a no-op. */
+	private contextLost = false;
 
 	constructor(private readonly callbacks: RendererCallbacks) {}
 
@@ -212,6 +217,15 @@ export class GraphRenderer {
 		});
 		this.app = app;
 		host.appendChild(app.canvas);
+		// Without preventDefault the browser will not even try to hand the
+		// context back. Pixi cannot rebuild its GPU resources on its own, so the
+		// view is told to start over rather than left with a blank canvas.
+		app.canvas.addEventListener("webglcontextlost", (event) => {
+			event.preventDefault();
+			this.contextLost = true;
+			console.error("Advanced Graph View: WebGL context lost");
+			this.callbacks.onContextLost();
+		});
 
 		this.colors = readThemeColors();
 		this.labelHalo = cssColorToNumber(
@@ -850,6 +864,7 @@ export class GraphRenderer {
 	}
 
 	private renderFrame(): void {
+		if (this.contextLost) return;
 		if (!this.model || !this.positions || !this.radii) return;
 
 		if (this.positionsDirty) {
@@ -1050,6 +1065,23 @@ export class GraphRenderer {
 	 * overlapping nodes bloom like stars. Idempotent: repeated calls with the
 	 * same style do nothing, keeping panel changes free of visual resets.
 	 */
+	/**
+	 * The user switched theme (or installed one). Re-read every color that came
+	 * from a CSS variable and drop the label cache, whose halo and fill were
+	 * baked in at creation time — they are rebuilt on the next frame.
+	 */
+	refreshThemeColors(): void {
+		this.colors = readThemeColors();
+		this.labelHalo = cssColorToNumber(
+			getComputedStyle(document.body).getPropertyValue("--background-primary").trim() || "#1e1e1e"
+		);
+		for (const label of this.labels.values()) label.destroy();
+		this.labels.clear();
+		this.edgeMesh?.setColor(this.colors.edge);
+		this.positionsDirty = true;
+		this.edgesDirty = true;
+	}
+
 	setVisualStyle(glow: boolean, backdrop: number | null): void {
 		if (this.app) {
 			this.app.renderer.background.alpha = backdrop === null ? 0 : 1;

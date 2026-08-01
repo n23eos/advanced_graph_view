@@ -18,9 +18,13 @@ import { stripMarkdown } from "../data/stripMarkdown";
 import { countRecentOpens } from "../data/UsageTracker";
 import type { PositionMap } from "../data/persistence";
 import { buildEncoding, type NodeEncoding } from "../encoding/encode";
-import { categoryColor, resolvePreset } from "../encoding/colorScales";
+import { categoryColor } from "../encoding/colorScales";
+import { activePreset, isLightTheme } from "../render/theme";
 import type { NodeFacts } from "../encoding/metrics";
 import { ExploreSession } from "../explore/ExploreSession";
+import { DEFAULT_EXPLORE_TUNING } from "../explore/ExploreController";
+import { chooseCompanionAction } from "./companionPane";
+import { motionMs, motionSeconds } from "../render/motion";
 import { GraphRenderer } from "../render/GraphRenderer";
 import { ControlPanel, type PanelState } from "../ui/ControlPanel";
 import { Legend } from "../ui/Legend";
@@ -41,11 +45,13 @@ import { presetDisplayName } from "./presetNames";
 import { resolveFollowAction } from "./followActiveNote";
 import { t } from "../i18n";
 import type GraphInsightPlugin from "../main";
-import type { ViewPreset } from "../main";
+import type { ViewPreset } from "./builtinPresets";
 
 export const GRAPH_INSIGHT_VIEW_TYPE = "graph-insight-view";
 
 const POSITION_SAVE_DEBOUNCE_MS = 5000;
+/** How long the session trail takes to redraw itself end to end. */
+const TRAIL_REPLAY_MS = 4000;
 /** World-unit collision radius at nodeScale 1. 0 = no size-based repulsion
  *  (nodes may overlap; layout spacing comes from charge + links only). */
 const COLLIDE_BASE_RADIUS = 0;
@@ -88,6 +94,10 @@ export class GraphInsightView extends ItemView {
 	/** needle → set of matching paths, built lazily on Enter. */
 	private contentIndex = new Map<string, Set<string>>();
 	private legend: Legend | null = null;
+	/** Pane beside the graph that notes open into while side-pane mode is on. */
+	private companionLeaf: WorkspaceLeaf | null = null;
+	/** Placeholder shown instead of a blank canvas when the vault has no notes. */
+	private emptyState: HTMLElement | null = null;
 	private searchBar: SearchBar | null = null;
 	private filterChips: FilterChips | null = null;
 	/** Tag/folder picks from the dedicated dropdowns (OR inside, AND across). */
@@ -182,6 +192,7 @@ export class GraphInsightView extends ItemView {
 				this.showExploreTarget(nodeId, clientX, clientY);
 			},
 			onExploreJump: () => this.exploreSession?.jump(),
+			onContextLost: () => this.reportContextLost(),
 		});
 		await this.renderer.init(container);
 		// The pane may not have its final size during onOpen; resize once the
@@ -194,10 +205,14 @@ export class GraphInsightView extends ItemView {
 				this.renderer?.updatePositions(positions);
 				this.savePositionsDebounced();
 				this.redrawBubbles();
-			}
+			},
+			() => this.reportWorkerFailure("layout")
 		);
 
-		this.metricsClient = new MetricsClient((metrics) => this.handleMetricsResult(metrics));
+		this.metricsClient = new MetricsClient(
+			(metrics) => this.handleMetricsResult(metrics),
+			() => this.reportWorkerFailure("metrics")
+		);
 
 		this.panel = this.buildPanel(this.plugin.settings.panel);
 		this.panel.setViewPresets(this.presetRows(this.plugin.settings.viewPresets));
@@ -265,6 +280,7 @@ export class GraphInsightView extends ItemView {
 			this.cursorTool,
 			this.focusDepth,
 			this.plugin.settings.followActiveNote,
+			this.plugin.settings.openInSidePane,
 			{
 				onToolChange: (tool) => {
 					this.cursorTool = tool;
@@ -279,6 +295,7 @@ export class GraphInsightView extends ItemView {
 					}
 				},
 				onToggleFollow: (enabled) => void this.plugin.setFollowActiveNote(enabled),
+				onToggleSidePane: (enabled) => void this.plugin.setOpenInSidePane(enabled),
 			}
 		);
 
@@ -314,6 +331,10 @@ export class GraphInsightView extends ItemView {
 		this.registerEvent(
 			this.app.workspace.on("file-open", (file) => this.handleActiveNoteChanged(file))
 		);
+		// Theme switch or a newly installed theme: node, edge and label colors
+		// all come from CSS variables, and the scheme itself is dimmed on light
+		// themes — both have to be re-read, not just repainted.
+		this.registerEvent(this.app.workspace.on("css-change", () => this.handleThemeChange()));
 
 		if (!this.plugin.settings.onboardingShown) {
 			new OnboardingModal(this.app, () => void this.plugin.markOnboardingShown()).open();
@@ -455,6 +476,11 @@ export class GraphInsightView extends ItemView {
 		this.toolBar?.setFollowing(enabled);
 	}
 
+	setOpenInSidePane(enabled: boolean): void {
+		void this.plugin.setOpenInSidePane(enabled);
+		this.toolBar?.setSidePane(enabled);
+	}
+
 	// ── Pins ──────────────────────────────────────────────────────────
 
 	/** Explicit pins and the temporary ones a drag leaves behind both count:
@@ -578,7 +604,9 @@ export class GraphInsightView extends ItemView {
 					this.recomputeVisual();
 					this.renderExploreBar();
 				},
-			}
+			},
+			// A reduced-motion user gets the same trip with the flight cut out.
+			{ flightSeconds: motionSeconds(DEFAULT_EXPLORE_TUNING.flightSeconds) }
 		);
 		this.cameraWidget?.setExploring(true);
 		if (!reanchoring) new Notice(t("notice.exploreStart"), 5000);
@@ -687,12 +715,12 @@ export class GraphInsightView extends ItemView {
 		// replace whatever the trip started from, and the graph is still mid-
 		// exploration behind it.
 		const open = this.focusBar.createEl("button", { text: t("explore.open") });
-		open.setAttribute("title", t("explore.open.hint"));
+		open.setAttribute("aria-label", t("explore.open.hint"));
 		open.addEventListener("click", () => this.openNode(centerId, true));
 		const back = this.focusBar.createEl("button", { text: t("explore.back") });
 		back.addEventListener("click", () => this.exploreSession?.back());
 		const detach = this.focusBar.createEl("button", { text: t("explore.detach") });
-		detach.setAttribute("title", t("explore.detach.hint"));
+		detach.setAttribute("aria-label", t("explore.detach.hint"));
 		detach.addEventListener("click", () => this.detachExplore());
 		const exit = this.focusBar.createEl("button", { text: t("explore.exit") });
 		exit.addEventListener("click", () => void this.exitExplore());
@@ -894,15 +922,31 @@ export class GraphInsightView extends ItemView {
 	private openNode(nodeId: number, newTab: boolean): void {
 		const file = this.nodeFile(nodeId);
 		if (!file) return;
+		// An explicit "new tab" (middle click, menu item) still means a new tab;
+		// the side-pane mode only changes what a plain click does.
+		if (!newTab && this.plugin.settings.openInSidePane) {
+			this.openNodeInSplit(nodeId);
+			return;
+		}
 		this.selfOpenedPath = file.path;
 		void this.app.workspace.getLeaf(newTab ? "tab" : false).openFile(file);
 	}
 
+	/** Open beside the graph, reusing the pane from the previous note. */
 	private openNodeInSplit(nodeId: number): void {
 		const file = this.nodeFile(nodeId);
 		if (!file) return;
 		this.selfOpenedPath = file.path;
-		void this.app.workspace.getLeaf("split").openFile(file);
+
+		const openLeaves: WorkspaceLeaf[] = [];
+		this.app.workspace.iterateAllLeaves((leaf) => openLeaves.push(leaf));
+		const action = chooseCompanionAction(this.companionLeaf, openLeaves, this.leaf);
+		if (action === "create") {
+			// Split from the graph's own pane, not the active one — otherwise the
+			// new pane lands wherever focus happens to be.
+			this.companionLeaf = this.app.workspace.createLeafBySplit(this.leaf, "vertical");
+		}
+		void this.companionLeaf?.openFile(file);
 	}
 
 	/** Show the note in the file explorer's tree, the way the core graph does. */
@@ -987,6 +1031,93 @@ export class GraphInsightView extends ItemView {
 		this.searchBar?.setVocabulary(...vocabulary);
 		this.filterChips?.setVocabulary(...vocabulary);
 		this.rebuilding = false;
+		this.updateEmptyState(model.nodes.length);
+	}
+
+	/**
+	 * A vault with nothing in it renders as an empty black rectangle, which
+	 * reads as a broken plugin rather than an empty vault. Say which it is.
+	 */
+	private updateEmptyState(nodeCount: number): void {
+		if (nodeCount > 0) {
+			this.emptyState?.remove();
+			this.emptyState = null;
+			return;
+		}
+		if (this.emptyState) return;
+		this.emptyState = this.contentEl.createDiv({ cls: "graph-insight-empty" });
+		this.emptyState.createDiv({ cls: "graph-insight-empty-title", text: t("empty.title") });
+		this.emptyState.createDiv({ cls: "graph-insight-empty-body", text: t("empty.body") });
+	}
+
+	/**
+	 * A background worker died. The graph itself is still on screen, so say what
+	 * stopped and offer the one action that fixes it rather than leaving the user
+	 * with a view that has quietly gone still.
+	 */
+	private handleThemeChange(): void {
+		this.renderer?.refreshThemeColors();
+		this.applyEncoding(this.plugin.settings.panel);
+	}
+
+	/**
+	 * The GPU took the canvas away. Pixi cannot restore its buffers in place, so
+	 * the only honest fix is to build the view again — offered as a button
+	 * rather than done behind the user's back, since a rebuild costs a relayout.
+	 */
+	private reportContextLost(): void {
+		const message = new DocumentFragment();
+		message.createDiv({ text: t("notice.contextLost") });
+		const reload = message.createEl("button", { text: t("notice.contextReload") });
+		reload.addClass("agv-notice-action");
+		const notice = new Notice(message, 0);
+		reload.addEventListener("click", () => {
+			notice.hide();
+			void this.reopen();
+		});
+	}
+
+	/** Settings were replaced wholesale (import or reset) — start over. */
+	reloadFromSettings(): Promise<void> {
+		return this.reopen();
+	}
+
+	/** Tear the whole view down and build it again from saved settings. */
+	private async reopen(): Promise<void> {
+		await this.onClose();
+		await this.onOpen();
+	}
+
+	private reportWorkerFailure(kind: "layout" | "metrics"): void {
+		const message = new DocumentFragment();
+		message.createDiv({
+			text: kind === "layout" ? t("notice.layoutWorkerFailed") : t("notice.metricsWorkerFailed"),
+		});
+		const retry = message.createEl("button", { text: t("notice.workerRetry") });
+		retry.addClass("agv-notice-action");
+		const notice = new Notice(message, 0);
+		retry.addEventListener("click", () => {
+			notice.hide();
+			void this.restartWorker(kind);
+		});
+	}
+
+	private async restartWorker(kind: "layout" | "metrics"): Promise<void> {
+		if (kind === "metrics") {
+			this.metricsClient?.stop();
+			this.metricsClient = new MetricsClient(
+				(metrics) => this.handleMetricsResult(metrics),
+				() => this.reportWorkerFailure("metrics")
+			);
+			if (this.model) this.metricsClient.compute(this.model);
+			return;
+		}
+		// The layout client tore itself down on the error; a rebuild spawns a
+		// fresh worker. Clearing the model defeats the "nothing changed" guard,
+		// which would otherwise make the rebuild a no-op.
+		this.model = null;
+		this.rebuilding = false;
+		await this.rebuildGraph();
 	}
 
 	/** Worker finished PageRank + Louvain: enrich facts, refresh UI. */
@@ -1088,7 +1219,7 @@ export class GraphInsightView extends ItemView {
 			return;
 		}
 		// Bubbles follow the active scheme so hulls match their node colors.
-		const palette = resolvePreset(this.plugin.settings.panel.colorPreset).categories;
+		const palette = activePreset(this.plugin.settings.panel.colorPreset).categories;
 		const groups = this.clusterOrder
 			.filter((communityId) => !this.hiddenClusters.has(communityId))
 			.map((communityId) => ({
@@ -1192,9 +1323,11 @@ export class GraphInsightView extends ItemView {
 
 	private applyEncoding(state: PanelState): void {
 		if (!this.renderer || this.facts.length === 0) return;
-		const preset = resolvePreset(state.colorPreset);
+		const preset = activePreset(state.colorPreset);
 		this.renderer.setVisualStyle(preset.glow === true, preset.backdrop ?? null);
-		this.encoding = buildEncoding(this.facts, state.channels, state.colorPreset, Date.now());
+		this.encoding = buildEncoding(
+			this.facts, state.channels, state.colorPreset, Date.now(), isLightTheme()
+		);
 		const sizes = new Float32Array(this.encoding.sizes.length);
 		for (let i = 0; i < sizes.length; i++) sizes[i] = this.encoding.sizes[i] * state.nodeScale;
 		this.renderer.applyEncoding(sizes, this.encoding.tints, this.encoding.glow);
@@ -1335,13 +1468,15 @@ export class GraphInsightView extends ItemView {
 			case "open":
 				break;
 		}
-		const file = this.app.vault.getAbstractFileByPath(node.path);
-		if (!(file instanceof TFile)) return;
-		// Plain click opens in the last used pane; Cmd = new tab, Cmd+Shift = split.
-		const leaf = Keymap.isModEvent(event)
-			? this.app.workspace.getLeaf(event.shiftKey ? "split" : "tab")
-			: this.app.workspace.getLeaf(false);
-		void leaf.openFile(file);
+		// Cmd+Shift always splits and Cmd always opens a tab, whatever the mode.
+		// A plain click goes through openNode, which is where side-pane mode
+		// decides between the pane beside the graph and the last used one.
+		const modifier = Keymap.isModEvent(event) !== false;
+		if (modifier && event.shiftKey) {
+			this.openNodeInSplit(nodeId);
+			return;
+		}
+		this.openNode(nodeId, modifier);
 	}
 
 	// ── Command API (used by main.ts commands) ────────────────────────
@@ -1619,7 +1754,7 @@ export class GraphInsightView extends ItemView {
 
 	private replayTrail(): void {
 		if (this.trailReplayFrame !== null) window.cancelAnimationFrame(this.trailReplayFrame);
-		const durationMs = 4000;
+		const durationMs = motionMs(TRAIL_REPLAY_MS);
 		const start = performance.now();
 		const step = () => {
 			const progress = Math.min(1, (performance.now() - start) / durationMs);
@@ -1635,6 +1770,9 @@ export class GraphInsightView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
+		// Forget the companion pane without closing it: the note in it is the
+		// user's, and they may well still be reading it.
+		this.companionLeaf = null;
 		this.clearPreviewTimer();
 		this.exploreSession?.stop();
 		this.exploreSession = null;

@@ -12,7 +12,10 @@ export class LayoutClient {
 
 	constructor(
 		private readonly onPositions: (positions: Float32Array, alpha: number) => void,
-		private readonly onSettled: (positions: Float32Array) => void
+		private readonly onSettled: (positions: Float32Array) => void,
+		/** Called when the worker dies. The graph stays on screen, frozen at the
+		 *  last positions it sent — the caller decides whether to offer a retry. */
+		private readonly onError?: (reason: string) => void
 	) {}
 
 	start(model: GraphModel, seedPositions?: Float32Array, dimensions: 2 | 3 = 2, isStatic = false): void {
@@ -27,6 +30,15 @@ export class LayoutClient {
 			} else if (message.type === "end") {
 				this.onSettled(message.positions);
 			}
+		};
+		this.worker.onerror = (event: ErrorEvent) => {
+			// An uncaught throw leaves the worker in an undefined state; drop it
+			// rather than keep pushing messages into something that stopped
+			// ticking, and let the caller surface it.
+			const reason = event.message || "layout worker stopped";
+			console.error("Advanced Graph View: layout worker failed", event);
+			this.stop();
+			this.onError?.(reason);
 		};
 
 		const edges = new Uint32Array(model.edges.length * 2);

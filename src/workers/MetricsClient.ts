@@ -18,7 +18,12 @@ export class MetricsClient {
 	private computing = false;
 	private pendingModel: GraphModel | null = null;
 
-	constructor(private readonly onResult: (metrics: GraphMetrics) => void) {}
+	constructor(
+		private readonly onResult: (metrics: GraphMetrics) => void,
+		/** Called when the worker dies. PageRank and clusters keep their last
+		 *  values; everything else in the graph goes on working. */
+		private readonly onError?: (reason: string) => void
+	) {}
 
 	compute(model: GraphModel): void {
 		if (this.computing) {
@@ -44,6 +49,15 @@ export class MetricsClient {
 				this.pendingModel = null;
 				this.compute(next);
 			}
+		};
+		this.worker.onerror = (event: ErrorEvent) => {
+			// `stop()` clears the computing flag as well — without it a crashed
+			// worker would leave every later compute() queued behind a request
+			// that can never finish.
+			const reason = event.message || "metrics worker stopped";
+			console.error("Advanced Graph View: metrics worker failed", event);
+			this.stop();
+			this.onError?.(reason);
 		};
 		return this.worker;
 	}

@@ -15,7 +15,11 @@ export type BuiltinPresetId =
 	| "wide-range"
 	| "density"
 	| "small-nodes-2d"
-	| "minimalism";
+	| "minimalism"
+	| "orphans"
+	| "broken-links"
+	| "dead-ends"
+	| "attention-map";
 
 interface NamedPreset {
 	name: string;

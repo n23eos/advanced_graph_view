@@ -3,6 +3,7 @@ import {
 	compactLog,
 	countRecentOpens,
 	emptyLog,
+	normalizeUsageLog,
 	pushSessionEntry,
 	recordOpen,
 	removePath,
@@ -146,3 +147,40 @@ describe("pushSessionEntry", () => {
 		expect(trail[199].path).toBe("n249.md");
 	});
 });
+
+describe("normalizeUsageLog", () => {
+	test("keeps a well-formed log as is", () => {
+		const log = { "a.md": { total: 3, days: { "2024-01-01": 3 }, months: {}, years: {} } };
+
+		expect(normalizeUsageLog(log)).toEqual(log);
+	});
+
+	test("returns null when the file is not an object", () => {
+		expect(normalizeUsageLog(null)).toBeNull();
+		expect(normalizeUsageLog("wrecked")).toBeNull();
+		expect(normalizeUsageLog([1, 2, 3])).toBeNull();
+	});
+
+	test("drops entries whose shape is broken instead of failing the whole log", () => {
+		const raw = {
+			"good.md": { total: 2, days: { "2024-01-01": 2 }, months: {}, years: {} },
+			"broken.md": "not a usage record",
+			"half.md": { total: 1 },
+		};
+
+		expect(normalizeUsageLog(raw)).toEqual({
+			"good.md": { total: 2, days: { "2024-01-01": 2 }, months: {}, years: {} },
+			"half.md": { total: 1, days: {}, months: {}, years: {} },
+		});
+	});
+
+	test("repairs non-numeric counts rather than letting NaN reach the graph", () => {
+		const raw = {
+			"a.md": { total: "many", days: { "2024-01-01": "lots", "2024-01-02": 4 }, months: {}, years: {} },
+		};
+
+		expect(normalizeUsageLog(raw)).toEqual({
+			"a.md": { total: 0, days: { "2024-01-02": 4 }, months: {}, years: {} },
+		});
+	});
+})

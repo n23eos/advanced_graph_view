@@ -11,228 +11,19 @@ import {
 	type SessionEntry,
 	type UsageLog,
 } from "./data/UsageTracker";
-import type { PanelState } from "./ui/ControlPanel";
-import type { SearchPreset } from "./ui/SearchBar";
 import { InsightsView, INSIGHTS_VIEW_TYPE } from "./view/InsightsView";
 import { GraphInsightSettingsTab } from "./settings/SettingsTab";
 import { initI18n, t } from "./i18n";
-import { migrateViewPresets, type BuiltinPresetId } from "./view/presetNames";
-
-export interface ViewPreset {
-	/** Literal name. For bundled presets this is the English original, kept so
-	 *  older installs keep matching on it; the UI shows the translated name. */
-	name: string;
-	/** Set only on bundled presets: the locale key their display name comes
-	 *  from. User presets have none and always show their literal name. */
-	builtinId?: BuiltinPresetId;
-	/** Full panel state snapshot: channels, colors, physics, 3D, layers. */
-	panel: PanelState;
-}
-
-interface GraphInsightSettings {
-	panel: PanelState;
-	viewPresets: ViewPreset[];
-	presets: SearchPreset[];
-	onboardingShown: boolean;
-	/** Version of the built-in view presets last seeded. Lower than
-	 *  VIEW_PRESET_VERSION triggers a one-time re-seed + retire migration. */
-	viewPresetsVersion: number;
-	/** Open counts only when the file stays active at least this long. */
-	openDwellSeconds: number;
-	/** Note-body preview shown in the hover tooltip. */
-	hoverPreview: HoverPreviewSettings;
-	/** Last tag/folder filter, restored on the next session. */
-	chipFilter: { tags: string[]; folders: string[] };
-	/** Camera follows the note you open elsewhere in the vault. Not part of
-	 *  PanelState: it is how the view behaves, not what a view preset looks like. */
-	followActiveNote: boolean;
-}
-
-interface HoverPreviewSettings {
-	/** When off, the tooltip stays name + metadata only. */
-	enabled: boolean;
-	/** How many leading words of the note body to show. */
-	words: number;
-	/** Hold the cursor on a node this long before the preview loads. */
-	delayMs: number;
-}
-
-/** Fixed fields shared by every bundled panel snapshot, so each preset only
- *  spells out what actually differs. */
-type PanelSpec = Pick<
-	PanelState,
-	"channels" | "colorPreset" | "physics" | "labels" | "edges" | "nodeScale" | "view3d"
-> & { showBubbles?: boolean };
-
-function makePanel(spec: PanelSpec): PanelState {
-	return {
-		channels: spec.channels,
-		colorPreset: spec.colorPreset,
-		collapsed: false,
-		overlays: { orphans: false, deadEnds: false, broken: false },
-		showBubbles: spec.showBubbles ?? false,
-		showTimeline: false,
-		showTrail: false,
-		physics: spec.physics,
-		labels: spec.labels,
-		edges: spec.edges,
-		nodeScale: spec.nodeScale,
-		view3d: spec.view3d,
-	};
-}
-
-/** The out-of-the-box view: a 3D galaxy. Also seeded as the "Default 3D" preset. */
-const DEFAULT_3D_PANEL = makePanel({
-	channels: { size: "links-out", color: "cluster", glow: null },
-	colorPreset: "galaxy",
-	physics: {
-		repel: 112, linkDistance: 205, centering: 0.245,
-		linkStrength: 0.08, velocityDecay: 0.45, elasticity: 0.35, freeLayout: true, disabled: false,
-	},
-	labels: { show: true, fontSize: 11, zoomThreshold: 1.53, maxCount: 140, scaleWithZoom: true },
-	edges: { show: true, width: 0.4, opacity: 0.21 },
-	nodeScale: 1.2,
-	view3d: { enabled: true, depthSource: "physics", focal: 900 },
-});
-
-const DEFAULT_SETTINGS: GraphInsightSettings = {
-	panel: DEFAULT_3D_PANEL,
-	openDwellSeconds: 5,
-	hoverPreview: { enabled: true, words: 300, delayMs: 350 },
-	chipFilter: { tags: [], folders: [] },
-	followActiveNote: false,
-	presets: [],
-	viewPresets: [],
-	viewPresetsVersion: 0,
-	onboardingShown: false,
-};
-
-/** Bump when DEFAULT_VIEW_PRESETS changes so existing installs re-seed. */
-const VIEW_PRESET_VERSION = 6;
-/** Default preset names retired in newer versions — removed on migration. */
-const RETIRED_VIEW_PRESETS = new Set([
-	"3D галактика", "Хабы и кластеры", "Недавнее", "Мелкие ноды",
-	"Широкий разброс", "Плотный клубок", "Минимализм",
-]);
-
-/** Bundled presets, copied from the tuned Raincoat vault. "Default 3D" first —
- *  it matches the out-of-the-box panel. */
-const DEFAULT_VIEW_PRESETS: ViewPreset[] = [
-	{ builtinId: "default-3d", name: "Default 3D", panel: DEFAULT_3D_PANEL },
-	{
-		builtinId: "default-2d",
-		name: "Default 2D",
-		panel: makePanel({
-			channels: { size: "links-in", color: "cluster", glow: null },
-			colorPreset: "galaxy",
-			physics: {
-				repel: 157, linkDistance: 90, centering: 0.355,
-				linkStrength: 0.08, velocityDecay: 0.55, elasticity: 0.4, freeLayout: true,
-			},
-			labels: { show: false, fontSize: 11, zoomThreshold: 0.9, maxCount: 100, scaleWithZoom: true },
-			edges: { show: true, width: 0.2, opacity: 0.16 },
-			nodeScale: 2.05,
-			view3d: { enabled: false, depthSource: "physics", focal: 900 },
-		}),
-	},
-	{
-		builtinId: "hubs-clusters",
-		name: "Hubs and Clusters",
-		panel: makePanel({
-			channels: { size: "pagerank", color: "cluster", glow: "links-total" },
-			colorPreset: "galaxy",
-			showBubbles: true,
-			physics: {
-				repel: 30, linkDistance: 25, centering: 0.09,
-				linkStrength: 0.15, velocityDecay: 0.55, elasticity: 0.4, freeLayout: false,
-			},
-			labels: { show: false, fontSize: 11, zoomThreshold: 0.9, maxCount: 100, scaleWithZoom: true },
-			edges: { show: true, width: 0.2, opacity: 0.16 },
-			nodeScale: 0.8,
-			view3d: { enabled: false, depthSource: "physics", focal: 900 },
-		}),
-	},
-	{
-		builtinId: "recent",
-		name: "Recent",
-		panel: makePanel({
-			channels: { size: "opens-30", color: "recency-edit", glow: null },
-			colorPreset: "heat",
-			physics: {
-				repel: 30, linkDistance: 25, centering: 0.09,
-				linkStrength: 0.15, velocityDecay: 0.55, elasticity: 0.4, freeLayout: false,
-			},
-			labels: { show: false, fontSize: 11, zoomThreshold: 0.9, maxCount: 100, scaleWithZoom: true },
-			edges: { show: true, width: 0.2, opacity: 0.16 },
-			nodeScale: 1.25,
-			view3d: { enabled: false, depthSource: "physics", focal: 900 },
-		}),
-	},
-	{
-		builtinId: "wide-range",
-		name: "Wide Range",
-		panel: makePanel({
-			channels: { size: "pagerank", color: "recency-edit", glow: null },
-			colorPreset: "recency",
-			physics: {
-				repel: 158, linkDistance: 120, centering: 0.355,
-				linkStrength: 0.08, velocityDecay: 0.55, elasticity: 0.4, freeLayout: true,
-			},
-			labels: { show: true, fontSize: 11, zoomThreshold: 0.73, maxCount: 40, scaleWithZoom: true },
-			edges: { show: true, width: 0.2, opacity: 0.16 },
-			nodeScale: 2.5,
-			view3d: { enabled: false, depthSource: "physics", focal: 900 },
-		}),
-	},
-	{
-		builtinId: "density",
-		name: "Density",
-		panel: makePanel({
-			channels: { size: "pagerank", color: "recency-edit", glow: null },
-			colorPreset: "recency",
-			physics: {
-				repel: 5, linkDistance: 125, centering: 0.265,
-				linkStrength: 0.15, velocityDecay: 0.55, elasticity: 0.55, freeLayout: true,
-			},
-			labels: { show: false, fontSize: 11, zoomThreshold: 0.9, maxCount: 100, scaleWithZoom: true },
-			edges: { show: true, width: 0.15, opacity: 0.18 },
-			nodeScale: 0.95,
-			view3d: { enabled: false, depthSource: "physics", focal: 900 },
-		}),
-	},
-	{
-		builtinId: "small-nodes-2d",
-		name: "Small Nodes 2D",
-		panel: makePanel({
-			channels: { size: "pagerank", color: "recency-edit", glow: null },
-			colorPreset: "recency",
-			physics: {
-				repel: 30, linkDistance: 25, centering: 0.09,
-				linkStrength: 0.15, velocityDecay: 0.55, elasticity: 0.4, freeLayout: false,
-			},
-			labels: { show: true, fontSize: 10, zoomThreshold: 1.78, maxCount: 100, scaleWithZoom: true },
-			edges: { show: true, width: 0.2, opacity: 0.15 },
-			nodeScale: 0.55,
-			view3d: { enabled: false, depthSource: "physics", focal: 900 },
-		}),
-	},
-	{
-		builtinId: "minimalism",
-		name: "Minimalism",
-		panel: makePanel({
-			channels: { size: "pagerank", color: "recency-edit", glow: null },
-			colorPreset: "mono",
-			physics: {
-				repel: 30, linkDistance: 25, centering: 0.09,
-				linkStrength: 0.15, velocityDecay: 0.55, elasticity: 0.4, freeLayout: false,
-			},
-			labels: { show: false, fontSize: 11, zoomThreshold: 0.9, maxCount: 100, scaleWithZoom: true },
-			edges: { show: true, width: 0.2, opacity: 0.16 },
-			nodeScale: 1.25,
-			view3d: { enabled: false, depthSource: "physics", focal: 900 },
-		}),
-	},
-];
+import { migrateViewPresets } from "./view/presetNames";
+import {
+	DEFAULT_VIEW_PRESETS,
+	RETIRED_VIEW_PRESETS,
+	VIEW_PRESET_VERSION,
+} from "./view/builtinPresets";
+import { DEFAULT_SETTINGS, type GraphInsightSettings } from "./settings/schema";
+import type { PanelState } from "./ui/ControlPanel";
+import type { SearchPreset } from "./ui/SearchBar";
+import type { ViewPreset } from "./view/builtinPresets";
 
 const SESSION_TRAIL_CAP = 200;
 const USAGE_SAVE_DEBOUNCE_MS = 30_000;
@@ -393,6 +184,17 @@ export default class GraphInsightPlugin extends Plugin {
 		});
 
 		this.addCommand({
+			id: "toggle-side-pane",
+			name: t("command.toggleSidePane"),
+			checkCallback: (checking) => {
+				const view = this.getGraphView();
+				if (!view) return false;
+				if (!checking) view.setOpenInSidePane(!this.settings.openInSidePane);
+				return true;
+			},
+		});
+
+		this.addCommand({
 			id: "exit-focus-mode",
 			name: t("command.exitFocus"),
 			// Offered only while focus mode is actually on: otherwise the palette
@@ -474,6 +276,17 @@ export default class GraphInsightPlugin extends Plugin {
 		await this.dataStore.saveUsage(this.usageLog);
 	}
 
+	/**
+	 * Swap the whole settings object — an import or a reset to defaults. An open
+	 * graph is rebuilt from scratch, because nearly everything it holds (panel,
+	 * presets, filters) has just been replaced underneath it.
+	 */
+	async replaceSettings(settings: GraphInsightSettings): Promise<void> {
+		this.settings = settings;
+		await this.saveData(this.settings);
+		await this.getGraphView()?.reloadFromSettings();
+	}
+
 	async savePanelState(panel: PanelState): Promise<void> {
 		this.settings = { ...this.settings, panel };
 		await this.saveData(this.settings);
@@ -481,6 +294,11 @@ export default class GraphInsightPlugin extends Plugin {
 
 	async setFollowActiveNote(followActiveNote: boolean): Promise<void> {
 		this.settings = { ...this.settings, followActiveNote };
+		await this.saveData(this.settings);
+	}
+
+	async setOpenInSidePane(openInSidePane: boolean): Promise<void> {
+		this.settings = { ...this.settings, openInSidePane };
 		await this.saveData(this.settings);
 	}
 

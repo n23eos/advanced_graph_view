@@ -32,6 +32,10 @@ export const en = {
 	"preset.density": "Density",
 	"preset.small-nodes-2d": "Small nodes 2D",
 	"preset.minimalism": "Minimalism",
+	"preset.orphans": "Orphans",
+	"preset.broken-links": "Broken links",
+	"preset.dead-ends": "Dead ends",
+	"preset.attention-map": "Attention map",
 
 	// ── Appearance ────────────────────────────────────────────────────
 	"appearance.size": "Size",
@@ -155,6 +159,8 @@ export const en = {
 	"tool.pin.hint": "Click pins or releases the note",
 	"tool.follow": "Follow",
 	"tool.follow.hint": "The camera moves to whichever note you open elsewhere in the vault",
+	"tool.sidePane": "Side pane",
+	"tool.sidePane.hint": "A click opens the note in a pane beside the graph, and the next note replaces it there",
 	"tool.depth": "Neighborhood steps",
 
 	// ── Camera widget ─────────────────────────────────────────────────
@@ -226,6 +232,11 @@ export const en = {
 	"notice.presetSaved": "Preset \"{name}\" saved",
 	"notice.presetDeleted": "Preset \"{name}\" deleted",
 	"notice.viewStateReset": "View state reset",
+	"notice.layoutWorkerFailed": "Graph layout stopped: the physics worker failed. Node positions are frozen where they were.",
+	"notice.metricsWorkerFailed": "PageRank and clusters stopped: the metrics worker failed. The rest of the graph still works.",
+	"notice.workerRetry": "Restart",
+	"notice.contextLost": "WebGL stopped: the graphics context was lost. The view has to be rebuilt.",
+	"notice.contextReload": "Rebuild view",
 	"notice.usageCleared": "Usage statistics cleared",
 	"notice.dataReset": "Advanced Graph View data reset",
 
@@ -250,6 +261,7 @@ export const en = {
 	"command.toggle3d": "Toggle 3D mode",
 	"command.exitFocus": "Exit focus mode",
 	"command.toggleFollow": "Toggle follow active note",
+	"command.toggleSidePane": "Toggle opening notes in a side pane",
 	"command.openInsights": "Open insights dashboard",
 	"command.exportPng": "Export current view as PNG",
 	"command.exportJson": "Export graph data as JSON",
@@ -290,6 +302,24 @@ export const en = {
 	"settings.group.data": "Data",
 	"settings.resetAll": "Reset all plugin data",
 	"settings.resetAll.desc": "Usage statistics and node positions. Settings are kept.",
+	"settings.group.profile": "Settings profile",
+	"settings.exportProfile": "Export settings",
+	"settings.exportProfile.desc": "Download your view presets, filters and preferences as a file you can carry to another vault.",
+	"settings.importProfile": "Import settings",
+	"settings.importProfile.desc": "Load a settings file exported from this plugin. Usage statistics are left untouched.",
+	"settings.resetSettings": "Reset settings to defaults",
+	"settings.resetSettings.desc": "Restores every preference and rebuilds the bundled view presets. Usage statistics are kept.",
+	"settings.resetSettings.confirm": "Every preference goes back to its default and your own view presets are removed. This cannot be undone.",
+	"settings.resetAll.confirm": "The whole open-count log and all saved node positions are deleted. This cannot be undone.",
+	"notice.profileImported": "Settings imported",
+	"notice.profileInvalid": "That file is not an Advanced Graph View settings profile",
+	"notice.settingsReset": "Settings reset to defaults",
+	"confirm.title": "Are you sure?",
+	"confirm.proceed": "Yes, continue",
+	"confirm.cancel": "Cancel",
+
+	"empty.title": "Nothing to graph yet",
+	"empty.body": "This vault has no markdown notes. Create a few and link them — the graph builds itself as you write.",
 
 	// ── Onboarding ────────────────────────────────────────────────────
 	"onboarding.title": "Advanced Graph View — what is different",

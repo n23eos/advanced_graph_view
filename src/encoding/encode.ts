@@ -3,6 +3,7 @@
  * radius, tint, glow alpha for every node.
  */
 import { categoryColor, resolvePreset, sampleGradient } from "./colorScales";
+import { adaptPresetToTheme } from "./themeContrast";
 import {
 	computeMetric,
 	isCategoricalMetric,
@@ -47,7 +48,9 @@ export function buildEncoding(
 	nodes: readonly NodeFacts[],
 	channels: ChannelAssignment,
 	colorPreset: string,
-	now: number
+	now: number,
+	/** Light themes need the brightest scheme colors dimmed to stay visible. */
+	isLightTheme = false
 ): NodeEncoding {
 	const count = nodes.length;
 	const sizes = new Float32Array(count).fill(DEFAULT_RADIUS);
@@ -63,7 +66,7 @@ export function buildEncoding(
 	}
 
 	if (channels.color) {
-		const preset = resolvePreset(colorPreset);
+		const preset = adaptPresetToTheme(resolvePreset(colorPreset), isLightTheme);
 		if (isCategoricalMetric(channels.color)) {
 			categories = nodes.map((f) => String(computeMetric(channels.color!, f, now)));
 			for (let i = 0; i < count; i++) {

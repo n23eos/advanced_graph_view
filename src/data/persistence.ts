@@ -4,7 +4,7 @@
  * must start cleanly on first run and after manual file deletion.
  */
 import type { App } from "obsidian";
-import type { UsageLog } from "./UsageTracker";
+import { normalizeUsageLog, type UsageLog } from "./UsageTracker";
 
 /** [x, y] in old saves, [x, y, z] since the pseudo-3D update. */
 export type PositionMap = Record<string, [number, number] | [number, number, number]>;
@@ -68,8 +68,35 @@ export class PluginDataStore {
 		}
 	}
 
-	loadUsage(): Promise<UsageLog | null> {
-		return this.readJson<UsageLog>("usage.json");
+	/**
+	 * A usage log that fails validation is moved aside before the plugin starts
+	 * over, so a shape problem never silently erases years of history: the file
+	 * is still there to inspect or hand back.
+	 */
+	async loadUsage(): Promise<UsageLog | null> {
+		const raw = await this.readJson<unknown>("usage.json");
+		if (raw === null) return null;
+		const log = normalizeUsageLog(raw);
+		if (log === null) {
+			await this.quarantine("usage.json");
+			return null;
+		}
+		return log;
+	}
+
+	/** Rename a damaged file to `<name>.corrupt` instead of deleting it. */
+	private async quarantine(fileName: string): Promise<void> {
+		const path = `${this.dataDir}/${fileName}`;
+		const backup = `${path}.corrupt`;
+		try {
+			if (await this.app.vault.adapter.exists(backup)) {
+				await this.app.vault.adapter.remove(backup);
+			}
+			await this.app.vault.adapter.rename(path, backup);
+			console.error(`Advanced Graph View: ${fileName} was unreadable, moved to ${backup}`);
+		} catch (error) {
+			console.error(`Advanced Graph View: failed to set aside ${fileName}`, error);
+		}
 	}
 
 	saveUsage(log: UsageLog): Promise<void> {

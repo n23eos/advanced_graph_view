@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Side-pane mode** — a toolbar toggle (also a command, so it can take a
+  hotkey). With it on, clicking a note opens it in a pane beside the graph
+  instead of on top of it, and every following note replaces the one in that
+  same pane rather than spawning another split. Close the pane and the next
+  click makes a new one. Middle click and "Open in new tab" are unaffected.
+- **Four diagnostic view presets.** *Orphans*, *Broken links* and *Dead ends*
+  each turn on their overlay, drop the scheme to mono and switch labels on, so
+  the matches are the only thing lit and can be read and acted on one by one.
+  *Attention map* sizes nodes by PageRank and colors them by opens in the last
+  90 days — big and cold is a hub you have stopped reading.
+- **Settings profile.** Export your view presets, filters and preferences to a
+  file and import them in another vault. Usage history and node positions stay
+  behind; they describe one vault, not a way of working.
+- **Reset settings to defaults**, separate from the existing reset of plugin
+  data. Both now ask for confirmation before they run.
+- **Empty-vault placeholder** instead of a blank canvas when there are no
+  markdown notes to graph.
+
+### Changed
+
+- **Light themes are supported properly.** Scheme colors that ran to near-white
+  are dimmed just enough to stay visible on a light background, keeping their
+  hue; the glowing "galaxy" schemes, which bring their own dark backdrop, are
+  left as they were. Switching theme now repaints the graph immediately instead
+  of waiting for a restart.
+- **`prefers-reduced-motion` is respected**: explore-mode camera flights and the
+  session-trail replay cut straight to their end state.
+
+### Fixed
+
+- A crashed layout or metrics worker no longer leaves the view silently frozen —
+  it says what stopped, what still works, and offers a restart. A crashed
+  metrics worker previously also blocked every later computation.
+- A lost WebGL context is reported with a rebuild button instead of leaving a
+  blank canvas behind.
+- A `usage.json` with a valid-JSON but wrong shape is now repaired entry by
+  entry rather than taken at face value; a file that is not a usage log at all
+  is moved aside as `usage.json.corrupt` instead of being overwritten.
+
 ## [0.4.0] — 2026-07-29
 
 ### Added
