@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { computeGraphMetrics } from "./metricsEngine";
+import { makeSyntheticGraph } from "../bench/synthGraph";
 
 /** Flat edge pairs helper. */
 function edges(pairs: [number, number][]): { edges: Uint32Array; weights: Float32Array } {
@@ -74,5 +75,26 @@ describe("computeGraphMetrics", () => {
 
 		// Act & Assert
 		expect(() => computeGraphMetrics(2, input.edges, input.weights)).not.toThrow();
+	});
+
+	test("the same graph always lands in the same communities", () => {
+		// Louvain is randomised: it walks nodes in a shuffled order and keeps
+		// whichever merge improves modularity first. Unseeded, the same vault
+		// recomputed gives different community ids — and the graph silently
+		// recolours itself for no reason the user can see.
+		//
+		// Big enough to matter: on a six-node toy graph the greedy pass reaches
+		// the same answer whatever the order, so it would pass while broken.
+
+		// Arrange
+		const graph = makeSyntheticGraph(600);
+
+		// Act
+		const first = computeGraphMetrics(graph.nodeCount, graph.edgePairs, graph.weights);
+		const second = computeGraphMetrics(graph.nodeCount, graph.edgePairs, graph.weights);
+
+		// Assert
+		expect(Array.from(second.community)).toEqual(Array.from(first.community));
+		expect(second.communityCount).toBe(first.communityCount);
 	});
 });

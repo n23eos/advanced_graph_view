@@ -14,6 +14,12 @@ import {
 	type SimulationNodeDatum3D,
 } from "d3-force-3d";
 import { computeLayoutSeed } from "./layoutSeed";
+import { nextTickDelay } from "./tickPacing";
+import { SETTLED_THETA, repulsionTheta } from "./repulsionAccuracy";
+
+/** Monotonic where available; `performance` is absent in some test contexts. */
+const now = (): number =>
+	typeof performance !== "undefined" ? performance.now() : Date.now();
 
 interface SimNode extends SimulationNodeDatum3D {
 	id: number;
@@ -131,10 +137,6 @@ export interface LayoutEngine {
 }
 
 const ALPHA_MIN = 0.01;
-// Tighter than d3's loose 0.9 default: accurate repulsion means forces stay
-// consistent frame-to-frame, so nodes glide to rest like Obsidian's graph
-// instead of buzzing on approximate Barnes-Hut noise.
-const BARNES_HUT_THETA = 0.6;
 // 30 Hz: settle animation stays smooth while halving main-thread work
 // (sprite sync + edge rewrite + cull run per received tick).
 const FRAME_INTERVAL_MS = 33;
@@ -179,6 +181,10 @@ export function createLayoutEngine(
 	};
 	let running = false;
 	let timer: number | null = null;
+	/** Target period of the running timer, or null when stopped. */
+	let tickInterval: number | null = null;
+	/** Cost of the previous tick, feeding the pacing of the next one. */
+	let lastTickMs: number | null = null;
 	// Cluster-by-group attraction, persisted across re-inits.
 	const cluster = createClusterForce();
 	let clusterGroups: Int32Array | null = null;
@@ -206,24 +212,50 @@ export function createLayoutEngine(
 		return positions;
 	};
 
-	// Bare setInterval, not self.setInterval: inside a worker they are the same
+	// Bare setTimeout, not self.setTimeout: inside a worker they are the same
 	// function, but the bare form also resolves under the test runner, which
 	// keeps the drag/tow protocol unit-testable off the main thread.
 	const stopTimer = () => {
 		if (timer !== null) {
-			clearInterval(timer);
+			clearTimeout(timer);
 			timer = null;
 		}
+		tickInterval = null;
+		lastTickMs = null;
+	};
+
+	/** Chains the next tick, pacing it by what the previous one actually cost. */
+	const scheduleTick = () => {
+		if (tickInterval === null) return;
+		timer = setTimeout(pacedStep, nextTickDelay(tickInterval, lastTickMs)) as unknown as number;
 	};
 
 	const startTimer = (intervalMs: number) => {
 		stopTimer();
 		running = true;
-		timer = setInterval(stepOnce, intervalMs) as unknown as number;
+		tickInterval = intervalMs;
+		// First tick goes out on the full interval; later ones adapt.
+		lastTickMs = null;
+		scheduleTick();
+	};
+
+	/** One tick plus its own re-scheduling. `stepOnce` stays timer-free so the
+	 *  "step" message can drive a single tick in tests and benchmarks. */
+	const pacedStep = () => {
+		timer = null;
+		const startedAt = now();
+		stepOnce();
+		lastTickMs = now() - startedAt;
+		// stepOnce may have settled the layout and cleared the interval.
+		if (running) scheduleTick();
 	};
 
 	const stepOnce = () => {
 		if (!simulation || !running) return;
+		// Repulsion accuracy tracks how hot the layout is: cheap while nodes are
+		// still flying, exact by the time they come to rest.
+		(simulation.force("charge") as ReturnType<typeof forceManyBody>)
+			.theta(repulsionTheta(simulation.alpha()));
 		simulation.tick();
 		const positions = snapshotPositions();
 		post({ type: "tick", positions, alpha: simulation.alpha() }, [positions.buffer]);
@@ -293,7 +325,8 @@ export function createLayoutEngine(
 			.force(
 				"charge",
 				forceManyBody()
-					.theta(BARNES_HUT_THETA)
+					// Starting point only; stepOnce paces this against alpha.
+					.theta(SETTLED_THETA)
 					.strength(-params.repel)
 					.distanceMax(params.freeLayout ? Infinity : CHARGE_MAX_DISTANCE)
 			)

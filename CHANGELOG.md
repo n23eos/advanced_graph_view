@@ -36,8 +36,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   of waiting for a restart.
 - **`prefers-reduced-motion` is respected**: explore-mode camera flights and the
   session-trail replay cut straight to their end state.
+- **The layout settles about twice as fast.** Repulsion is the entire cost of a
+  simulation tick, and its price is set by how accurately it is approximated.
+  That accuracy only matters once the graph is coming to rest — while nodes are
+  still flying, nobody can see the difference — so it now starts cheap and
+  tightens as the layout cools. On a 3000-note vault a 3D layout reaches rest in
+  about 5 seconds instead of 9, and a 2D one in 1.8 instead of 2.9, with the
+  same final shape.
+- **The layout worker stays responsive on large vaults.** Ticks are now paced by
+  what the previous one actually cost, with a guaranteed gap between them, so
+  dragging a node or changing a setting is handled promptly instead of queueing
+  behind physics.
 
 ### Fixed
+
+- **Cluster colors no longer change between sessions.** Community detection is a
+  randomised algorithm and was left unseeded, so recomputing the same vault
+  could hand out different cluster ids and silently recolor the graph.
 
 - A crashed layout or metrics worker no longer leaves the view silently frozen —
   it says what stopped, what still works, and offers a restart. A crashed

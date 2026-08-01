@@ -5,6 +5,15 @@
 import Graph from "graphology";
 import louvain from "graphology-communities-louvain";
 import pagerank from "graphology-metrics/centrality/pagerank";
+import { seededRandom } from "../util/seededRandom";
+
+/**
+ * Louvain shuffles node visit order and keeps whichever merge improves
+ * modularity first, so an unseeded run gives different community ids every
+ * time — the same vault would silently recolour itself on each recompute.
+ * A fixed seed makes clustering a pure function of the graph.
+ */
+const LOUVAIN_SEED = 0x51ee7;
 
 export interface GraphMetricsResult {
 	pagerank: Float32Array;
@@ -30,7 +39,10 @@ export function computeGraphMetrics(
 	const pagerankOut = new Float32Array(nodeCount);
 	for (let i = 0; i < nodeCount; i++) pagerankOut[i] = rankById[i] ?? 0;
 
-	const communityById = louvain(graph, { getEdgeWeight: "weight" });
+	const communityById = louvain(graph, {
+		getEdgeWeight: "weight",
+		rng: seededRandom(LOUVAIN_SEED),
+	});
 	const community = new Int32Array(nodeCount);
 	let maxCommunity = -1;
 	for (let i = 0; i < nodeCount; i++) {
