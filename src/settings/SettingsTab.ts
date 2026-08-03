@@ -185,7 +185,7 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 		}
 		await this.plugin.replaceSettings(merged);
 		new Notice(t("notice.profileImported"));
-		this.display();
+		this.update();
 	}
 
 	/**
@@ -196,7 +196,7 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 	private async resetSettings(): Promise<void> {
 		await this.plugin.replaceSettings({ ...DEFAULT_SETTINGS, viewPresetsVersion: 0 });
 		new Notice(t("notice.settingsReset"));
-		this.display();
+		this.update();
 	}
 
 	getControlValue(key: string): unknown {

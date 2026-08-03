@@ -93,9 +93,8 @@ interface ThemeColors {
 /** Resolved inside `parent`, so container-scoped variable overrides (the
  *  graph's own light/dark theme) win over the Obsidian body theme. */
 function cssColorToNumber(value: string, parent: HTMLElement): number {
-	const probe = createEl("div");
+	const probe = parent.createDiv();
 	probe.style.color = value;
-	parent.appendChild(probe);
 	const rgb = getComputedStyle(probe).color.match(/\d+/g);
 	probe.remove();
 	if (!rgb) return 0x888888;
@@ -172,6 +171,8 @@ export class GraphRenderer {
 	private glowMode = false;
 	/** Sprite size multiplier compensating the star texture's smaller core. */
 	private spriteScale = 1;
+	/** Largest radius the last encoding produced; drives the cull margin. */
+	private maxEncodedRadius = MAX_NODE_RADIUS;
 	private viewport: Viewport | null = null;
 	private colors: ThemeColors | null = null;
 	private labelFontSize = DEFAULT_LABEL_FONT_SIZE;
@@ -474,7 +475,7 @@ export class GraphRenderer {
 	 *  view's onResize. */
 	resize(): void {
 		if (!this.app) return;
-		const host = this.app.resizeTo as HTMLElement | Window;
+		const host = this.app.resizeTo;
 		if (host instanceof HTMLElement) {
 			// Sub-2px "resizes" are scrollbar overlays and pane-edge hover
 			// artifacts, not real layout changes. Recentering the 3D camera on
@@ -518,10 +519,15 @@ export class GraphRenderer {
 		if (!this.radii || sizes.length !== this.sprites.length) return;
 		this.encodedTints = tints;
 		this.encodedGlow = glow;
+		let maxRadius = 0;
 		for (let i = 0; i < this.sprites.length; i++) {
 			this.radii[i] = sizes[i];
+			if (sizes[i] > maxRadius) maxRadius = sizes[i];
 			this.sprites[i].setSize(sizes[i] * 2 * this.spriteScale);
 		}
+		// The node-size slider scales radii well past MAX_NODE_RADIUS, and the
+		// cull margin has to keep up or big nodes blink out at the view edge.
+		this.maxEncodedRadius = maxRadius;
 		this.applyNodeTints();
 		this.applyNodeAlpha();
 		this.applyHoverSize();
@@ -929,7 +935,7 @@ export class GraphRenderer {
 		const view = this.app.canvas;
 		const topLeft = this.viewport.toWorld(0, 0);
 		const bottomRight = this.viewport.toWorld(view.clientWidth, view.clientHeight);
-		const margin = MAX_NODE_RADIUS;
+		const margin = Math.max(MAX_NODE_RADIUS, this.maxEncodedRadius) * this.spriteScale;
 
 		const isOnScreen = (i: number) => {
 			const x = this.positions![i * 2];

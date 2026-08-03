@@ -11,7 +11,10 @@ const model = buildGraphModel(
 describe("graphToJson", () => {
 	test("round-trippable structure with nodes and edges", () => {
 		// Act
-		const parsed = JSON.parse(graphToJson(model));
+		const parsed = JSON.parse(graphToJson(model)) as {
+			nodes: unknown[];
+			edges: { source: string; target: string; weight: number }[];
+		};
 
 		// Assert
 		expect(parsed.nodes).toHaveLength(2);

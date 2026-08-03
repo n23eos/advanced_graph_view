@@ -213,9 +213,11 @@ export function createLayoutEngine(
 		return positions;
 	};
 
-	// Bare setTimeout, not self.setTimeout: inside a worker they are the same
-	// function, but the bare form also resolves under the test runner, which
-	// keeps the drag/tow protocol unit-testable off the main thread.
+	// Bare setTimeout, not window.setTimeout: this module runs inside a Web
+	// Worker, where `window` does not exist at all — the usual Obsidian advice
+	// about popout windows does not apply here and would break the worker. The
+	// bare form also resolves under the test runner, which keeps the drag/tow
+	// protocol unit-testable off the main thread.
 	const stopTimer = () => {
 		if (timer !== null) {
 			clearTimeout(timer);
@@ -228,7 +230,7 @@ export function createLayoutEngine(
 	/** Chains the next tick, pacing it by what the previous one actually cost. */
 	const scheduleTick = () => {
 		if (tickInterval === null) return;
-		timer = setTimeout(pacedStep, nextTickDelay(tickInterval, lastTickMs)) as unknown as number;
+		timer = setTimeout(pacedStep, nextTickDelay(tickInterval, lastTickMs));
 	};
 
 	const startTimer = (intervalMs: number) => {

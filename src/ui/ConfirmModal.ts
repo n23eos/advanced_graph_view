@@ -23,7 +23,10 @@ export class ConfirmModal extends Modal {
 			.addButton((button) =>
 				button
 					.setButtonText(t("confirm.proceed"))
-					.setWarning()
+					// Destructive primary action: this modal only ever guards
+					// resets and deletions.
+					.setDestructive()
+					.setCta()
 					.onClick(() => {
 						this.close();
 						this.onConfirm();
