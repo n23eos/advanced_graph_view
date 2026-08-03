@@ -123,6 +123,14 @@ CI (`.github/workflows/ci.yml`) runs lint, typecheck, tests and a production bui
 
 Architecture notes: force layout (`d3-force`) and PageRank/Louvain (`graphology`) each run in their own Web Worker, inlined into `main.js` as Blob workers. Edges render as a single GPU line-list mesh — position updates write into a vertex buffer instead of rebuilding geometry.
 
+## Feedback
+
+The plugin is in beta and bug reports are the fastest way to make it better.
+
+[**Report a bug or request a feature**](https://docs.google.com/forms/d/e/1FAIpQLSeUwcQWrqM5XxDYih633cLqJOyeObSgeJ6p8CIp1SleQ34-Ew/viewform)
+
+The form asks for your plugin/Obsidian version, OS, vault size and the steps you took, so an issue can usually be reproduced without any follow-up questions. No sign-in required; email is optional.
+
 ## License
 
 MIT
