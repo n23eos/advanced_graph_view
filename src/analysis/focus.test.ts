@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { buildAdjacency, computeDistances, shortestPath } from "./focus";
+import { buildAdjacency, computeDistances, focusFalloff, shortestPath } from "./focus";
 import { pointInPolygon } from "./geometry";
 import { buildGraphModel } from "../data/GraphStore";
 
@@ -68,5 +68,38 @@ describe("shortestPath", () => {
 
 	test("disconnected nodes return an empty path", () => {
 		expect(shortestPath(adj, 5, 0, 4)).toEqual([]);
+	});
+});
+
+describe("focusFalloff", () => {
+	test("the root note stays at full brightness", () => {
+		expect(focusFalloff(0, 3)).toBe(1);
+	});
+
+	test("notes outside the chosen depth fade to the background", () => {
+		expect(focusFalloff(-1, 3)).toBeLessThan(0.1);
+	});
+
+	test("each further step is dimmer than the one before it", () => {
+		const steps = [0, 1, 2, 3, 4, 5, 6].map((d) => focusFalloff(d, 6));
+
+		for (let i = 1; i < steps.length; i++) {
+			expect(steps[i]).toBeLessThan(steps[i - 1]);
+		}
+	});
+
+	test("the slider stretches the ramp: step 3 of 6 is brighter than step 3 of 3", () => {
+		// The bug: a fixed 4-entry table flattened everything past step 3, so
+		// widening the slider added notes at an identical, indistinguishable dim.
+		expect(focusFalloff(3, 6)).toBeGreaterThan(focusFalloff(3, 3));
+	});
+
+	test("the last step in range stays clearly above the out-of-range fade", () => {
+		expect(focusFalloff(6, 6)).toBeGreaterThan(focusFalloff(-1, 6) * 3);
+	});
+
+	test("a single-step neighborhood still separates root from neighbors", () => {
+		expect(focusFalloff(1, 1)).toBeLessThan(focusFalloff(0, 1));
+		expect(focusFalloff(1, 1)).toBeGreaterThan(focusFalloff(-1, 1));
 	});
 });

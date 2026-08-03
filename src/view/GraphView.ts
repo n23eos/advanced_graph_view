@@ -10,7 +10,7 @@ import {
 	type View,
 	type WorkspaceLeaf,
 } from "obsidian";
-import { buildAdjacency, computeDistances, shortestPath } from "../analysis/focus";
+import { buildAdjacency, computeDistances, focusFalloff, shortestPath } from "../analysis/focus";
 import { nameClusters, type ClusterContent } from "../analysis/clusterNames";
 import { computeOverlayMask, countOverlayMatches } from "../analysis/overlays";
 import { buildGraphModel, type GraphModel } from "../data/GraphStore";
@@ -109,6 +109,9 @@ export class GraphInsightView extends ItemView {
 	private cursorTool: CursorTool = "open";
 	/** First endpoint picked in «Путь» mode. */
 	private pathAnchor: number | null = null;
+	/** True while a found route is drawn, so Esc knows there is one to clear
+	 *  (the anchor is already consumed by the time the path shows). */
+	private pathDrawn = false;
 
 	/** Live (soft) query while typing; matched=1, others dimmed. */
 	private softQuery: ParsedQuery | null = null;
@@ -287,6 +290,12 @@ export class GraphInsightView extends ItemView {
 				onToolChange: (tool) => {
 					this.cursorTool = tool;
 					this.pathAnchor = null;
+					// A drawn route belongs to the path tool; leaving it behind
+					// would mark links the current tool knows nothing about.
+					if (tool !== "path") {
+						this.renderer?.setPathHighlight(null);
+						this.pathDrawn = false;
+					}
 					if (tool !== "links" && this.focusRootId !== null) this.exitFocus();
 				},
 				onDepthChange: (depth) => {
@@ -405,6 +414,8 @@ export class GraphInsightView extends ItemView {
 			new Notice(t("notice.pathNone"));
 			this.renderer?.setAlphaFactors(null);
 			this.renderer?.setHighlightMask(null);
+			this.renderer?.setPathHighlight(null);
+			this.pathDrawn = false;
 			return;
 		}
 		const onPath = new Set(path);
@@ -416,6 +427,10 @@ export class GraphInsightView extends ItemView {
 		}
 		this.renderer?.setAlphaFactors(factors);
 		this.renderer?.setHighlightMask(highlight);
+		// The links along the route, not just its notes: on a dense graph two
+		// lit nodes do not say which way the chain actually runs.
+		this.renderer?.setPathHighlight(path);
+		this.pathDrawn = true;
 		this.renderer?.zoomToNodes(path);
 		const names = path.map((id) => this.model!.nodes[id].name);
 		new Notice(t("notice.pathFound", { count: path.length, names: names.join(" → ") }), 8000);
@@ -812,16 +827,19 @@ export class GraphInsightView extends ItemView {
 				if (this.overlayMask[i] === 1) highlight[i] = 1;
 			}
 		}
-		this.renderer.setHighlightMask(highlight);
 		const distances = this.currentFocusDistances();
 		if (distances) {
 			factors ??= new Float32Array(count).fill(1);
-			const falloff = [1, 0.6, 0.35, 0.2];
+			// Everything the slider reaches is accented, the same way the path
+			// tool marks its chain; distance only sets how bright.
+			highlight ??= new Uint8Array(count);
 			for (let i = 0; i < count; i++) {
 				const d = distances[i];
-				factors[i] *= d >= 0 ? falloff[Math.min(d, falloff.length - 1)] : 0.04;
+				factors[i] *= focusFalloff(d, this.focusDepth);
+				if (d >= 0) highlight[i] = 1;
 			}
 		}
+		this.renderer.setHighlightMask(highlight);
 		// Explore mode leaves only the node you are on and the ones you can
 		// travel to readable — everything else is the sky you fly through.
 		if (this.exploreFocus) {
@@ -1697,6 +1715,7 @@ export class GraphInsightView extends ItemView {
 			this.softQuery !== null ||
 			this.hardQuery !== null ||
 			this.pathAnchor !== null ||
+			this.pathDrawn ||
 			this.chipFilter.tags.size > 0 ||
 			this.chipFilter.folders.size > 0
 		);
@@ -1718,6 +1737,8 @@ export class GraphInsightView extends ItemView {
 		this.renderer?.setSelected(null);
 		this.renderer?.setHighlightMask(null);
 		this.renderer?.setAlphaFactors(null);
+		this.renderer?.setPathHighlight(null);
+		this.pathDrawn = false;
 		this.panel?.setHiddenNodeCount(0);
 		this.recomputeVisual();
 		new Notice(t("notice.viewStateReset"));

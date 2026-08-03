@@ -12,6 +12,26 @@ export function buildAdjacency(model: GraphModel): Adjacency {
 	return adjacency;
 }
 
+/** Brightness of the farthest ring still inside the neighborhood. Well above
+ *  OUT_OF_RANGE_ALPHA so "in range, far" never reads as "excluded". */
+const FURTHEST_IN_RANGE_ALPHA = 0.4;
+/** Everything the neighborhood does not reach — context, not content. */
+const OUT_OF_RANGE_ALPHA = 0.04;
+
+/**
+ * Opacity for a note at `distance` hops from the focus root.
+ *
+ * The ramp is stretched across `maxDepth` rather than read from a fixed table,
+ * so widening the depth slider actually spreads the rings apart instead of
+ * piling every far note onto one indistinguishable dim.
+ */
+export function focusFalloff(distance: number, maxDepth: number): number {
+	if (distance < 0) return OUT_OF_RANGE_ALPHA;
+	if (distance === 0 || maxDepth <= 0) return 1;
+	const t = Math.min(distance, maxDepth) / maxDepth;
+	return 1 - t * (1 - FURTHEST_IN_RANGE_ALPHA);
+}
+
 /** -1 = beyond maxDepth / unreachable. */
 export function computeDistances(
 	adjacency: Adjacency,

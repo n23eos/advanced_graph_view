@@ -183,7 +183,7 @@ export class ControlPanel {
 			});
 		}
 
-		this.physicsSlider(view, t("appearance.nodeSize"), 0.1, 5, 0.05, this.state.nodeScale, (value) => {
+		this.physicsSlider(view, t("appearance.nodeSize"), 0.1, 3, 0.05, this.state.nodeScale, (value) => {
 			this.setState({ ...this.state, nodeScale: value });
 		});
 
@@ -370,7 +370,7 @@ export class ControlPanel {
 			}
 		);
 
-		this.physicsSlider(body, t("appearance.nodeSize"), 0.1, 5, 0.05, this.state.nodeScale, (value) => {
+		this.physicsSlider(body, t("appearance.nodeSize"), 0.1, 3, 0.05, this.state.nodeScale, (value) => {
 			this.setState({ ...this.state, nodeScale: value });
 		});
 

@@ -52,6 +52,10 @@ const EXPLORE_LINK_ALPHA = 0.45;
 const EXPLORE_LINK_WIDTH = 1.2;
 const EXPLORE_CANDIDATE_ALPHA = 1;
 const EXPLORE_CANDIDATE_WIDTH = 3.5;
+/** Path tool: a thin violet thread. Fixed hue, not the theme accent — the
+ *  route has to stay recognizable on every color scheme and both themes. */
+const PATH_LINK_COLOR = 0x7c3aed;
+const PATH_LINK_WIDTH = 1.2;
 /** Share of its normal opacity the rest of the link web keeps in explore mode. */
 const EXPLORE_BACKGROUND_EDGE_DIM = 0.12;
 
@@ -159,6 +163,9 @@ export class GraphRenderer {
 	private trailProgress = 1;
 	private exploreGraphics = new Graphics();
 	private explore: ExploreOverlay | null = null;
+	private pathGraphics = new Graphics();
+	/** Node chain of the current "shortest path" pick, in order. */
+	private pathNodeIds: number[] = [];
 	private pinGraphics = new Graphics();
 	private pinnedIds: ReadonlySet<number> = new Set();
 	private nodeLayer = new Container();
@@ -248,6 +255,7 @@ export class GraphRenderer {
 			this.pinGraphics,
 			this.labelLayer,
 			this.trailGraphics,
+			this.pathGraphics,
 			this.exploreGraphics
 		);
 		app.stage.addChild(this.world);
@@ -692,6 +700,37 @@ export class GraphRenderer {
 		}
 	}
 
+	/** The chain found by the path tool, in order. Null clears it. */
+	setPathHighlight(nodeIds: readonly number[] | null): void {
+		this.pathNodeIds = nodeIds ? [...nodeIds] : [];
+		this.redrawPath();
+		// The route names its own notes, so the label pass has to run again.
+		this.cullDirty = true;
+	}
+
+	/**
+	 * Draw the links the path actually travels, not just its notes. Two lit
+	 * nodes leave the route between them to guesswork on a dense graph — the
+	 * line is the answer, so it is drawn like the armed link in explore mode.
+	 */
+	private redrawPath(): void {
+		const g = this.pathGraphics;
+		g.clear();
+		const ids = this.pathNodeIds;
+		if (ids.length < 2 || !this.positions || !this.colors) return;
+		for (let i = 0; i < ids.length - 1; i++) {
+			const x1 = this.positions[ids[i] * 2];
+			const y1 = this.positions[ids[i] * 2 + 1];
+			const x2 = this.positions[ids[i + 1] * 2];
+			const y2 = this.positions[ids[i + 1] * 2 + 1];
+			g.moveTo(x1, y1);
+			g.lineTo(x2, y2);
+			g.stroke({ color: PATH_LINK_COLOR, alpha: 1, width: PATH_LINK_WIDTH });
+			// Arrows read the chain in order: which note leads to which.
+			drawArrowHead(g, x1, y1, x2, y2, PATH_LINK_COLOR, 1);
+		}
+	}
+
 	/** Nodes the user has pinned in place. Drawn as rings so a pin is visible
 	 *  without a tooltip — otherwise a node that ignores physics looks broken. */
 	setPinned(ids: ReadonlySet<number>): void {
@@ -913,6 +952,7 @@ export class GraphRenderer {
 			this.edgeMesh?.updatePositions(this.positions, this.camera.enabled ? this.depthScales : null);
 			this.redrawTrail();
 			this.redrawExplore();
+			this.redrawPath();
 			this.redrawPins();
 		}
 		if (this.cullDirty) {
@@ -998,6 +1038,16 @@ export class GraphRenderer {
 				if (!isOnScreen(i)) continue;
 				takeLabel(i);
 			}
+		}
+
+		// Same for the path tool: the route is only useful if you can read
+		// which notes it runs through, whatever the zoom threshold says.
+		for (const i of this.pathNodeIds) {
+			if (labeled.has(i)) continue;
+			if (this.hiddenMask !== null && this.hiddenMask[i] === 1) continue;
+			if (this.depthScales !== null && this.depthScales[i] === 0) continue;
+			if (!isOnScreen(i)) continue;
+			takeLabel(i);
 		}
 
 		// …and nothing else gets named. A field of labels from notes you cannot
