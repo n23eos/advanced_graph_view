@@ -41,10 +41,24 @@ describe("adaptPresetToTheme", () => {
 		expect(adapted.categories[1]).toBe(preset.categories[1]);
 	});
 
-	test("leaves schemes that bring their own dark backdrop alone", () => {
+	test("a backdrop scheme keeps its dark canvas and glow on a dark theme", () => {
 		const galaxy = { stops: [0xf8fafc], categories: [0xffffff], glow: true, backdrop: 0x05050f };
 
-		expect(adaptPresetToTheme(galaxy, true)).toBe(galaxy);
+		expect(adaptPresetToTheme(galaxy, false)).toBe(galaxy);
+	});
+
+	test("a backdrop scheme drops backdrop and glow on a light theme", () => {
+		// Additive glow is invisible on white, and the forced dark canvas is
+		// exactly what "light mode" asks to remove — the scheme falls back to
+		// its palette on the theme background.
+		const galaxy = { stops: [0xf8fafc], categories: [0xffffff], glow: true, backdrop: 0x05050f };
+
+		const adapted = adaptPresetToTheme(galaxy, true);
+
+		expect(adapted.backdrop).toBeUndefined();
+		expect(adapted.glow).toBeUndefined();
+		expect(luminance(adapted.stops[0])).toBeLessThan(luminance(galaxy.stops[0]));
+		expect(luminance(adapted.categories[0])).toBeLessThan(luminance(galaxy.categories[0]));
 	});
 });
 

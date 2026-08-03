@@ -66,4 +66,26 @@ describe("mergeProfile", () => {
 		expect(restored?.panel).toEqual(settings.panel);
 		expect(restored?.openDwellSeconds).toBe(DEFAULT_SETTINGS.openDwellSeconds);
 	});
+
+	test("carries the panel mode across vaults", () => {
+		const restored = mergeProfile(DEFAULT_SETTINGS, buildProfile({ ...settings, panelMode: "expert" }));
+
+		expect(restored?.panelMode).toBe("expert");
+	});
+
+	test("keeps the current mode when an older profile has none", () => {
+		const legacy = { version: PROFILE_VERSION, panel: settings.panel };
+
+		const restored = mergeProfile({ ...DEFAULT_SETTINGS, panelMode: "expert" }, legacy);
+
+		expect(restored?.panelMode).toBe("expert");
+	});
+
+	test("ignores a mode the plugin does not know", () => {
+		const bogus = { version: PROFILE_VERSION, panel: settings.panel, panelMode: "wizard" };
+
+		const restored = mergeProfile(DEFAULT_SETTINGS, bogus);
+
+		expect(restored?.panelMode).toBe(DEFAULT_SETTINGS.panelMode);
+	});
 });

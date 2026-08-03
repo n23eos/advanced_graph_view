@@ -21,7 +21,7 @@ import {
 	VIEW_PRESET_VERSION,
 } from "./view/builtinPresets";
 import { DEFAULT_SETTINGS, type GraphInsightSettings } from "./settings/schema";
-import type { PanelState } from "./ui/ControlPanel";
+import type { PanelMode, PanelState } from "./ui/ControlPanel";
 import type { SearchPreset } from "./ui/SearchBar";
 import type { ViewPreset } from "./view/builtinPresets";
 
@@ -289,6 +289,11 @@ export default class GraphInsightPlugin extends Plugin {
 
 	async savePanelState(panel: PanelState): Promise<void> {
 		this.settings = { ...this.settings, panel };
+		await this.saveData(this.settings);
+	}
+
+	async savePanelMode(panelMode: PanelMode): Promise<void> {
+		this.settings = { ...this.settings, panelMode };
 		await this.saveData(this.settings);
 	}
 

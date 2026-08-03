@@ -14,6 +14,12 @@ import {
 import { DEFAULT_PRESET_ID } from "../encoding/colorScales";
 import type { OverlayCounts, OverlayToggles } from "../analysis/overlays";
 import type { PhysicsParams } from "../workers/layoutEngine";
+import { LAYOUT_DENSITIES, applyLayoutDensity, matchLayoutDensity, type LayoutDensity } from "./layoutDensity";
+
+/** "simple" shows a handful of casual controls, "expert" the full panel. */
+export type PanelMode = "simple" | "expert";
+
+export const PANEL_MODES: readonly PanelMode[] = ["simple", "expert"];
 
 export interface PanelState {
 	channels: ChannelAssignment;
@@ -81,9 +87,16 @@ export interface PanelCallbacks {
 	onShowHiddenNodes(): void;
 	/** Clear every selection, highlight, focus, filter and hidden node. */
 	onResetViewState(): void;
+	/** Switch between the simple and the expert panel. */
+	onModeChange(mode: PanelMode): void;
 }
 
 const NONE_VALUE = "__none__";
+const DENSITY_LABELS: Record<LayoutDensity, "simple.layout.dense" | "simple.layout.normal" | "simple.layout.loose"> = {
+	dense: "simple.layout.dense",
+	normal: "simple.layout.normal",
+	loose: "simple.layout.loose",
+};
 const OVERLAY_KEYS: Record<keyof OverlayToggles, "layers.orphans" | "layers.deadEnds" | "layers.broken"> = {
 	orphans: "layers.orphans",
 	deadEnds: "layers.deadEnds",
@@ -102,7 +115,8 @@ export class ControlPanel {
 	constructor(
 		host: HTMLElement,
 		private state: PanelState,
-		private readonly callbacks: PanelCallbacks
+		private readonly callbacks: PanelCallbacks,
+		private mode: PanelMode = "expert"
 	) {
 		this.root = host.createDiv({ cls: "graph-insight-panel" });
 
@@ -132,30 +146,14 @@ export class ControlPanel {
 	private renderBody(): void {
 		this.body.empty();
 		this.overlayCountEls.clear();
+		this.renderModeSwitch();
 
-		const presets = this.section("presets", t("panel.section.presets"));
-		const presetRow = presets.createDiv({ cls: "graph-insight-panel-row" });
-		this.presetSelect = presetRow.createEl("select", { cls: "dropdown" });
-		this.presetSelect.addEventListener("change", () => {
-			const index = Number(this.presetSelect!.value);
-			if (!Number.isNaN(index) && this.presetSelect!.value !== "") {
-				this.selectedPresetIndex = index;
-				this.callbacks.onPresetApply(index);
-			} else {
-				this.selectedPresetIndex = null;
-			}
-		});
-		const presetButtons = presets.createDiv({ cls: "graph-insight-panel-row" });
-		const saveButton = presetButtons.createEl("button", { text: t("presets.save") });
-		saveButton.addEventListener("click", () => this.callbacks.onPresetSaveRequest());
-		const deleteButton = presetButtons.createEl("button", { text: t("presets.delete") });
-		deleteButton.addEventListener("click", () => {
-			const index = Number(this.presetSelect!.value);
-			if (this.presetSelect!.value !== "" && !Number.isNaN(index)) {
-				this.callbacks.onPresetDelete(index);
-			}
-		});
-		this.renderPresetOptions();
+		if (this.mode === "simple") {
+			this.renderSimpleBody();
+			return;
+		}
+
+		this.renderPresets(this.section("presets", t("panel.section.presets")));
 
 		const view = this.section("appearance", t("panel.section.appearance"));
 		this.channelSelect(view, t("appearance.size"), this.state.channels.size, numericMetricOptions(), (value) => {
@@ -309,20 +307,7 @@ export class ControlPanel {
 		clusters.createDiv({ cls: "graph-insight-panel-hint", text: t("clusters.hint") });
 
 		const physics = this.section("physics", t("panel.section.physics"));
-		// Not part of PanelState — applies immediately on change and always
-		// shows "Связи" (the default rule) after a rebuild.
-		this.channelSelect(
-			physics,
-			t("physics.layoutRule"),
-			"links",
-			{
-				links: t("physics.rule.links"),
-				tags: t("physics.rule.tags"),
-				folders: t("physics.rule.folders"),
-			},
-			(value) => this.callbacks.onLayoutRule((value ?? "links") as LayoutRule),
-			false
-		);
+		this.layoutRuleSelect(physics);
 		this.physicsSlider(physics, t("physics.repel"), 1, 300, 1, this.state.physics.repel, (value) => {
 			this.setState({ ...this.state, physics: { ...this.state.physics, repel: value } });
 		});
@@ -349,6 +334,119 @@ export class ControlPanel {
 		});
 		const button = physics.createEl("button", { text: t("physics.reheat") });
 		button.addEventListener("click", () => this.callbacks.onReheat());
+	}
+
+	/** Two buttons at the very top: the way out of whichever panel you are in. */
+	private renderModeSwitch(): void {
+		const row = this.body.createDiv({ cls: "graph-insight-panel-modes" });
+		for (const mode of PANEL_MODES) {
+			const button = row.createEl("button", {
+				text: mode === "simple" ? t("panel.mode.simple") : t("panel.mode.expert"),
+				cls: "graph-insight-panel-mode",
+			});
+			button.toggleClass("is-active", this.mode === mode);
+			button.addEventListener("click", () => {
+				if (this.mode === mode) return;
+				this.mode = mode;
+				this.callbacks.onModeChange(mode);
+				this.renderBody();
+			});
+		}
+	}
+
+	/** Five controls that cover what most people ever touch. 3D and Explore stay
+	 *  on the toolbar, so this panel deliberately does not repeat them. */
+	private renderSimpleBody(): void {
+		const body = this.body.createDiv({ cls: "graph-insight-panel-section-body" });
+		this.renderPresets(body);
+
+		this.channelSelect(
+			body,
+			t("simple.colorBy"),
+			this.state.channels.color,
+			categoricalMetricOptions(),
+			(value) => {
+				this.setState({ ...this.state, channels: { ...this.state.channels, color: value as MetricId | null } });
+			}
+		);
+
+		this.physicsSlider(body, t("appearance.nodeSize"), 0.1, 2.5, 0.05, this.state.nodeScale, (value) => {
+			this.setState({ ...this.state, nodeScale: value });
+		});
+
+		this.checkboxRow(body, t("labels.show"), this.state.labels.show, (value) => {
+			this.setState({ ...this.state, labels: { ...this.state.labels, show: value } });
+		});
+
+		this.layoutRuleSelect(body);
+		this.densityRow(body);
+		body.createDiv({ cls: "graph-insight-panel-hint", text: t("simple.hint") });
+	}
+
+	/** Not part of PanelState — applies immediately on change and always shows
+	 *  "Links" (the default rule) after a rebuild. Shared by both modes. */
+	private layoutRuleSelect(parent: HTMLElement): void {
+		this.channelSelect(
+			parent,
+			t("physics.layoutRule"),
+			"links",
+			{
+				links: t("physics.rule.links"),
+				tags: t("physics.rule.tags"),
+				folders: t("physics.rule.folders"),
+				cluster: t("physics.rule.cluster"),
+				age: t("physics.rule.age"),
+				recency: t("physics.rule.recency"),
+				hubs: t("physics.rule.hubs"),
+			},
+			(value) => this.callbacks.onLayoutRule((value ?? "links") as LayoutRule),
+			false
+		);
+	}
+
+	/** One click stands in for the repulsion, link length and link strength
+	 *  sliders of the expert panel. */
+	private densityRow(parent: HTMLElement): void {
+		const row = parent.createDiv({ cls: "graph-insight-panel-row" });
+		row.createSpan({ cls: "graph-insight-panel-label", text: t("simple.layout") });
+		const active = matchLayoutDensity(this.state.physics);
+		const buttons = parent.createDiv({ cls: "graph-insight-panel-modes" });
+		for (const density of LAYOUT_DENSITIES) {
+			const button = buttons.createEl("button", {
+				text: t(DENSITY_LABELS[density]),
+				cls: "graph-insight-panel-mode",
+			});
+			button.toggleClass("is-active", active === density);
+			button.addEventListener("click", () => {
+				this.setState({ ...this.state, physics: applyLayoutDensity(this.state.physics, density) });
+				this.renderBody();
+			});
+		}
+	}
+
+	private renderPresets(parent: HTMLElement): void {
+		const presetRow = parent.createDiv({ cls: "graph-insight-panel-row" });
+		this.presetSelect = presetRow.createEl("select", { cls: "dropdown" });
+		this.presetSelect.addEventListener("change", () => {
+			const index = Number(this.presetSelect!.value);
+			if (!Number.isNaN(index) && this.presetSelect!.value !== "") {
+				this.selectedPresetIndex = index;
+				this.callbacks.onPresetApply(index);
+			} else {
+				this.selectedPresetIndex = null;
+			}
+		});
+		const presetButtons = parent.createDiv({ cls: "graph-insight-panel-row" });
+		const saveButton = presetButtons.createEl("button", { text: t("presets.save") });
+		saveButton.addEventListener("click", () => this.callbacks.onPresetSaveRequest());
+		const deleteButton = presetButtons.createEl("button", { text: t("presets.delete") });
+		deleteButton.addEventListener("click", () => {
+			const index = Number(this.presetSelect!.value);
+			if (this.presetSelect!.value !== "" && !Number.isNaN(index)) {
+				this.callbacks.onPresetDelete(index);
+			}
+		});
+		this.renderPresetOptions();
 	}
 
 	private checkboxRow(

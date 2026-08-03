@@ -2,12 +2,16 @@
  * Shape of everything the plugin persists, and the values it starts from.
  * Kept free of the Obsidian runtime so settings logic can be unit-tested.
  */
-import type { PanelState } from "../ui/ControlPanel";
+import type { PanelMode, PanelState } from "../ui/ControlPanel";
 import type { SearchPreset } from "../ui/SearchBar";
 import { DEFAULT_3D_PANEL, type ViewPreset } from "../view/builtinPresets";
 
 export interface GraphInsightSettings {
 	panel: PanelState;
+	/** How much of the control panel is on show. Not part of PanelState: it is
+	 *  which controls you see, not what the graph looks like, so a view preset
+	 *  never drags the user back into the panel they did not choose. */
+	panelMode: PanelMode;
 	viewPresets: ViewPreset[];
 	presets: SearchPreset[];
 	onboardingShown: boolean;
@@ -39,6 +43,7 @@ export interface HoverPreviewSettings {
 
 export const DEFAULT_SETTINGS: GraphInsightSettings = {
 	panel: DEFAULT_3D_PANEL,
+	panelMode: "simple",
 	openDwellSeconds: 5,
 	hoverPreview: { enabled: true, words: 300, delayMs: 350 },
 	chipFilter: { tags: [], folders: [] },

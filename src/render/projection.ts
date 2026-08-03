@@ -95,14 +95,22 @@ export class Camera3D {
 		return [-cp * sy, sp, cp * cy];
 	}
 
-	/** Sideways/vertical camera move in the view plane (world units). */
+	/** Sideways/vertical camera move in the view plane (world units). Carries
+	 *  the orbit pivot along: a pan means "look over there", so the next orbit
+	 *  must spin around the panned-to spot, not snap back to the old center. */
 	strafe(rightUnits: number, upUnits: number): void {
 		const cy = Math.cos(this.yaw), sy = Math.sin(this.yaw);
 		const cp = Math.cos(this.pitch), sp = Math.sin(this.pitch);
 		// View right and up axes expressed in world space (transposed rotation).
-		this.px += cy * rightUnits + sp * sy * upUnits;
-		this.py += cp * upUnits;
-		this.pz += sy * rightUnits - sp * cy * upUnits;
+		const dx = cy * rightUnits + sp * sy * upUnits;
+		const dy = cp * upUnits;
+		const dz = sy * rightUnits - sp * cy * upUnits;
+		this.px += dx;
+		this.py += dy;
+		this.pz += dz;
+		this.tx += dx;
+		this.ty += dy;
+		this.tz += dz;
 	}
 
 	/** Fly along the look direction; positive = forward into the cloud. */

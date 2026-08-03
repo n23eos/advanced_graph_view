@@ -5,18 +5,22 @@
  * The decision of whether to reuse the remembered pane is kept here, free of
  * the Obsidian workspace, because it is the part that has edge cases: the user
  * can close the pane, and the graph's own pane must never be borrowed.
+ *
+ * Panes are identified by leaf id, never by object identity — Obsidian can
+ * rebuild the WorkspaceLeaf behind the same id, and comparing objects made
+ * every rebuilt pane look closed, so each click opened one more split.
  */
 
 export type CompanionAction = "reuse" | "create";
 
-export function chooseCompanionAction<T>(
-	remembered: T | null,
-	openLeaves: readonly T[],
-	graphLeaf: T
+export function chooseCompanionAction(
+	rememberedId: string | null,
+	openLeafIds: readonly string[],
+	graphLeafId: string
 ): CompanionAction {
-	if (remembered === null) return "create";
+	if (rememberedId === null) return "create";
 	// Opening into the graph's own pane would replace the graph with the note,
 	// which is exactly what this mode exists to prevent.
-	if (remembered === graphLeaf) return "create";
-	return openLeaves.includes(remembered) ? "reuse" : "create";
+	if (rememberedId === graphLeafId) return "create";
+	return openLeafIds.includes(rememberedId) ? "reuse" : "create";
 }

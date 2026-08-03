@@ -94,8 +94,10 @@ export class GraphInsightView extends ItemView {
 	/** needle → set of matching paths, built lazily on Enter. */
 	private contentIndex = new Map<string, Set<string>>();
 	private legend: Legend | null = null;
-	/** Pane beside the graph that notes open into while side-pane mode is on. */
-	private companionLeaf: WorkspaceLeaf | null = null;
+	/** Pane beside the graph that notes open into while side-pane mode is on.
+	 *  Remembered by id, not by object: Obsidian can rebuild the leaf behind
+	 *  the same id, and a stale object reference made every click split again. */
+	private companionLeafId: string | null = null;
 	/** Placeholder shown instead of a blank canvas when the vault has no notes. */
 	private emptyState: HTMLElement | null = null;
 	private searchBar: SearchBar | null = null;
@@ -711,12 +713,12 @@ export class GraphInsightView extends ItemView {
 				count: neighbors.length,
 			}),
 		});
-		// Opening goes to a new tab on purpose: reusing the active one would
-		// replace whatever the trip started from, and the graph is still mid-
-		// exploration behind it.
+		// With side-pane mode on, the note lands in the companion pane and the
+		// graph keeps focus — the trip continues. Otherwise a new tab, so the
+		// tab the trip started from is not replaced mid-exploration.
 		const open = this.focusBar.createEl("button", { text: t("explore.open") });
 		open.setAttribute("aria-label", t("explore.open.hint"));
-		open.addEventListener("click", () => this.openNode(centerId, true));
+		open.addEventListener("click", () => this.openNode(centerId, !this.plugin.settings.openInSidePane));
 		const back = this.focusBar.createEl("button", { text: t("explore.back") });
 		back.addEventListener("click", () => this.exploreSession?.back());
 		const detach = this.focusBar.createEl("button", { text: t("explore.detach") });
@@ -938,15 +940,20 @@ export class GraphInsightView extends ItemView {
 		if (!file) return;
 		this.selfOpenedPath = file.path;
 
-		const openLeaves: WorkspaceLeaf[] = [];
-		this.app.workspace.iterateAllLeaves((leaf) => openLeaves.push(leaf));
-		const action = chooseCompanionAction(this.companionLeaf, openLeaves, this.leaf);
-		if (action === "create") {
-			// Split from the graph's own pane, not the active one — otherwise the
-			// new pane lands wherever focus happens to be.
-			this.companionLeaf = this.app.workspace.createLeafBySplit(this.leaf, "vertical");
-		}
-		void this.companionLeaf?.openFile(file);
+		const openLeafIds: string[] = [];
+		this.app.workspace.iterateAllLeaves((leaf) => openLeafIds.push(leafId(leaf)));
+		const action = chooseCompanionAction(this.companionLeafId, openLeafIds, leafId(this.leaf));
+		const companion =
+			action === "reuse" && this.companionLeafId !== null
+				? this.app.workspace.getLeafById(this.companionLeafId)
+				: null;
+		// Split from the graph's own pane, not the active one — otherwise the
+		// new pane lands wherever focus happens to be.
+		const target = companion ?? this.app.workspace.createLeafBySplit(this.leaf, "vertical");
+		this.companionLeafId = leafId(target);
+		// active: false keeps the graph focused — a click is "show me that",
+		// not "take me there", and explore mode must not lose the camera.
+		void target.openFile(file, { active: false });
 	}
 
 	/** Show the note in the file explorer's tree, the way the core graph does. */
@@ -1529,7 +1536,8 @@ export class GraphInsightView extends ItemView {
 				).open();
 			},
 			onPresetDelete: (index) => void this.deleteViewPreset(index),
-		});
+			onModeChange: (mode) => void this.plugin.savePanelMode(mode),
+		}, this.plugin.settings.panelMode);
 	}
 
 	// ── View presets ──────────────────────────────────────────────────
@@ -1677,7 +1685,7 @@ export class GraphInsightView extends ItemView {
 	 *  a shared tag / folder clustering them into clumps. */
 	private applyLayoutRule(rule: LayoutRule): void {
 		if (!this.layout) return;
-		this.layout.setCluster(rule === "links" ? null : computeGroups(rule, this.facts));
+		this.layout.setCluster(rule === "links" ? null : computeGroups(rule, this.facts, Date.now()));
 		this.layout.reheat(0.6);
 	}
 
@@ -1772,7 +1780,7 @@ export class GraphInsightView extends ItemView {
 	async onClose(): Promise<void> {
 		// Forget the companion pane without closing it: the note in it is the
 		// user's, and they may well still be reading it.
-		this.companionLeaf = null;
+		this.companionLeafId = null;
 		this.clearPreviewTimer();
 		this.exploreSession?.stop();
 		this.exploreSession = null;
@@ -1814,6 +1822,14 @@ interface FileExplorerView extends View {
 function asFileExplorer(view: View): FileExplorerView | null {
 	const candidate = view as Partial<FileExplorerView>;
 	return typeof candidate.revealInFolder === "function" ? (view as FileExplorerView) : null;
+}
+
+/** Leaf ids exist at runtime (getLeafById is public API) but are missing from
+ *  the typings. An id-less leaf yields "" — it matches nothing, so the worst
+ *  case is one extra split, never a crash. */
+function leafId(leaf: WorkspaceLeaf): string {
+	const id = (leaf as WorkspaceLeaf & { id?: unknown }).id;
+	return typeof id === "string" ? id : "";
 }
 
 function downloadBlob(fileName: string, blob: Blob): void {

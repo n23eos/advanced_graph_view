@@ -4,8 +4,7 @@
  * Most schemes were tuned against Obsidian's dark background, so their bright
  * end runs to near-white — which disappears on a light theme. Nodes are
  * darkened just enough to stay visible, keeping their hue so the scheme still
- * reads as itself. Schemes that force their own dark backdrop (the glowing
- * "galaxy" family) are left alone: they never sit on the theme background.
+ * reads as itself.
  */
 import type { ScalePreset } from "./colorScales";
 
@@ -30,11 +29,16 @@ function scale(channel: number, factor: number): number {
 	return Math.max(0, Math.min(255, Math.round(channel * factor)));
 }
 
-/** Same preset on dark themes — identity, so callers can compare by reference. */
+/** Same preset on dark themes — identity, so callers can compare by reference.
+ *  On light themes a backdrop scheme (galaxy family) loses its forced dark
+ *  canvas and its glow — additive blending is invisible on white — and joins
+ *  the others: darkened palette on the theme background. */
 export function adaptPresetToTheme<T extends ScalePreset>(preset: T, isLightTheme: boolean): T {
-	if (!isLightTheme || preset.backdrop !== undefined) return preset;
+	if (!isLightTheme) return preset;
 	return {
 		...preset,
+		glow: undefined,
+		backdrop: undefined,
 		stops: preset.stops.map((color) => adaptColorToTheme(color, true)),
 		categories: preset.categories.map((color) => adaptColorToTheme(color, true)),
 	};

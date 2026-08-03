@@ -26,8 +26,9 @@ interface SimNode extends SimulationNodeDatum3D {
 }
 
 /** Which attraction rule shapes the layout: by links (default), or by pulling
- *  notes that share a tag / folder into the same cluster. */
-export type LayoutRule = "links" | "tags" | "folders";
+ *  notes that share a tag, folder, community, creation year, edit-recency
+ *  bucket or connectivity tier into the same cluster. */
+export type LayoutRule = "links" | "tags" | "folders" | "cluster" | "age" | "recency" | "hubs";
 
 interface ClusterForce {
 	(alpha: number): void;

@@ -11,14 +11,20 @@ import type { LayoutRule } from "../workers/layoutEngine";
 /** Nodes that belong to no group. */
 export const UNGROUPED = -1;
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 /**
- * Group id per node: notes sharing a primary tag (or a folder) get the same id.
+ * Group id per node: notes sharing a grouping key — primary tag, folder,
+ * community, creation year, edit-recency bucket or connectivity tier — get the
+ * same id.
  *
- * Untagged notes and notes at the vault root are left ungrouped rather than
- * lumped into one bucket — a giant "everything else" clump would out-mass every
- * real group and drag the layout into it.
+ * Notes with no key (untagged, vault root, no community yet) are left
+ * ungrouped rather than lumped into one bucket — a giant "everything else"
+ * clump would out-mass every real group and drag the layout into it.
+ *
+ * `now` anchors the recency buckets; the other rules ignore it.
  */
-export function computeGroups(rule: LayoutRule, facts: readonly NodeFacts[]): Int32Array {
+export function computeGroups(rule: LayoutRule, facts: readonly NodeFacts[], now = 0): Int32Array {
 	const groups = new Int32Array(facts.length).fill(UNGROUPED);
 	if (rule === "links") return groups; // links mode uses the edges, not groups
 
@@ -26,7 +32,7 @@ export function computeGroups(rule: LayoutRule, facts: readonly NodeFacts[]): In
 	for (let i = 0; i < facts.length; i++) {
 		const node = facts[i];
 		if (!node) continue;
-		const key = rule === "tags" ? (node.tags[0] ?? "") : node.folder;
+		const key = groupKey(rule, node, now);
 		if (!key || key === "/") continue;
 
 		let id = ids.get(key);
@@ -37,6 +43,33 @@ export function computeGroups(rule: LayoutRule, facts: readonly NodeFacts[]): In
 		groups[i] = id;
 	}
 	return groups;
+}
+
+function groupKey(rule: LayoutRule, node: NodeFacts, now: number): string {
+	switch (rule) {
+		case "tags": return node.tags[0] ?? "";
+		case "folders": return node.folder;
+		case "cluster": return node.cluster;
+		case "age": return String(new Date(node.ctime).getUTCFullYear());
+		case "recency": return recencyBucket(now - node.mtime);
+		case "hubs": return hubTier(node.inCount + node.outCount);
+		default: return "";
+	}
+}
+
+function recencyBucket(ageMs: number): string {
+	if (ageMs <= 7 * DAY_MS) return "week";
+	if (ageMs <= 30 * DAY_MS) return "month";
+	if (ageMs <= 365 * DAY_MS) return "year";
+	return "older";
+}
+
+/** Tier boundaries: isolated / a few links / well connected / hub. */
+function hubTier(degree: number): string {
+	if (degree === 0) return "isolated";
+	if (degree <= 3) return "few";
+	if (degree <= 10) return "connected";
+	return "hub";
 }
 
 /** How deep the depth axis reaches, in world units, front to back. */

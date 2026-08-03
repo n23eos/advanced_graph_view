@@ -115,3 +115,26 @@ describe("flying camera", () => {
 		expect(depth[0]).toBe(0);
 	});
 });
+
+describe("strafe then orbit", () => {
+	test("orbit spins around the panned-to spot, not the old center", () => {
+		const camera = new Camera3D();
+		camera.orbit(0, 0); // place the camera on the orbit sphere
+		camera.strafe(400, 150);
+		const panPx = camera.px, panPy = camera.py, panPz = camera.pz;
+
+		camera.orbit(0, 0); // zero-angle orbit must be a no-op after a pan
+
+		expect(camera.px).toBeCloseTo(panPx, 5);
+		expect(camera.py).toBeCloseTo(panPy, 5);
+		expect(camera.pz).toBeCloseTo(panPz, 5);
+	});
+
+	test("pan moves the pivot with the camera", () => {
+		const camera = new Camera3D();
+		camera.strafe(100, 0);
+
+		expect(camera.tx).not.toBe(0);
+		expect(camera.px - camera.tx).toBeCloseTo(0 - 0, 5);
+	});
+});

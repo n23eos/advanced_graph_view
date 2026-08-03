@@ -4,7 +4,7 @@
  * behind — they describe one vault, not a way of working.
  */
 import type { GraphInsightSettings } from "./schema";
-import type { PanelState } from "../ui/ControlPanel";
+import { PANEL_MODES, type PanelMode, type PanelState } from "../ui/ControlPanel";
 
 /** Bump only on a breaking change: an older plugin refuses a newer profile. */
 export const PROFILE_VERSION = 1;
@@ -12,6 +12,7 @@ export const PROFILE_VERSION = 1;
 export interface SettingsProfile {
 	version: number;
 	panel: PanelState;
+	panelMode: PanelMode;
 	viewPresets: GraphInsightSettings["viewPresets"];
 	presets: GraphInsightSettings["presets"];
 	openDwellSeconds: number;
@@ -25,6 +26,7 @@ export function buildProfile(settings: GraphInsightSettings): SettingsProfile {
 	return {
 		version: PROFILE_VERSION,
 		panel: settings.panel,
+		panelMode: settings.panelMode,
 		viewPresets: settings.viewPresets,
 		presets: settings.presets,
 		openDwellSeconds: settings.openDwellSeconds,
@@ -51,6 +53,7 @@ export function mergeProfile(
 	return {
 		...current,
 		panel: isObject(profile.panel) ? { ...current.panel, ...profile.panel } : current.panel,
+		panelMode: isPanelMode(profile.panelMode) ? profile.panelMode : current.panelMode,
 		viewPresets: Array.isArray(profile.viewPresets) ? profile.viewPresets : current.viewPresets,
 		presets: Array.isArray(profile.presets) ? profile.presets : current.presets,
 		openDwellSeconds:
@@ -77,3 +80,8 @@ export function mergeProfile(
 function isObject(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+
+function isPanelMode(value: unknown): value is PanelMode {
+	return typeof value === "string" && (PANEL_MODES as readonly string[]).includes(value);
+}
+

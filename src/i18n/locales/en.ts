@@ -16,6 +16,16 @@ export const en = {
 	"panel.section.layers": "Layers",
 	"panel.section.clusters": "Clusters",
 	"panel.section.physics": "Physics",
+	"panel.mode.simple": "Simple",
+	"panel.mode.expert": "Expert",
+
+	// ── Simple panel ──────────────────────────────────────────────────
+	"simple.colorBy": "Color by",
+	"simple.layout": "Layout",
+	"simple.layout.dense": "Tight",
+	"simple.layout.normal": "Normal",
+	"simple.layout.loose": "Airy",
+	"simple.hint": "3D and Explore are on the toolbar. Expert mode has every setting.",
 
 	// ── View presets ──────────────────────────────────────────────────
 	"presets.save": "Save current",
@@ -87,6 +97,10 @@ export const en = {
 	"physics.rule.links": "Links",
 	"physics.rule.tags": "Tags",
 	"physics.rule.folders": "Folders",
+	"physics.rule.cluster": "Communities",
+	"physics.rule.age": "Creation year",
+	"physics.rule.recency": "Edit recency",
+	"physics.rule.hubs": "Connectivity",
 	"physics.repel": "Node spread (repulsion)",
 	"physics.linkDistance": "Link length",
 	"physics.centering": "Pull to center",

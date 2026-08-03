@@ -32,6 +32,8 @@ const DEFAULT_LABEL_ZOOM_THRESHOLD = 0.9;
 const DEFAULT_LABEL_FONT_SIZE = 11;
 const LABEL_COUNT_LIMIT = 150;
 const TINY_NODE_CULL_PX = 0.35; // nodes smaller than this on screen are skipped
+/** Host-size changes smaller than this are noise, not a real pane resize. */
+const RESIZE_EPSILON_PX = 2;
 const EDGE_ALPHA = 0.25;
 // Text rasterization is expensive; creating many labels in one frame causes
 // visible hitches during panning, so budget creations per frame.
@@ -88,10 +90,12 @@ interface ThemeColors {
 	label: number;
 }
 
-function cssColorToNumber(value: string): number {
+/** Resolved inside `parent`, so container-scoped variable overrides (the
+ *  graph's own light/dark theme) win over the Obsidian body theme. */
+function cssColorToNumber(value: string, parent: HTMLElement): number {
 	const probe = createEl("div");
 	probe.style.color = value;
-	document.body.appendChild(probe);
+	parent.appendChild(probe);
 	const rgb = getComputedStyle(probe).color.match(/\d+/g);
 	probe.remove();
 	if (!rgb) return 0x888888;
@@ -130,14 +134,14 @@ function drawArrowHead(
 	g.stroke({ color, alpha, width: 1.5 });
 }
 
-function readThemeColors(): ThemeColors {
-	const styles = getComputedStyle(document.body);
+function readThemeColors(host: HTMLElement): ThemeColors {
+	const styles = getComputedStyle(host);
 	const read = (name: string, fallback: string) => styles.getPropertyValue(name).trim() || fallback;
 	return {
-		node: cssColorToNumber(read("--graph-node", "var(--text-muted)")),
-		nodeSelected: cssColorToNumber(read("--interactive-accent", "#7c3aed")),
-		edge: cssColorToNumber(read("--graph-line", "var(--background-modifier-border)")),
-		label: cssColorToNumber(read("--text-muted", "#888888")),
+		node: cssColorToNumber(read("--graph-node", "var(--text-muted)"), host),
+		nodeSelected: cssColorToNumber(read("--interactive-accent", "#7c3aed"), host),
+		edge: cssColorToNumber(read("--graph-line", "var(--background-modifier-border)"), host),
+		label: cssColorToNumber(read("--text-muted", "#888888"), host),
 	};
 }
 
@@ -204,10 +208,13 @@ export class GraphRenderer {
 	private selectedId: number | null = null;
 	/** Set once the GPU context is gone; every draw call after that is a no-op. */
 	private contextLost = false;
+	/** The element the canvas lives in; theme colors are resolved against it. */
+	private host: HTMLElement | null = null;
 
 	constructor(private readonly callbacks: RendererCallbacks) {}
 
 	async init(host: HTMLElement): Promise<void> {
+		this.host = host;
 		const app = new Application();
 		await app.init({
 			resizeTo: host,
@@ -227,9 +234,10 @@ export class GraphRenderer {
 			this.callbacks.onContextLost();
 		});
 
-		this.colors = readThemeColors();
+		this.colors = readThemeColors(host);
 		this.labelHalo = cssColorToNumber(
-			getComputedStyle(document.body).getPropertyValue("--background-primary").trim() || "#1e1e1e"
+			getComputedStyle(host).getPropertyValue("--background-primary").trim() || "#1e1e1e",
+			host
 		);
 		this.nodeTexture = createNodeTexture(app.renderer);
 		this.starTexture = createStarTexture(app.renderer);
@@ -466,6 +474,15 @@ export class GraphRenderer {
 	 *  view's onResize. */
 	resize(): void {
 		if (!this.app) return;
+		const host = this.app.resizeTo as HTMLElement | Window;
+		if (host instanceof HTMLElement) {
+			// Sub-2px "resizes" are scrollbar overlays and pane-edge hover
+			// artifacts, not real layout changes. Recentering the 3D camera on
+			// each of them made the view visibly shudder near the pane edge.
+			const dw = Math.abs(host.clientWidth - this.app.screen.width);
+			const dh = Math.abs(host.clientHeight - this.app.screen.height);
+			if (dw < RESIZE_EPSILON_PX && dh < RESIZE_EPSILON_PX) return;
+		}
 		this.app.resize();
 		if (this.camera.enabled && this.viewport) {
 			this.world.scale.set(1);
@@ -1071,9 +1088,11 @@ export class GraphRenderer {
 	 * baked in at creation time — they are rebuilt on the next frame.
 	 */
 	refreshThemeColors(): void {
-		this.colors = readThemeColors();
+		if (!this.host) return;
+		this.colors = readThemeColors(this.host);
 		this.labelHalo = cssColorToNumber(
-			getComputedStyle(document.body).getPropertyValue("--background-primary").trim() || "#1e1e1e"
+			getComputedStyle(this.host).getPropertyValue("--background-primary").trim() || "#1e1e1e",
+			this.host
 		);
 		for (const label of this.labels.values()) label.destroy();
 		this.labels.clear();

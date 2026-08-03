@@ -4,6 +4,7 @@
 	height: 100%;
 	overflow: hidden;
 	position: relative;
+	background: var(--background-primary);
 }
 
 .graph-insight-tooltip {
@@ -74,11 +75,15 @@
 	justify-content: space-between;
 	align-items: center;
 	gap: 8px;
-	margin: 4px 0;
+	margin: 6px 0 2px;
+	font-size: var(--font-ui-smaller);
 }
 
 .graph-insight-panel-row select {
-	max-width: 140px;
+	max-width: 150px;
+	font-size: var(--font-ui-smaller);
+	height: auto;
+	padding: 2px 18px 2px 6px;
 }
 
 .graph-insight-legend {
@@ -167,6 +172,26 @@
 .graph-insight-panel-count {
 	color: var(--text-muted);
 	font-variant-numeric: tabular-nums;
+}
+
+/* Segmented row: panel mode at the top, layout density inside the simple panel.
+   Buttons share the width so the group reads as one control, not three. */
+.graph-insight-panel-modes {
+	display: flex;
+	gap: 4px;
+	margin: 4px 0 8px;
+}
+
+.graph-insight-panel-mode {
+	flex: 1;
+	padding: 4px 6px;
+	font-size: var(--font-ui-smaller);
+	cursor: pointer;
+}
+
+.graph-insight-panel-mode.is-active {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
 }
 
 .graph-insight-panel-hint {
@@ -416,18 +441,6 @@
 	margin: 0 0 6px;
 }
 
-.graph-insight-panel-row {
-	margin: 6px 0 2px;
-	font-size: var(--font-ui-smaller);
-}
-
-.graph-insight-panel-row select {
-	max-width: 150px;
-	font-size: var(--font-ui-smaller);
-	height: auto;
-	padding: 2px 18px 2px 6px;
-}
-
 .graph-insight-panel-body button {
 	width: 100%;
 	margin-top: 6px;
@@ -493,24 +506,20 @@
 .graph-insight-ui-hidden .graph-insight-timeline,
 .graph-insight-ui-hidden .graph-insight-focusbar,
 .graph-insight-ui-hidden .graph-insight-camera > div:not(:first-child),
-.graph-insight-ui-hidden .graph-insight-camera .graph-insight-panel-checkbox {
+.graph-insight-ui-hidden .graph-insight-camera .graph-insight-camera-icon:not(:first-child) {
 	display: none;
 }
 
-.graph-insight-camera .graph-insight-camera-eye {
-	width: auto;
-	margin: 0;
-	padding: 2px 6px;
-	line-height: 1;
-	background: transparent;
-	border: none;
-	box-shadow: none;
-	cursor: pointer;
-	font-size: 14px;
+/* One quiet icon row, styled like Obsidian's own view actions: muted icons,
+   hover background from the theme, accent color when the toggle is on. */
+.graph-insight-camera-icon {
+	--icon-size: var(--icon-s);
+	padding: 4px;
 }
 
-.graph-insight-camera-eye.is-ui-hidden {
-	opacity: 0.5;
+.graph-insight-camera-icon.is-active {
+	color: var(--interactive-accent);
+	background-color: var(--background-modifier-hover);
 }
 
 .graph-insight-camera-fit {

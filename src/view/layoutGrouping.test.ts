@@ -96,6 +96,68 @@ describe("computeGroups", () => {
 		expect(Array.from(computeGroups("folders", facts))).toEqual([UNGROUPED, 0, 1]);
 	});
 
+	test("cluster mode groups notes of the same community", () => {
+		const facts = [note({ cluster: "ML" }), note({ cluster: "Cooking" }), note({ cluster: "ML" })];
+
+		const groups = computeGroups("cluster", facts);
+
+		expect(groups[0]).toBe(groups[2]);
+		expect(groups[1]).not.toBe(groups[0]);
+	});
+
+	test("notes without a computed community stay ungrouped", () => {
+		const facts = [note({ cluster: "" }), note({ cluster: "ML" })];
+
+		const groups = computeGroups("cluster", facts);
+
+		expect(groups[0]).toBe(UNGROUPED);
+		expect(groups[1]).not.toBe(UNGROUPED);
+	});
+
+	test("age mode groups notes created in the same year", () => {
+		const y2020 = Date.UTC(2020, 5, 1);
+		const y2020b = Date.UTC(2020, 11, 31);
+		const y2024 = Date.UTC(2024, 0, 15);
+		const facts = [note({ ctime: y2020 }), note({ ctime: y2024 }), note({ ctime: y2020b })];
+
+		const groups = computeGroups("age", facts);
+
+		expect(groups[0]).toBe(groups[2]);
+		expect(groups[1]).not.toBe(groups[0]);
+	});
+
+	test("recency mode buckets by how long ago the note was edited", () => {
+		const now = Date.UTC(2026, 0, 31);
+		const day = 24 * 60 * 60 * 1000;
+		const facts = [
+			note({ mtime: now - 2 * day }), // this week
+			note({ mtime: now - 3 * day }), // this week
+			note({ mtime: now - 20 * day }), // this month
+			note({ mtime: now - 100 * day }), // this year
+			note({ mtime: now - 500 * day }), // older
+		];
+
+		const groups = computeGroups("recency", facts, now);
+
+		expect(groups[0]).toBe(groups[1]);
+		expect(new Set(Array.from(groups)).size).toBe(4);
+	});
+
+	test("hubs mode tiers notes by their link count", () => {
+		const facts = [
+			note({ inCount: 0, outCount: 0 }), // isolated
+			note({ inCount: 1, outCount: 1 }), // few links
+			note({ inCount: 2, outCount: 0 }), // few links
+			note({ inCount: 5, outCount: 3 }), // connected
+			note({ inCount: 30, outCount: 10 }), // hub
+		];
+
+		const groups = computeGroups("hubs", facts);
+
+		expect(groups[1]).toBe(groups[2]);
+		expect(new Set(Array.from(groups)).size).toBe(4);
+	});
+
 	test("an empty vault yields an empty grouping", () => {
 		expect(computeGroups("folders", [])).toHaveLength(0);
 	});

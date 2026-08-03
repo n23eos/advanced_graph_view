@@ -1,7 +1,8 @@
 /**
- * Bottom-right widget: eye (hide all UI), 3D toggle, free-layout toggle,
- * camera center X/Y sliders and a fit-all button.
+ * Bottom-right widget: a row of Obsidian-style icon toggles (hide UI, 3D,
+ * free layout), camera center X/Y sliders and a fit-all button.
  */
+import { setIcon } from "obsidian";
 import { t } from "../i18n";
 import type { View3DOptions } from "./ControlPanel";
 
@@ -19,8 +20,8 @@ const OFFSET_RANGE = 600;
 export class CameraWidget {
 	private root: HTMLElement;
 	private body: HTMLElement;
-	private checkbox3d: HTMLInputElement;
-	private checkboxFree: HTMLInputElement;
+	private button3d: HTMLButtonElement;
+	private buttonFree: HTMLButtonElement;
 	private sliderX: HTMLInputElement;
 	private sliderY: HTMLInputElement;
 	private exploreButton: HTMLElement;
@@ -35,29 +36,22 @@ export class CameraWidget {
 		this.root = host.createDiv({ cls: "graph-insight-camera" });
 
 		const header = this.root.createDiv({ cls: "graph-insight-camera-row" });
-		const eye = header.createEl("button", { text: "👁", cls: "graph-insight-camera-eye" });
-		eye.setAttribute("aria-label", t("camera.toggleUi"));
-		eye.addEventListener("click", () => {
+
+		const eye = this.iconButton(header, "eye", t("camera.toggleUi"), () => {
 			this.uiHidden = !this.uiHidden;
-			eye.toggleClass("is-ui-hidden", this.uiHidden);
+			setIcon(eye, this.uiHidden ? "eye-off" : "eye");
 			this.callbacks.onToggleUI(this.uiHidden);
 		});
 
-		const label3d = header.createEl("label", { cls: "graph-insight-panel-checkbox" });
-		this.checkbox3d = label3d.createEl("input", { type: "checkbox" });
-		this.checkbox3d.checked = state3d.enabled;
-		label3d.createSpan({ text: t("camera.threeD") });
-		this.checkbox3d.addEventListener("change", () => {
-			this.callbacks.onToggle3D(this.checkbox3d.checked);
+		this.button3d = this.iconButton(header, "rotate-3d", t("camera.threeD"), () => {
+			this.callbacks.onToggle3D(!this.button3d.hasClass("is-active"));
 		});
+		this.button3d.toggleClass("is-active", state3d.enabled);
 
-		const labelFree = header.createEl("label", { cls: "graph-insight-panel-checkbox" });
-		this.checkboxFree = labelFree.createEl("input", { type: "checkbox" });
-		this.checkboxFree.checked = freeLayout;
-		labelFree.createSpan({ text: t("camera.free") });
-		this.checkboxFree.addEventListener("change", () => {
-			this.callbacks.onToggleFreeLayout(this.checkboxFree.checked);
+		this.buttonFree = this.iconButton(header, "expand", t("camera.free"), () => {
+			this.callbacks.onToggleFreeLayout(!this.buttonFree.hasClass("is-active"));
 		});
+		this.buttonFree.toggleClass("is-active", freeLayout);
 
 		this.body = this.root.createDiv();
 
@@ -85,6 +79,19 @@ export class CameraWidget {
 		this.exploreButton.toggleClass("is-active", active);
 	}
 
+	private iconButton(
+		parent: HTMLElement,
+		icon: string,
+		label: string,
+		onClick: () => void
+	): HTMLButtonElement {
+		const button = parent.createEl("button", { cls: "clickable-icon graph-insight-camera-icon" });
+		setIcon(button, icon);
+		button.setAttribute("aria-label", label);
+		button.addEventListener("click", onClick);
+		return button;
+	}
+
 	private offsetSlider(label: string): HTMLInputElement {
 		const row = this.body.createDiv({ cls: "graph-insight-camera-row" });
 		row.createSpan({ cls: "graph-insight-camera-label", text: label });
@@ -101,8 +108,8 @@ export class CameraWidget {
 
 	/** Keep in step when 3D/free-layout is toggled from the main panel. */
 	sync(state3d: View3DOptions, freeLayout: boolean): void {
-		this.checkbox3d.checked = state3d.enabled;
-		this.checkboxFree.checked = freeLayout;
+		this.button3d.toggleClass("is-active", state3d.enabled);
+		this.buttonFree.toggleClass("is-active", freeLayout);
 	}
 
 	destroy(): void {
