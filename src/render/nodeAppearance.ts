@@ -116,3 +116,13 @@ export function mergeHiddenMask(
 	}
 	return { mask: buffer, buffer };
 }
+
+/**
+ * Label opacity from camera depth in 3D: a name on a note in front of the
+ * projection plane reads at full strength, and fades continuously the deeper
+ * the note sits — distance is told by how legible the name is. The floor
+ * stays barely above zero so a label never vanishes while its node is drawn.
+ */
+export function labelDepthAlpha(depth: number): number {
+	return Math.min(1, Math.max(0.03, (depth - 0.3) * 1.15));
+}

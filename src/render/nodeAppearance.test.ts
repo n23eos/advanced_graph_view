@@ -12,6 +12,7 @@ import {
 	mergeHiddenMask,
 	nodeAlpha,
 	pinRingRadius,
+	labelDepthAlpha,
 	sizeDepth,
 } from "./nodeAppearance";
 
@@ -186,5 +187,28 @@ describe("pinRingRadius", () => {
 
 	test("never floors below the gap, so a speck still shows a ring", () => {
 		expect(pinRingRadius(0, 1, 1)).toBe(PIN_RING_GAP);
+	});
+});
+
+describe("labelDepthAlpha", () => {
+	test("a note in front of the projection plane reads at full strength", () => {
+		expect(labelDepthAlpha(1.3)).toBe(1);
+	});
+
+	test("labels fade continuously with distance", () => {
+		const depths = [1.2, 1.0, 0.8, 0.6, 0.4];
+		const alphas = depths.map(labelDepthAlpha);
+
+		for (let i = 1; i < alphas.length; i++) {
+			expect(alphas[i]).toBeLessThan(alphas[i - 1]);
+		}
+	});
+
+	test("far labels are nearly gone, not parked at a readable floor", () => {
+		expect(labelDepthAlpha(0.35)).toBeLessThan(0.15);
+	});
+
+	test("the fade never goes fully invisible while the node is drawn", () => {
+		expect(labelDepthAlpha(0.05)).toBeGreaterThan(0);
 	});
 });

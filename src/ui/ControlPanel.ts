@@ -374,6 +374,10 @@ export class ControlPanel {
 			this.setState({ ...this.state, nodeScale: value });
 		});
 
+		this.physicsSlider(body, t("edges.width"), 0.05, 2, 0.05, this.state.edges.width, (value) => {
+			this.setState({ ...this.state, edges: { ...this.state.edges, width: value } });
+		});
+
 		this.checkboxRow(body, t("labels.show"), this.state.labels.show, (value) => {
 			this.setState({ ...this.state, labels: { ...this.state.labels, show: value } });
 		});

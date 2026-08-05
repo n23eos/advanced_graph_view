@@ -16,6 +16,7 @@ import { HOVER_RADIUS_PX, pickNodeAt } from "./hitTest";
 import {
 	emphasisBoost,
 	fogFactor,
+	labelDepthAlpha,
 	mergeHiddenMask,
 	nodeAlpha,
 	pinRingRadius,
@@ -1197,10 +1198,10 @@ export class GraphRenderer {
 			this.labelLayer.addChild(label);
 		}
 		label.position.set(x, y + this.radii[nodeId] + 2);
-		// Depth-matched label brightness: near labels glow, far ones dim.
+		// Depth-matched label brightness: near names crisp, far ones fading
+		// almost out — legibility itself reads as distance.
 		if (this.camera.enabled && this.depthScales) {
-			const depth = this.depthScales[nodeId];
-			label.alpha = Math.min(1, Math.max(0.25, (depth - 0.3) * 1.6));
+			label.alpha = labelDepthAlpha(this.depthScales[nodeId]);
 		} else {
 			label.alpha = 1;
 		}
