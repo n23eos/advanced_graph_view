@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Advanced Graph View — an Obsidian plugin for large vaults</title>
+<meta name="description" content="An advanced replacement for Obsidian's Graph View, built for large vaults: WebGL rendering, clusters, PageRank, usage tracking, focus and explore mode." />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22><circle cx=%2216%22 cy=%2216%22 r=%2214%22 fill=%22%237c3aed%22/></svg>" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<canvas id="bg-canvas"></canvas>
+
+<div class="page">
+<nav>
+	<div class="wrap">
+		<div class="brand"><span class="dot"></span> Advanced Graph View</div>
+		<div class="nav-links">
+			<a href="#features">Features</a>
+			<a href="#explore">Explore mode</a>
+			<a href="#install">Install</a>
+			<a href="#privacy">Privacy</a>
+			<a href="https://github.com/n23eos/advanced_graph_view">GitHub</a>
+		</div>
+	</div>
+</nav>
+
+<header class="hero wrap">
+	<span class="badge">Obsidian plugin · Desktop only · Beta</span>
+	<h1>Your vault, as a graph<br />you can actually read</h1>
+	<p class="tagline">
+		A replacement for Obsidian's Graph View built for 5,000–50,000 notes,
+		where the default graph turns into a hairball. WebGL rendering, PageRank,
+		clusters and usage tracking turn the graph into an analysis tool instead
+		of a decoration.
+	</p>
+	<div class="cta-row">
+		<a class="btn btn-primary" href="#install">Install the plugin</a>
+		<a class="btn btn-ghost" href="https://github.com/n23eos/advanced_graph_view">View on GitHub</a>
+	</div>
+	<div class="media-frame">
+		<video src="assets/advanced_graph_view_opt.mp4" autoplay muted loop playsinline></video>
+	</div>
+</header>
+
+<section id="features" class="wrap">
+	<h2>Built for vaults that outgrew the default graph</h2>
+	<p class="lede">Every node carries real signal — how often you open it, how it ranks, when it last changed — and you decide what that signal means visually.</p>
+	<div class="grid">
+		<div class="card">
+			<h3>Metric-driven encoding</h3>
+			<p>Map PageRank, open frequency, edit recency, note age, link counts, folder or tag to size, color or glow.</p>
+		</div>
+		<div class="card">
+			<h3>WebGL rendering</h3>
+			<p>Pixi.js v8 keeps 10,000+ nodes above 50 FPS. Force layout runs off the UI thread in a Web Worker.</p>
+		</div>
+		<div class="card">
+			<h3>Usage tracking</h3>
+			<p>A fully local log of note opens, bucketed by day. Export to CSV or wipe it any time.</p>
+		</div>
+		<div class="card">
+			<h3>Clusters</h3>
+			<p>Louvain community detection with automatic TF-IDF naming, cluster bubbles, per-cluster zoom and hide.</p>
+		</div>
+		<div class="card">
+			<h3>Overlays &amp; diagnostics</h3>
+			<p>Orphans, dead ends and broken links surface with live counters — plus an attention map for cooling hubs.</p>
+		</div>
+		<div class="card">
+			<h3>Search &amp; filters</h3>
+			<p>Native graph syntax plus <code>opened:&gt;10</code>, <code>edited:&lt;30d</code>, <code>cluster:"name"</code> and more, with saved presets.</p>
+		</div>
+		<div class="card">
+			<h3>Focus mode</h3>
+			<p>Double-click a node to see only its N-hop neighborhood, with distance-based fading.</p>
+		</div>
+		<div class="card">
+			<h3>Timeline &amp; session trail</h3>
+			<p>Watch the vault grow month by month, then retrace your own navigation path with animated arrows.</p>
+		</div>
+		<div class="card">
+			<h3>Export</h3>
+			<p>Current view as PNG, graph data as JSON or GEXF for Gephi, settings as a portable profile.</p>
+		</div>
+	</div>
+</section>
+
+<section id="explore" class="wrap">
+	<div class="explore">
+		<div class="copy">
+			<h2>Explore mode</h2>
+			<p>Travel the graph one link at a time, No Man's Sky style: point toward a link, click, and the camera flies to the note at the other end.</p>
+			<p>Aiming is by <strong>direction</strong>, not by pixel — a hub with fifty overlapping links stays navigable. Nothing moves on hover alone; every trip is a deliberate click.</p>
+			<p><code>Backspace</code> retraces the trail, <code>Space</code> lets go of the current note, <code>Esc</code> leaves.</p>
+		</div>
+		<div class="media-frame">
+			<video src="assets/advanced_graph_view_explore.mp4" autoplay muted loop playsinline></video>
+		</div>
+	</div>
+</section>
+
+<section class="wrap">
+	<h2>The galaxy color scheme</h2>
+	<p class="lede">One of several color schemes — glowing, additive blending, dimmed automatically on light themes so nodes stay visible.</p>
+	<div class="media-frame">
+		<img src="assets/advanced_graph_view_nebula.jpg" alt="Advanced Graph View — Nebula color scheme on a 9k-note vault" loading="lazy" />
+	</div>
+</section>
+
+<section id="install" class="wrap">
+	<h2>Installation</h2>
+	<p class="lede">Not yet in the Community Plugins directory. Two ways in, for now.</p>
+	<div class="steps">
+		<div class="step">
+			<span class="num">1</span>
+			<h3>BRAT (recommended)</h3>
+			<p>Install <strong>BRAT</strong> from Community Plugins and enable it. Command palette → <strong>BRAT: Add a beta plugin for testing</strong>. Paste <code>n23eos/advanced_graph_view</code> and confirm. Then enable <strong>Advanced Graph View</strong> in Settings → Community Plugins.</p>
+		</div>
+		<div class="step">
+			<span class="num">2</span>
+			<h3>Manual</h3>
+			<p>Download <code>main.js</code>, <code>manifest.json</code> and <code>styles.css</code> from the <a href="https://github.com/n23eos/advanced_graph_view/releases/latest">latest release</a>. Put them in <code>&lt;vault&gt;/.obsidian/plugins/graph-insight/</code> and enable the plugin.</p>
+		</div>
+	</div>
+	<p style="margin-top:22px;color:var(--text-muted);font-size:0.9rem">Requires Obsidian 1.13.0 or newer. Open the graph via the ribbon icon or the command <strong>Advanced Graph View: Open graph view</strong>.</p>
+</section>
+
+<section id="privacy" class="wrap">
+	<div class="privacy">
+		<span class="icon">🔒</span>
+		<div>
+			<h2 style="margin-bottom:6px">Privacy &amp; network</h2>
+			<p style="margin:0;color:var(--text-muted)">No telemetry. No analytics. The plugin makes no network requests at all — everything, including your usage log, stays on your machine.</p>
+		</div>
+	</div>
+</section>
+
+<footer class="wrap">
+	<div class="foot-links">
+		<a href="https://github.com/n23eos/advanced_graph_view">GitHub</a>
+		<a href="https://github.com/n23eos/advanced_graph_view/releases">Releases</a>
+		<a href="https://github.com/n23eos/advanced_graph_view/blob/main/CHANGELOG.md">Changelog</a>
+		<a href="https://docs.google.com/forms/d/e/1FAIpQLSeUwcQWrqM5XxDYih633cLqJOyeObSgeJ6p8CIp1SleQ34-Ew/viewform">Report a bug</a>
+	</div>
+	<p>MIT License · Advanced Graph View is not affiliated with Obsidian.</p>
+</footer>
+</div>
+
+<script>
+// Small decorative background: a slowly drifting node graph,
+// echoing the plugin's own canvas. Pure vanilla JS, no deps.
+(function () {
+	var canvas = document.getElementById("bg-canvas");
+	var ctx = canvas.getContext("2d");
+	var w, h, nodes;
+	var COLORS = ["#7c3aed", "#db2777", "#22d3ee", "#fb923c"];
+	var NODE_COUNT = 70;
+	var LINK_DIST = 140;
+
+	function resize() {
+		w = canvas.width = window.innerWidth;
+		h = canvas.height = window.innerHeight;
+	}
+
+	function makeNodes() {
+		nodes = [];
+		for (var i = 0; i < NODE_COUNT; i++) {
+			nodes.push({
+				x: Math.random() * w,
+				y: Math.random() * h,
+				vx: (Math.random() - 0.5) * 0.25,
+				vy: (Math.random() - 0.5) * 0.25,
+				r: 1.5 + Math.random() * 2,
+				color: COLORS[i % COLORS.length],
+			});
+		}
+	}
+
+	function step() {
+		ctx.clearRect(0, 0, w, h);
+
+		for (var i = 0; i < nodes.length; i++) {
+			var n = nodes[i];
+			n.x += n.vx;
+			n.y += n.vy;
+			if (n.x < 0 || n.x > w) n.vx *= -1;
+			if (n.y < 0 || n.y > h) n.vy *= -1;
+		}
+
+		ctx.lineWidth = 1;
+		for (var a = 0; a < nodes.length; a++) {
+			for (var b = a + 1; b < nodes.length; b++) {
+				var dx = nodes[a].x - nodes[b].x;
+				var dy = nodes[a].y - nodes[b].y;
+				var dist = Math.sqrt(dx * dx + dy * dy);
+				if (dist < LINK_DIST) {
+					ctx.strokeStyle = "rgba(124, 58, 237, " + (1 - dist / LINK_DIST) * 0.25 + ")";
+					ctx.beginPath();
+					ctx.moveTo(nodes[a].x, nodes[a].y);
+					ctx.lineTo(nodes[b].x, nodes[b].y);
+					ctx.stroke();
+				}
+			}
+		}
+
+		for (var j = 0; j < nodes.length; j++) {
+			var node = nodes[j];
+			ctx.beginPath();
+			ctx.fillStyle = node.color;
+			ctx.globalAlpha = 0.8;
+			ctx.arc(node.x, node.y, node.r, 0, Math.PI * 2);
+			ctx.fill();
+			ctx.globalAlpha = 1;
+		}
+
+		requestAnimationFrame(step);
+	}
+
+	// Respect reduced-motion preference: draw one static frame, skip the loop.
+	var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+	window.addEventListener("resize", function () {
+		resize();
+		makeNodes();
+	});
+
+	resize();
+	makeNodes();
+	if (reduceMotion) {
+		ctx.clearRect(0, 0, w, h);
+		for (var k = 0; k < nodes.length; k++) {
+			ctx.beginPath();
+			ctx.fillStyle = nodes[k].color;
+			ctx.arc(nodes[k].x, nodes[k].y, nodes[k].r, 0, Math.PI * 2);
+			ctx.fill();
+		}
+	} else {
+		requestAnimationFrame(step);
+	}
+})();
+</script>
+</body>
+</html>
