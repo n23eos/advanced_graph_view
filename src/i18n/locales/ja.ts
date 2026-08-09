@@ -253,6 +253,8 @@ export const ja: Translation = {
 	"command.exportJson": "グラフデータを JSON で書き出す",
 	"command.exportGexf": "グラフデータを GEXF で書き出す",
 
+	"localGraph.toggle3d": "3D切り替え",
+	"tool.localGraph": "ローカル3Dグラフ",
 	"localGraph.title": "ローカル3Dグラフ",
 	"localGraph.depth": "深さ",
 	"localGraph.export": "Markdownにエクスポート",

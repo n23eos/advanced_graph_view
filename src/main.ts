@@ -21,7 +21,11 @@ import {
 	RETIRED_VIEW_PRESETS,
 	VIEW_PRESET_VERSION,
 } from "./view/builtinPresets";
-import { DEFAULT_SETTINGS, type GraphInsightSettings } from "./settings/schema";
+import {
+	DEFAULT_SETTINGS,
+	type GraphInsightSettings,
+	type LocalGraphSettings,
+} from "./settings/schema";
 import type { PanelMode, PanelState } from "./ui/ControlPanel";
 import type { SearchPreset } from "./ui/SearchBar";
 import type { ViewPreset } from "./view/builtinPresets";
@@ -62,6 +66,7 @@ export default class GraphInsightPlugin extends Plugin {
 				edges: { ...DEFAULT_SETTINGS.panel.edges, ...(saved?.panel?.edges ?? {}) },
 				view3d: { ...DEFAULT_SETTINGS.panel.view3d, ...(saved?.panel?.view3d ?? {}) },
 			},
+			localGraph: { ...DEFAULT_SETTINGS.localGraph, ...(saved?.localGraph ?? {}) },
 		};
 		// Softer-links migration: users still on the old stiff defaults get
 		// the new feel; anyone who moved the sliders keeps their values.
@@ -309,6 +314,11 @@ export default class GraphInsightPlugin extends Plugin {
 		await this.saveData(this.settings);
 	}
 
+	async saveLocalGraph(localGraph: LocalGraphSettings): Promise<void> {
+		this.settings = { ...this.settings, localGraph };
+		await this.saveData(this.settings);
+	}
+
 	async savePanelMode(panelMode: PanelMode): Promise<void> {
 		this.settings = { ...this.settings, panelMode };
 		await this.saveData(this.settings);
@@ -375,7 +385,7 @@ export default class GraphInsightPlugin extends Plugin {
 		await this.app.workspace.revealLeaf(leaf);
 	}
 
-	private async activateLocalGraph(): Promise<void> {
+	async activateLocalGraph(): Promise<void> {
 		const existing = this.app.workspace.getLeavesOfType(LOCAL_GRAPH_VIEW_TYPE);
 		if (existing.length > 0) {
 			await this.app.workspace.revealLeaf(existing[0]);

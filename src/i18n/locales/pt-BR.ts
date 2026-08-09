@@ -253,6 +253,8 @@ export const ptBR: Translation = {
 	"command.exportJson": "Exportar os dados do grafo como JSON",
 	"command.exportGexf": "Exportar os dados do grafo como GEXF",
 
+	"localGraph.toggle3d": "Alternar 3D",
+	"tool.localGraph": "Grafo local 3D",
 	"localGraph.title": "Grafo local 3D",
 	"localGraph.depth": "Profundidade",
 	"localGraph.export": "Exportar para Markdown",

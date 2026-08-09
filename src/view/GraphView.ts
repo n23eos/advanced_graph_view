@@ -319,6 +319,7 @@ export class GraphInsightView extends ItemView {
 				},
 				onToggleFollow: (enabled) => void this.plugin.setFollowActiveNote(enabled),
 				onToggleSidePane: (enabled) => void this.plugin.setOpenInSidePane(enabled),
+				onOpenLocalGraph: () => void this.plugin.activateLocalGraph(),
 			}
 		);
 

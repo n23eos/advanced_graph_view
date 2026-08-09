@@ -5,6 +5,32 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] — 2026-08-09
+
+### Added
+
+- **The local graph pane can go flat.** A 3D toggle sits next to the depth
+  slider, and both are remembered between sessions instead of resetting every
+  time the pane opens.
+- **Toolbar button for the local graph**, so it no longer lives only in the
+  command palette.
+- **Hover a node in the local pane** to see its name and which ring it is on.
+
+### Changed
+
+- **The local pane follows your color scheme.** Nodes were flat grey; they now
+  take the active scheme's gradient, sampled by distance from the root, so the
+  rings read as rings and glowing schemes glow here too.
+- **Switching notes and moving the depth slider are fast now.** The pane
+  rebuilt the whole vault graph on every note you opened; it now keeps that
+  model and re-cuts the neighborhood from it, rebuilding only when the vault
+  actually changes.
+
+### Fixed
+
+- **Clicking a node in the local pane could replace the pane itself** with the
+  note. It now always opens in the main editor area.
+
 ## [0.6.1] — 2026-08-09
 
 ### Fixed

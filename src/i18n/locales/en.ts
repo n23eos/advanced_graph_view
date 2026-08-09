@@ -282,6 +282,8 @@ export const en = {
 	"command.exportGexf": "Export graph data as GEXF",
 
 	// ── Local 3D graph pane ───────────────────────────────────────────
+	"localGraph.toggle3d": "Toggle 3D",
+	"tool.localGraph": "Local 3D graph",
 	"localGraph.title": "Local 3D graph",
 	"localGraph.depth": "Depth",
 	"localGraph.export": "Export to Markdown",

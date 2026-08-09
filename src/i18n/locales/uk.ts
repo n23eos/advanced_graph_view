@@ -253,6 +253,8 @@ export const uk: Translation = {
 	"command.exportJson": "Експортувати дані графа у JSON",
 	"command.exportGexf": "Експортувати дані графа у GEXF",
 
+	"localGraph.toggle3d": "Перемкнути 3D",
+	"tool.localGraph": "Локальний 3D-граф",
 	"localGraph.title": "Локальний 3D-граф",
 	"localGraph.depth": "Глибина",
 	"localGraph.export": "Експорт у Markdown",

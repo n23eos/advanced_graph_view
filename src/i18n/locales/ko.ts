@@ -253,6 +253,8 @@ export const ko: Translation = {
 	"command.exportJson": "그래프 데이터를 JSON으로 내보내기",
 	"command.exportGexf": "그래프 데이터를 GEXF로 내보내기",
 
+	"localGraph.toggle3d": "3D 전환",
+	"tool.localGraph": "로컬 3D 그래프",
 	"localGraph.title": "로컬 3D 그래프",
 	"localGraph.depth": "깊이",
 	"localGraph.export": "Markdown으로 내보내기",

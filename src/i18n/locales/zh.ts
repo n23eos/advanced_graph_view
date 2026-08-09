@@ -253,6 +253,8 @@ export const zh: Translation = {
 	"command.exportJson": "将图谱数据导出为 JSON",
 	"command.exportGexf": "将图谱数据导出为 GEXF",
 
+	"localGraph.toggle3d": "切换3D",
+	"tool.localGraph": "局部3D图谱",
 	"localGraph.title": "局部3D图谱",
 	"localGraph.depth": "深度",
 	"localGraph.export": "导出为 Markdown",

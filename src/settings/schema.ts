@@ -30,6 +30,15 @@ export interface GraphInsightSettings {
 	/** A plain click opens the note in a pane beside the graph, so the graph
 	 *  stays visible. The same pane is reused for every note. */
 	openInSidePane: boolean;
+	/** Local graph pane: how it was left last time. */
+	localGraph: LocalGraphSettings;
+}
+
+export interface LocalGraphSettings {
+	/** Hops around the active note, 1–4. */
+	depth: number;
+	/** Perspective camera on. Off draws the neighborhood flat. */
+	view3d: boolean;
 }
 
 export interface HoverPreviewSettings {
@@ -49,6 +58,7 @@ export const DEFAULT_SETTINGS: GraphInsightSettings = {
 	chipFilter: { tags: [], folders: [] },
 	followActiveNote: false,
 	openInSidePane: false,
+	localGraph: { depth: 2, view3d: true },
 	presets: [],
 	viewPresets: [],
 	viewPresetsVersion: 0,

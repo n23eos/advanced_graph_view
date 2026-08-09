@@ -12,6 +12,7 @@ export interface ToolBarCallbacks {
 	onDepthChange(depth: number): void;
 	onToggleFollow(enabled: boolean): void;
 	onToggleSidePane(enabled: boolean): void;
+	onOpenLocalGraph(): void;
 }
 
 /** Lucide icon names — theme-tinted, so every glyph shares one tone. */
@@ -72,6 +73,11 @@ export class ToolBar {
 			this.setSidePane(!this.sidePane);
 			this.callbacks.onToggleSidePane(this.sidePane);
 		});
+
+		const localGraphButton = followGroup.createEl("button", { cls: "graph-insight-tool" });
+		setIcon(localGraphButton, "orbit");
+		localGraphButton.setAttribute("aria-label", t("tool.localGraph"));
+		localGraphButton.addEventListener("click", () => this.callbacks.onOpenLocalGraph());
 
 		// Depth control lives inline; only meaningful in the neighborhood mode.
 		this.depthRow = this.root.createDiv({ cls: "graph-insight-toolbar-depth" });

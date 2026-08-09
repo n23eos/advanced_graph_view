@@ -254,6 +254,8 @@ export const de: Translation = {
 	"command.exportJson": "Graphdaten als JSON exportieren",
 	"command.exportGexf": "Graphdaten als GEXF exportieren",
 
+	"localGraph.toggle3d": "3D umschalten",
+	"tool.localGraph": "Lokaler 3D-Graph",
 	"localGraph.title": "Lokaler 3D-Graph",
 	"localGraph.depth": "Tiefe",
 	"localGraph.export": "Als Markdown exportieren",
