@@ -25,6 +25,19 @@ const NEAR_FADE_START = 40;
 const NEAR_FADE_LENGTH = 200;
 /** World-unit clearance between a pinned node's sprite and its ring. */
 export const PIN_RING_GAP = 3;
+/** In 2D a node never renders smaller than this on screen (px). */
+export const MIN_NODE_SCREEN_PX = 2.5;
+
+/**
+ * Size multiplier keeping a 2D node's screen diameter at MIN_NODE_SCREEN_PX
+ * when zooming out would shrink it below that — dots stay dots, not dust.
+ * Returns 1 (no compensation) for degenerate inputs.
+ */
+export function zoomSizeCompensation(worldDiameter: number, viewScale: number): number {
+	const screenDiameter = worldDiameter * viewScale;
+	if (screenDiameter <= 0 || screenDiameter >= MIN_NODE_SCREEN_PX) return 1;
+	return MIN_NODE_SCREEN_PX / screenDiameter;
+}
 
 /**
  * Radius of the ring marking a pinned node. Tracks the sprite it wraps: the

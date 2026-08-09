@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { LAYOUT_DENSITIES, applyLayoutDensity, matchLayoutDensity } from "./layoutDensity";
+import {
+	ADAPT_REFERENCE_NODES,
+	LAYOUT_DENSITIES,
+	adaptPhysicsToGraphSize,
+	applyLayoutDensity,
+	matchLayoutDensity,
+} from "./layoutDensity";
 import type { PhysicsParams } from "../workers/layoutEngine";
 
 const BASE: PhysicsParams = {
@@ -43,6 +49,56 @@ describe("applyLayoutDensity", () => {
 
 		expect(next).not.toBe(BASE);
 		expect(BASE.repel).toBe(112);
+	});
+});
+
+describe("adaptPhysicsToGraphSize", () => {
+	it("leaves physics untouched at the reference vault size", () => {
+		const next = adaptPhysicsToGraphSize(BASE, ADAPT_REFERENCE_NODES);
+
+		expect(next.repel).toBe(BASE.repel);
+		expect(next.linkDistance).toBe(BASE.linkDistance);
+	});
+
+	it("pulls a big vault tighter so it does not fly apart", () => {
+		const next = adaptPhysicsToGraphSize(BASE, ADAPT_REFERENCE_NODES * 16);
+
+		expect(next.repel).toBeLessThan(BASE.repel);
+		expect(next.linkDistance).toBeLessThan(BASE.linkDistance);
+	});
+
+	it("spreads a tiny vault out so it does not clump into a dot", () => {
+		const next = adaptPhysicsToGraphSize(BASE, 10);
+
+		expect(next.repel).toBeGreaterThan(BASE.repel);
+		expect(next.linkDistance).toBeGreaterThan(BASE.linkDistance);
+	});
+
+	it("clamps the adjustment so extreme vaults stay usable", () => {
+		const huge = adaptPhysicsToGraphSize(BASE, 1_000_000);
+		const tiny = adaptPhysicsToGraphSize(BASE, 1);
+
+		expect(huge.linkDistance).toBeGreaterThan(0);
+		expect(tiny.linkDistance / BASE.linkDistance).toBeLessThanOrEqual(1.5);
+		expect(huge.linkDistance / BASE.linkDistance).toBeGreaterThanOrEqual(0.5);
+	});
+
+	it("touches only repel and linkDistance, and never mutates the input", () => {
+		const next = adaptPhysicsToGraphSize(BASE, ADAPT_REFERENCE_NODES * 4);
+
+		expect(next).not.toBe(BASE);
+		expect(next.linkStrength).toBe(BASE.linkStrength);
+		expect(next.centering).toBe(BASE.centering);
+		expect(next.velocityDecay).toBe(BASE.velocityDecay);
+		expect(next.freeLayout).toBe(BASE.freeLayout);
+		expect(BASE.repel).toBe(112);
+	});
+
+	it("treats an empty graph as neutral instead of dividing by zero", () => {
+		const next = adaptPhysicsToGraphSize(BASE, 0);
+
+		expect(next.repel).toBe(BASE.repel);
+		expect(next.linkDistance).toBe(BASE.linkDistance);
 	});
 });
 

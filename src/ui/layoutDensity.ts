@@ -25,6 +25,31 @@ export function applyLayoutDensity(physics: PhysicsParams, density: LayoutDensit
 	return { ...physics, ...LAYOUT_DENSITY_PRESETS[density] };
 }
 
+/** Vault size the physics sliders are tuned for; adaptation is neutral here. */
+export const ADAPT_REFERENCE_NODES = 400;
+/** How far adaptation may push the spread in either direction. */
+const ADAPT_MIN_FACTOR = 0.5;
+const ADAPT_MAX_FACTOR = 1.5;
+
+/**
+ * Scale spread (repel + linkDistance) to the vault size: a big vault is pulled
+ * tighter so it does not fly apart, a tiny one is spread out so it does not
+ * clump into a dot. Slider values in the panel stay untouched — this adjusts
+ * only what the layout worker receives.
+ */
+export function adaptPhysicsToGraphSize(physics: PhysicsParams, nodeCount: number): PhysicsParams {
+	if (nodeCount <= 0) return { ...physics };
+	const factor = Math.min(
+		ADAPT_MAX_FACTOR,
+		Math.max(ADAPT_MIN_FACTOR, Math.sqrt(ADAPT_REFERENCE_NODES / nodeCount))
+	);
+	return {
+		...physics,
+		repel: physics.repel * factor,
+		linkDistance: physics.linkDistance * factor,
+	};
+}
+
 /** Which preset these physics came from, or null when the user hand-tuned them
  *  in the expert panel. Drives the pressed state of the density buttons. */
 export function matchLayoutDensity(physics: PhysicsParams): LayoutDensity | null {

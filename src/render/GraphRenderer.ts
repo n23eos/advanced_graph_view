@@ -21,6 +21,7 @@ import {
 	nodeAlpha,
 	pinRingRadius,
 	sizeDepth,
+	zoomSizeCompensation,
 } from "./nodeAppearance";
 import { createNodeTexture, createStarTexture, STAR_SIZE_FACTOR } from "./NodeTexture";
 import { Camera3D } from "./projection";
@@ -589,6 +590,14 @@ export class GraphRenderer {
 		this.edgeMesh.setHiddenNodes(mask);
 	}
 
+	/** Final sprite diameter for one node: base size, depth, hover/highlight
+	 *  boost, and in 2D the zoom floor that keeps far-out nodes visible. */
+	private spriteDiameter(i: number, depth: number, boost: number): number {
+		const base = (this.radii?.[i] ?? 0) * 2 * sizeDepth(depth) * boost * this.spriteScale;
+		if (this.camera.enabled || !this.viewport) return base;
+		return base * zoomSizeCompensation(base, this.viewport.scale);
+	}
+
 	/** Blow up the hovered sprite and lift it above the crowd. */
 	private applyHoverSize(): void {
 		if (!this.radii) return;
@@ -598,7 +607,7 @@ export class GraphRenderer {
 				i === this.hoveredId,
 				this.highlightMask !== null && this.highlightMask[i] === 1
 			);
-			this.sprites[i].setSize(this.radii[i] * 2 * sizeDepth(depth) * boost * this.spriteScale);
+			this.sprites[i].setSize(this.spriteDiameter(i, depth, boost));
 		}
 		if (this.hoveredId !== null) {
 			// zIndex only matters when the layer is sorted (3D mode).
@@ -941,7 +950,7 @@ export class GraphRenderer {
 						i === this.hoveredId,
 						this.highlightMask !== null && this.highlightMask[i] === 1
 					);
-					sprite.setSize(this.radii[i] * 2 * sizeDepth(depth) * boost * this.spriteScale);
+					sprite.setSize(this.spriteDiameter(i, depth, boost));
 					sprite.zIndex = i === this.hoveredId ? Number.MAX_SAFE_INTEGER : depth;
 				}
 			}
@@ -970,9 +979,18 @@ export class GraphRenderer {
 
 	private lastCullAt = 0;
 
+	/** Zoom the 2D size floor was last applied at; a change re-derives sizes. */
+	private lastSizedScale = 0;
+
 	private cullAndLabel(): void {
 		if (!this.app || !this.model || !this.positions || !this.radii || !this.viewport) return;
 		const scale = this.viewport.scale;
+		// Sub-percent zoom changes shift the floor by less than a pixel; skip
+		// the O(n) resize until the zoom moved enough to matter.
+		if (!this.camera.enabled && Math.abs(scale - this.lastSizedScale) > this.lastSizedScale * 0.01) {
+			this.lastSizedScale = scale;
+			this.applyHoverSize();
+		}
 		const view = this.app.canvas;
 		const topLeft = this.viewport.toWorld(0, 0);
 		const bottomRight = this.viewport.toWorld(view.clientWidth, view.clientHeight);
@@ -988,7 +1006,9 @@ export class GraphRenderer {
 		};
 
 		for (let i = 0; i < this.sprites.length; i++) {
-			const bigEnough = this.radii[i] * scale >= TINY_NODE_CULL_PX;
+			// Compensated size: in 2D the zoom floor keeps nodes above the cull
+			// threshold on purpose — dots stay visible however far out you zoom.
+			const bigEnough = (this.spriteDiameter(i, 1, 1) / 2) * scale >= TINY_NODE_CULL_PX;
 			const hidden = this.hiddenMask !== null && this.hiddenMask[i] === 1;
 			this.sprites[i].visible = isOnScreen(i) && bigEnough && !hidden;
 		}

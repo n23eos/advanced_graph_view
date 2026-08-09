@@ -49,6 +49,12 @@ describe("bundled view presets", () => {
 		}
 	});
 
+	it("keeps free layout on in every bundled preset", () => {
+		for (const preset of DEFAULT_VIEW_PRESETS) {
+			expect(preset.panel.physics.freeLayout, preset.name).toBe(true);
+		}
+	});
+
 	it("maps attention map to structural importance against recent opens", () => {
 		const panel = byId("attention-map")?.panel;
 		expect(panel?.channels.size).toBe("pagerank");

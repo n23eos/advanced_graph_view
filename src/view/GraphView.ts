@@ -29,6 +29,8 @@ import { GraphRenderer } from "../render/GraphRenderer";
 import { ControlPanel, type PanelState } from "../ui/ControlPanel";
 import { Legend } from "../ui/Legend";
 import { LayoutClient } from "../workers/LayoutClient";
+import { AutoFitGate } from "./autoFitGate";
+import { adaptPhysicsToGraphSize } from "../ui/layoutDensity";
 import type { LayoutRule } from "../workers/layoutEngine";
 import { MetricsClient, type GraphMetrics } from "../workers/MetricsClient";
 import { contentNeedles, parseQuery, matchesQuery, type ParsedQuery } from "../query/QueryParser";
@@ -63,6 +65,8 @@ const EXPLORE_BACKGROUND_ALPHA = 0.05;
 export class GraphInsightView extends ItemView {
 	private renderer: GraphRenderer | null = null;
 	private layout: LayoutClient | null = null;
+	/** Frames the graph after the first layout and after a preset switch. */
+	private readonly autoFit = new AutoFitGate();
 	private metricsClient: MetricsClient | null = null;
 	private model: GraphModel | null = null;
 	private facts: NodeFacts[] = [];
@@ -170,6 +174,11 @@ export class GraphInsightView extends ItemView {
 		this.tooltip = container.createDiv({ cls: "graph-insight-tooltip" });
 		this.tooltip.hide();
 
+		// Any manual pan/zoom/drag means the user framed the view themselves —
+		// a later auto-fit must not yank the camera out of their hands.
+		this.registerDomEvent(container, "pointerdown", () => this.autoFit.cancel());
+		this.registerDomEvent(container, "wheel", () => this.autoFit.cancel());
+
 		this.renderer = new GraphRenderer({
 			onNodeHover: (nodeId, clientX, clientY) => this.showTooltip(nodeId, clientX, clientY),
 			onNodeClick: (nodeId, event) => this.handleNodeClick(nodeId, event),
@@ -210,6 +219,7 @@ export class GraphInsightView extends ItemView {
 				this.renderer?.updatePositions(positions);
 				this.savePositionsDebounced();
 				this.redrawBubbles();
+				if (this.autoFit.consume()) this.renderer?.fitAll();
 			},
 			() => this.reportWorkerFailure("layout")
 		);
@@ -1029,6 +1039,9 @@ export class GraphInsightView extends ItemView {
 		this.rebuilding = true;
 
 		const { seed, pinnedPaths } = await this.buildSeedPositions(model);
+		// Frame the graph once the very first layout settles; later rebuilds
+		// (vault edits) keep whatever framing the user has.
+		if (!this.model) this.autoFit.request();
 		this.model = model;
 		this.facts = this.buildFacts(model, files);
 		this.metrics = null;
@@ -1564,6 +1577,7 @@ export class GraphInsightView extends ItemView {
 		const preset = this.plugin.settings.viewPresets[index];
 		if (!preset) return;
 		this.activePresetIndex = index;
+		this.autoFit.request();
 		await this.updatePanelState(() => preset.panel);
 		new Notice(t("notice.presetApplied", { name: presetDisplayName(preset) }));
 	}
@@ -1672,7 +1686,10 @@ export class GraphInsightView extends ItemView {
 		const key = `${JSON.stringify(state.physics)}|${state.nodeScale}`;
 		if (key === this.lastPhysics) return;
 		this.lastPhysics = key;
-		this.layout?.setParams({ ...state.physics, collideRadius });
+		// Slider values are tuned for a mid-size vault; rescale the spread to
+		// the actual node count before handing them to the worker.
+		const adapted = adaptPhysicsToGraphSize(state.physics, this.model?.nodes.length ?? 0);
+		this.layout?.setParams({ ...adapted, collideRadius });
 
 		// Physics off: the worker freezes itself; don't reheat it back to life.
 		if (state.physics.disabled) return;

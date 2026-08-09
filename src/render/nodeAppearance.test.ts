@@ -14,6 +14,8 @@ import {
 	pinRingRadius,
 	labelDepthAlpha,
 	sizeDepth,
+	MIN_NODE_SCREEN_PX,
+	zoomSizeCompensation,
 } from "./nodeAppearance";
 
 describe("sizeDepth", () => {
@@ -28,6 +30,31 @@ describe("sizeDepth", () => {
 
 	test("a near node keeps its perspective size", () => {
 		expect(sizeDepth(2.5)).toBe(2.5);
+	});
+});
+
+describe("zoomSizeCompensation", () => {
+	test("leaves a node alone when it is already big enough on screen", () => {
+		expect(zoomSizeCompensation(10, 1)).toBe(1);
+	});
+
+	test("grows a node that zoom shrank below the screen-size floor", () => {
+		const worldDiameter = 10;
+		const viewScale = 0.05;
+
+		const factor = zoomSizeCompensation(worldDiameter, viewScale);
+
+		expect(worldDiameter * factor * viewScale).toBeCloseTo(MIN_NODE_SCREEN_PX);
+	});
+
+	test("kicks in exactly at the floor boundary", () => {
+		const viewScale = MIN_NODE_SCREEN_PX / 10;
+		expect(zoomSizeCompensation(10, viewScale)).toBe(1);
+	});
+
+	test("ignores degenerate scales instead of dividing by zero", () => {
+		expect(zoomSizeCompensation(10, 0)).toBe(1);
+		expect(zoomSizeCompensation(0, 1)).toBe(1);
 	});
 });
 

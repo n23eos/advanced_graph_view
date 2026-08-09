@@ -57,7 +57,7 @@ export const DEFAULT_3D_PANEL = makePanel({
 });
 
 /** Bump when DEFAULT_VIEW_PRESETS changes so existing installs re-seed. */
-export const VIEW_PRESET_VERSION = 7;
+export const VIEW_PRESET_VERSION = 8;
 /** Default preset names retired in newer versions — removed on migration. */
 export const RETIRED_VIEW_PRESETS = new Set([
 	"3D галактика", "Хабы и кластеры", "Недавнее", "Мелкие ноды",
@@ -68,7 +68,7 @@ export const RETIRED_VIEW_PRESETS = new Set([
  *  other 2D bundled presets, so switching between them doesn't relayout. */
 const DIAGNOSTIC_PHYSICS: PanelState["physics"] = {
 	repel: 30, linkDistance: 25, centering: 0.09,
-	linkStrength: 0.15, velocityDecay: 0.55, elasticity: 0.4, freeLayout: false,
+	linkStrength: 0.15, velocityDecay: 0.55, elasticity: 0.4, freeLayout: true,
 };
 
 /** Bundled presets, copied from the tuned Raincoat vault. "Default 3D" first —
@@ -100,7 +100,7 @@ export const DEFAULT_VIEW_PRESETS: ViewPreset[] = [
 			showBubbles: true,
 			physics: {
 				repel: 30, linkDistance: 25, centering: 0.09,
-				linkStrength: 0.15, velocityDecay: 0.55, elasticity: 0.4, freeLayout: false,
+				linkStrength: 0.15, velocityDecay: 0.55, elasticity: 0.4, freeLayout: true,
 			},
 			labels: { show: false, fontSize: 11, zoomThreshold: 0.9, maxCount: 100, scaleWithZoom: true },
 			edges: { show: true, width: 0.2, opacity: 0.16 },
@@ -116,7 +116,7 @@ export const DEFAULT_VIEW_PRESETS: ViewPreset[] = [
 			colorPreset: "heat",
 			physics: {
 				repel: 30, linkDistance: 25, centering: 0.09,
-				linkStrength: 0.15, velocityDecay: 0.55, elasticity: 0.4, freeLayout: false,
+				linkStrength: 0.15, velocityDecay: 0.55, elasticity: 0.4, freeLayout: true,
 			},
 			labels: { show: false, fontSize: 11, zoomThreshold: 0.9, maxCount: 100, scaleWithZoom: true },
 			edges: { show: true, width: 0.2, opacity: 0.16 },
@@ -164,7 +164,7 @@ export const DEFAULT_VIEW_PRESETS: ViewPreset[] = [
 			colorPreset: "recency",
 			physics: {
 				repel: 30, linkDistance: 25, centering: 0.09,
-				linkStrength: 0.15, velocityDecay: 0.55, elasticity: 0.4, freeLayout: false,
+				linkStrength: 0.15, velocityDecay: 0.55, elasticity: 0.4, freeLayout: true,
 			},
 			labels: { show: true, fontSize: 10, zoomThreshold: 1.78, maxCount: 100, scaleWithZoom: true },
 			edges: { show: true, width: 0.2, opacity: 0.15 },
@@ -180,7 +180,7 @@ export const DEFAULT_VIEW_PRESETS: ViewPreset[] = [
 			colorPreset: "mono",
 			physics: {
 				repel: 30, linkDistance: 25, centering: 0.09,
-				linkStrength: 0.15, velocityDecay: 0.55, elasticity: 0.4, freeLayout: false,
+				linkStrength: 0.15, velocityDecay: 0.55, elasticity: 0.4, freeLayout: true,
 			},
 			labels: { show: false, fontSize: 11, zoomThreshold: 0.9, maxCount: 100, scaleWithZoom: true },
 			edges: { show: true, width: 0.2, opacity: 0.16 },
