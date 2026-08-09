@@ -5,7 +5,36 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.6.0] — 2026-08-09
+
+### Added
+
+- **Local 3D graph pane** — a right-sidebar view showing the neighborhood of
+  the active note: a depth slider (1–4 hops), the root note highlighted, rings
+  fading with distance, and the camera framing the cloud on its own once the
+  layout settles. Click a node to open the note. Opens from the command
+  palette: *Open local 3D graph*.
+- **Local graph export to Markdown** — a button in the pane (and a command)
+  writes the neighborhood as a note beside the root: one section per depth
+  ring, direction arrows on the first ring (→ outgoing, ← incoming, ↔ mutual),
+  and each deeper note names the note it was reached through.
+
+### Changed
+
+- **Free layout is now on in every bundled preset.** Existing installs pick
+  this up automatically when their bundled presets re-seed.
+- **Auto-fit** — the camera frames the whole graph after the first layout
+  settles and after switching a view preset. Panning or zooming by hand
+  cancels the pending fit; your framing always wins.
+- **Nodes stay visible at any zoom** — in 2D a node never renders smaller than
+  2.5 px on screen, so zooming far out no longer turns the vault into dust or
+  hides small notes entirely.
+- **Layout spread adapts to vault size** — repulsion and link distance scale
+  with the number of notes, so a large vault no longer flies apart and a tiny
+  one no longer clumps into a dot. The physics sliders keep showing your own
+  values; the adjustment happens on the way to the simulation.
+
+## [0.5.0] — 2026-08-03
 
 ### Added
 
