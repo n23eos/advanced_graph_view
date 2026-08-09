@@ -1,3 +1,6 @@
+> **⭐ Found this useful? [Star the repo](https://github.com/n23eos/advanced_graph_view)** — that's how other people find it.
+> **🐦 I build in public on X — [@Raincoat_talk](https://x.com/Raincoat_talk)** for new plugins and updates.
+
 # Advanced Graph View
 
 ![Advanced Graph View demo](assets/advanced_graph_view_demo.gif)
