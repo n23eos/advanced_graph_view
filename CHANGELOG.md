@@ -5,6 +5,17 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] — 2026-08-09
+
+### Fixed
+
+- **3D graph opened dark and distant.** The 0.6.0 auto-fit flew the camera far
+  enough out to frame the whole vault, which pushed every node into the depth
+  fog and the minimum-size floor — the galaxy read as unlit dust. Auto-fit now
+  runs only in 2D; the 3D view starts inside the galaxy again, the way its
+  look is tuned. The local graph pane keeps its 3D auto-fit: its neighborhood
+  cloud is small, so the camera stays close and bright.
+
 ## [0.6.0] — 2026-08-09
 
 ### Added

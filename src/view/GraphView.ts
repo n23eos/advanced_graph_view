@@ -29,7 +29,7 @@ import { GraphRenderer } from "../render/GraphRenderer";
 import { ControlPanel, type PanelState } from "../ui/ControlPanel";
 import { Legend } from "../ui/Legend";
 import { LayoutClient } from "../workers/LayoutClient";
-import { AutoFitGate } from "./autoFitGate";
+import { AutoFitGate, shouldFitOnSettle } from "./autoFitGate";
 import { adaptPhysicsToGraphSize } from "../ui/layoutDensity";
 import type { LayoutRule } from "../workers/layoutEngine";
 import { MetricsClient, type GraphMetrics } from "../workers/MetricsClient";
@@ -219,7 +219,9 @@ export class GraphInsightView extends ItemView {
 				this.renderer?.updatePositions(positions);
 				this.savePositionsDebounced();
 				this.redrawBubbles();
-				if (this.autoFit.consume()) this.renderer?.fitAll();
+				if (shouldFitOnSettle(this.autoFit, this.plugin.settings.panel.view3d.enabled)) {
+					this.renderer?.fitAll();
+				}
 			},
 			() => this.reportWorkerFailure("layout")
 		);
