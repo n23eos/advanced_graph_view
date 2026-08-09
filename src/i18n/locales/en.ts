@@ -281,6 +281,18 @@ export const en = {
 	"command.exportJson": "Export graph data as JSON",
 	"command.exportGexf": "Export graph data as GEXF",
 
+	// ── Local 3D graph pane ───────────────────────────────────────────
+	"localGraph.title": "Local 3D graph",
+	"localGraph.depth": "Depth",
+	"localGraph.export": "Export to Markdown",
+	"localGraph.empty": "Open a note to see its local graph",
+	"localGraph.exported": "Exported: {name}",
+	"localGraph.mdTitle": "Local graph: [[{name}]] (depth {depth})",
+	"localGraph.mdLevel": "Level {depth}",
+	"localGraph.mdVia": "via",
+	"command.openLocalGraph": "Open local 3D graph",
+	"command.exportLocalGraph": "Export local graph to Markdown",
+
 	// ── Insights dashboard ────────────────────────────────────────────
 	"insights.title": "Graph insights",
 	"insights.computing": "Computing metrics…",

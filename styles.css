@@ -803,3 +803,33 @@
 	color: var(--text-muted);
 	line-height: 1.5;
 }
+
+/* Local 3D graph pane: slim control strip above the canvas. */
+.graph-insight-local-header {
+	position: absolute;
+	top: 8px;
+	left: 8px;
+	right: 8px;
+	z-index: 10;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	pointer-events: none;
+}
+
+.graph-insight-local-header label {
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+	white-space: nowrap;
+}
+
+.graph-insight-local-header input[type="range"] {
+	width: 90px;
+	pointer-events: auto;
+}
+
+.graph-insight-local-header button {
+	margin-left: auto;
+	pointer-events: auto;
+	font-size: var(--font-ui-small);
+}

@@ -12,6 +12,7 @@ import {
 	type UsageLog,
 } from "./data/UsageTracker";
 import { InsightsView, INSIGHTS_VIEW_TYPE } from "./view/InsightsView";
+import { LocalGraphView, LOCAL_GRAPH_VIEW_TYPE } from "./view/LocalGraphView";
 import { GraphInsightSettingsTab } from "./settings/SettingsTab";
 import { initI18n, t } from "./i18n";
 import { migrateViewPresets } from "./view/presetNames";
@@ -107,6 +108,7 @@ export default class GraphInsightPlugin extends Plugin {
 
 		this.registerView(GRAPH_INSIGHT_VIEW_TYPE, (leaf) => new GraphInsightView(leaf, this));
 		this.registerView(INSIGHTS_VIEW_TYPE, (leaf) => new InsightsView(leaf, this));
+		this.registerView(LOCAL_GRAPH_VIEW_TYPE, (leaf) => new LocalGraphView(leaf, this));
 		this.addSettingTab(new GraphInsightSettingsTab(this.app, this));
 
 		this.addCommand({
@@ -124,6 +126,21 @@ export default class GraphInsightPlugin extends Plugin {
 				if (!path) return;
 				await this.activateView();
 				this.getGraphView()?.focusOnPath(path);
+			},
+		});
+		this.addCommand({
+			id: "open-local-graph",
+			name: t("command.openLocalGraph"),
+			callback: () => void this.activateLocalGraph(),
+		});
+		this.addCommand({
+			id: "export-local-graph",
+			name: t("command.exportLocalGraph"),
+			checkCallback: (checking) => {
+				const view = this.app.workspace.getLeavesOfType(LOCAL_GRAPH_VIEW_TYPE)[0]?.view;
+				if (!(view instanceof LocalGraphView)) return false;
+				if (!checking) void view.exportMarkdown();
+				return true;
 			},
 		});
 		this.addCommand({
@@ -355,6 +372,18 @@ export default class GraphInsightPlugin extends Plugin {
 		const leaf = this.app.workspace.getRightLeaf(false);
 		if (!leaf) return;
 		await leaf.setViewState({ type: INSIGHTS_VIEW_TYPE, active: true });
+		await this.app.workspace.revealLeaf(leaf);
+	}
+
+	private async activateLocalGraph(): Promise<void> {
+		const existing = this.app.workspace.getLeavesOfType(LOCAL_GRAPH_VIEW_TYPE);
+		if (existing.length > 0) {
+			await this.app.workspace.revealLeaf(existing[0]);
+			return;
+		}
+		const leaf = this.app.workspace.getRightLeaf(false);
+		if (!leaf) return;
+		await leaf.setViewState({ type: LOCAL_GRAPH_VIEW_TYPE, active: true });
 		await this.app.workspace.revealLeaf(leaf);
 	}
 
