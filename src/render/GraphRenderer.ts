@@ -22,14 +22,13 @@ import {
 	pinRingRadius,
 	sizeDepth,
 	zoomSizeCompensation,
+	degreeRadius,
+	MAX_NODE_RADIUS,
 } from "./nodeAppearance";
 import { createNodeTexture, createStarTexture, STAR_SIZE_FACTOR } from "./NodeTexture";
 import { Camera3D } from "./projection";
 import { Viewport } from "./Viewport";
 
-const BASE_NODE_RADIUS = 4;
-const DEGREE_RADIUS_BOOST = 0.35; // radius grows with sqrt(degree)
-const MAX_NODE_RADIUS = 16;
 const DEFAULT_LABEL_ZOOM_THRESHOLD = 0.9;
 const DEFAULT_LABEL_FONT_SIZE = 11;
 const LABEL_COUNT_LIMIT = 150;
@@ -316,11 +315,7 @@ export class GraphRenderer {
 		this.sprites = [];
 
 		for (const node of model.nodes) {
-			const degree = node.inCount + node.outCount;
-			const radius = Math.min(
-				MAX_NODE_RADIUS,
-				BASE_NODE_RADIUS + Math.sqrt(degree) * DEGREE_RADIUS_BOOST * BASE_NODE_RADIUS
-			);
+			const radius = degreeRadius(node.inCount + node.outCount);
 			this.radii[node.id] = radius;
 
 			const sprite = new Sprite(this.glowMode ? this.starTexture! : this.nodeTexture);

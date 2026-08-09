@@ -27,6 +27,20 @@ const NEAR_FADE_LENGTH = 200;
 export const PIN_RING_GAP = 3;
 /** In 2D a node never renders smaller than this on screen (px). */
 export const MIN_NODE_SCREEN_PX = 2.5;
+/** Radius of a note nothing links to. */
+export const BASE_NODE_RADIUS = 4;
+/** Ceiling, so one mega-hub cannot swallow the view. */
+export const MAX_NODE_RADIUS = 16;
+const DEGREE_RADIUS_BOOST = 0.35;
+
+/** Node radius from its link count. Square root, so a note with four times
+ *  the links reads as twice the node rather than four times. */
+export function degreeRadius(degree: number): number {
+	return Math.min(
+		MAX_NODE_RADIUS,
+		BASE_NODE_RADIUS + Math.sqrt(degree) * DEGREE_RADIUS_BOOST * BASE_NODE_RADIUS
+	);
+}
 
 /**
  * Size multiplier keeping a 2D node's screen diameter at MIN_NODE_SCREEN_PX

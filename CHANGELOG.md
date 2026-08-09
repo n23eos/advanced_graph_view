@@ -5,6 +5,15 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] — 2026-08-09
+
+### Fixed
+
+- **Local pane nodes were all one size.** The 0.7.0 ring coloring also replaced
+  their radius with a fixed value, so a hub next to your note looked like any
+  other link. Size comes from the link count again, with the root scaled up as
+  the anchor of the view.
+
 ## [0.7.0] — 2026-08-09
 
 ### Added

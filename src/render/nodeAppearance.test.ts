@@ -16,6 +16,9 @@ import {
 	sizeDepth,
 	MIN_NODE_SCREEN_PX,
 	zoomSizeCompensation,
+	degreeRadius,
+	BASE_NODE_RADIUS,
+	MAX_NODE_RADIUS,
 } from "./nodeAppearance";
 
 describe("sizeDepth", () => {
@@ -237,5 +240,20 @@ describe("labelDepthAlpha", () => {
 
 	test("the fade never goes fully invisible while the node is drawn", () => {
 		expect(labelDepthAlpha(0.05)).toBeGreaterThan(0);
+	});
+});
+
+describe("degreeRadius", () => {
+	test("gives an unlinked note the base radius", () => {
+		expect(degreeRadius(0)).toBe(BASE_NODE_RADIUS);
+	});
+
+	test("grows with the square root of the link count", () => {
+		expect(degreeRadius(4)).toBeGreaterThan(degreeRadius(1));
+		expect(degreeRadius(4) - degreeRadius(1)).toBeCloseTo(degreeRadius(1) - degreeRadius(0));
+	});
+
+	test("caps a mega-hub so it cannot swallow the view", () => {
+		expect(degreeRadius(100_000)).toBe(MAX_NODE_RADIUS);
 	});
 });

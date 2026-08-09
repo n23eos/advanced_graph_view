@@ -14,6 +14,7 @@ import { LayoutClient } from "../workers/LayoutClient";
 import { adaptPhysicsToGraphSize } from "../ui/layoutDensity";
 import { ringTints } from "../analysis/ringTints";
 import { activePreset } from "../render/theme";
+import { degreeRadius } from "../render/nodeAppearance";
 import { AutoFitGate } from "./autoFitGate";
 import { t } from "../i18n";
 import type GraphInsightPlugin from "../main";
@@ -23,6 +24,8 @@ export const LOCAL_GRAPH_VIEW_TYPE = "graph-insight-local";
 const MIN_DEPTH = 1;
 const MAX_DEPTH = 4;
 const DEFAULT_DEPTH = 2;
+/** The note the pane is about is drawn this much bigger than its links. */
+const ROOT_SIZE_BOOST = 1.6;
 
 export class LocalGraphView extends ItemView {
 	private renderer: GraphRenderer | null = null;
@@ -220,12 +223,15 @@ export class LocalGraphView extends ItemView {
 		// color instead of leaving the whole neighborhood one flat grey.
 		const preset = activePreset(this.plugin.settings.panel.colorPreset);
 		this.renderer.setVisualStyle(preset.glow === true, preset.backdrop ?? null);
+		// Size still comes from how linked a note is — a hub neighbor has to
+		// look like a hub — with the root scaled up as the anchor of the view.
 		const sizes = new Float32Array(sub.nodes.length);
 		const glow = new Float32Array(sub.nodes.length);
-		for (let i = 0; i < sizes.length; i++) {
-			// Root reads as the anchor; rings step down but never to a speck.
-			sizes[i] = (neighborhood.depths[i] === 0 ? 9 : 6) * this.plugin.settings.panel.nodeScale;
-			glow[i] = 1;
+		for (const node of sub.nodes) {
+			const anchor = neighborhood.depths[node.id] === 0 ? ROOT_SIZE_BOOST : 1;
+			sizes[node.id] =
+				degreeRadius(node.inCount + node.outCount) * anchor * this.plugin.settings.panel.nodeScale;
+			glow[node.id] = 1;
 		}
 		this.renderer.applyEncoding(sizes, ringTints(neighborhood.depths, this.depth, preset), glow);
 
