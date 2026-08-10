@@ -94,7 +94,16 @@ export class LocalGraphView extends ItemView {
 		this.registerDomEvent(container, "wheel", () => this.autoFit.cancel());
 
 		this.layout = new LayoutClient(
-			(positions) => this.renderer?.updatePositions(positions),
+			(positions) => {
+				this.renderer?.updatePositions(positions);
+				// A fresh neighborhood starts as a knot at the origin and expands
+				// over the next second. Framing only once it settles would leave
+				// the camera aimed at the previous note's cloud until then — and
+				// stranded there for good if the graph is touched meanwhile. Keep
+				// re-framing every tick until the fit is spent or the user takes
+				// the camera.
+				if (this.autoFit.isPending()) this.renderer?.fitAll();
+			},
 			(positions) => {
 				this.renderer?.updatePositions(positions);
 				if (this.autoFit.consume()) this.renderer?.fitAll();

@@ -28,13 +28,13 @@ import {
 import { createNodeTexture, createStarTexture, STAR_SIZE_FACTOR } from "./NodeTexture";
 import { Camera3D } from "./projection";
 import { Viewport } from "./Viewport";
+import { isMeaningfulResize } from "./resizeGate";
 
 const DEFAULT_LABEL_ZOOM_THRESHOLD = 0.9;
 const DEFAULT_LABEL_FONT_SIZE = 11;
 const LABEL_COUNT_LIMIT = 150;
 const TINY_NODE_CULL_PX = 0.35; // nodes smaller than this on screen are skipped
 /** Host-size changes smaller than this are noise, not a real pane resize. */
-const RESIZE_EPSILON_PX = 2;
 const EDGE_ALPHA = 0.25;
 // Text rasterization is expensive; creating many labels in one frame causes
 // visible hitches during panning, so budget creations per frame.
@@ -481,13 +481,16 @@ export class GraphRenderer {
 	resize(): void {
 		if (!this.app) return;
 		const host = this.app.resizeTo;
-		if (host instanceof HTMLElement) {
-			// Sub-2px "resizes" are scrollbar overlays and pane-edge hover
-			// artifacts, not real layout changes. Recentering the 3D camera on
-			// each of them made the view visibly shudder near the pane edge.
-			const dw = Math.abs(host.clientWidth - this.app.screen.width);
-			const dh = Math.abs(host.clientHeight - this.app.screen.height);
-			if (dw < RESIZE_EPSILON_PX && dh < RESIZE_EPSILON_PX) return;
+		if (
+			host instanceof HTMLElement &&
+			!isMeaningfulResize(
+				host.clientWidth,
+				host.clientHeight,
+				this.app.screen.width,
+				this.app.screen.height
+			)
+		) {
+			return;
 		}
 		this.app.resize();
 		if (this.camera.enabled && this.viewport) {

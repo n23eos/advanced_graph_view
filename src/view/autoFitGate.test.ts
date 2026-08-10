@@ -73,3 +73,41 @@ describe("shouldFitOnSettle", () => {
 		expect(shouldFitOnSettle(new AutoFitGate(), false)).toBe(false);
 	});
 });
+
+describe("AutoFitGate.isPending", () => {
+	it("reports nothing pending on a fresh gate", () => {
+		expect(new AutoFitGate().isPending()).toBe(false);
+	});
+
+	it("reports a pending fit after a request", () => {
+		const gate = new AutoFitGate();
+		gate.request();
+
+		expect(gate.isPending()).toBe(true);
+	});
+
+	it("does not disarm the latch, so ticks can keep re-framing", () => {
+		const gate = new AutoFitGate();
+		gate.request();
+
+		gate.isPending();
+
+		expect(gate.consume()).toBe(true);
+	});
+
+	it("reports nothing pending once the fit was consumed", () => {
+		const gate = new AutoFitGate();
+		gate.request();
+		gate.consume();
+
+		expect(gate.isPending()).toBe(false);
+	});
+
+	it("reports nothing pending after the user took the camera", () => {
+		const gate = new AutoFitGate();
+		gate.request();
+		gate.cancel();
+
+		expect(gate.isPending()).toBe(false);
+	});
+});

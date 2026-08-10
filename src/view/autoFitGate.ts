@@ -17,6 +17,12 @@ export class AutoFitGate {
 		this.pending = false;
 	}
 
+	/** Whether a fit is still owed, without disarming it. Lets a caller re-frame
+	 *  on every simulation tick while the cloud is still spreading out. */
+	isPending(): boolean {
+		return this.pending;
+	}
+
 	/** Whether to fit now. Reading disarms the latch, so a fit runs only once. */
 	consume(): boolean {
 		const shouldFit = this.pending;

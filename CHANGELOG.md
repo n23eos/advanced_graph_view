@@ -5,6 +5,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.2] — 2026-08-10
+
+### Fixed
+
+- **The 3D graph came back stuck in a corner** after switching to a note and
+  back. A hidden tab reports a zero-sized pane, which was treated as a real
+  resize and parked the world origin on the top-left pixel. A pane with no
+  size is now left alone, so the framing survives the trip.
+- **The local pane aimed at the previous note's cloud** for the first second
+  after switching notes, and stayed there for good if the graph was touched
+  meanwhile. The camera now tracks the neighborhood while it spreads out,
+  until it settles or you take the camera yourself.
+
 ## [0.7.1] — 2026-08-09
 
 ### Fixed
