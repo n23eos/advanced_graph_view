@@ -37,20 +37,24 @@ export function pickNodeAt(options: PickOptions): number | null {
 	const { positions, radii, pointerX, pointerY, hitRadius, hiddenMask, depthScales } = options;
 
 	let best: number | null = null;
-	let bestDistance = Infinity;
+	let bestDistanceSq = Infinity;
 
+	// Squared distances throughout: this runs over every node per pointermove,
+	// and Math.hypot is far slower than the multiply while ordering and the
+	// disc test are identical for non-negative values.
 	for (let i = 0; i < radii.length; i++) {
 		if (hiddenMask != null && hiddenMask[i] === 1) continue;
 		if (depthScales != null && depthScales[i] === 0) continue;
 
 		const dx = positions[i * 2] - pointerX;
 		const dy = positions[i * 2 + 1] - pointerY;
-		const distance = Math.hypot(dx, dy);
+		const distanceSq = dx * dx + dy * dy;
 		const visualRadius = radii[i] * (depthScales ? depthScales[i] : 1);
+		const reach = Math.max(visualRadius, hitRadius);
 
-		if (distance <= Math.max(visualRadius, hitRadius) && distance < bestDistance) {
+		if (distanceSq <= reach * reach && distanceSq < bestDistanceSq) {
 			best = i;
-			bestDistance = distance;
+			bestDistanceSq = distanceSq;
 		}
 	}
 
