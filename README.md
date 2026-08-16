@@ -1,4 +1,4 @@
-> **⭐ Found this useful? [Star the repo](https://github.com/n23eos/advanced_graph_view)** — that's how other people find it.
+> **⭐ [Star the repo](https://github.com/n23eos/advanced_graph_view)** — that's how other people find it.
 
 
 # Advanced Graph View
