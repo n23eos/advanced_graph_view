@@ -153,6 +153,75 @@ export function parseQuery(query: string): ParsedQuery {
 	return tokenize(query.trim()).map(parseToken);
 }
 
+/** What a diagnostic complains about; the UI resolves it to a message. */
+export interface QueryDiagnostic {
+	messageKey: "unclosedQuote" | "badValue";
+	/** Operator at fault for badValue, "" for unclosedQuote. */
+	operator: string;
+	tokenStart: number;
+	tokenEnd: number;
+}
+
+/** Operators whose arguments have a strict shape. Everything else keeps the
+ *  parser's lenient contract: unknown operators degrade to plain text. */
+const KNOWN_OPERATORS = new Set([
+	"content", "слово", "path", "file", "tag", "cluster",
+	"opened", "links", "inlinks", "outlinks", "unresolved", "edited", "created",
+]);
+
+function isValidArg(key: string, arg: string): boolean {
+	if (!arg) return false;
+	switch (key) {
+		case "opened":
+			return /^(\d+)d(>=|<=|>|<|=)?(\d+)$/.test(arg) || parseCondition(arg) !== null;
+		case "links":
+		case "inlinks":
+		case "outlinks":
+		case "unresolved":
+			return parseCondition(arg) !== null;
+		case "edited":
+		case "created":
+			return parseDateArg(arg) !== null;
+		default:
+			// Text-like operators accept any non-empty needle.
+			return true;
+	}
+}
+
+/**
+ * Companion to parseQuery for the search UI: parseQuery itself never fails —
+ * it degrades bad tokens to plain text so typos don't nuke the graph — while
+ * this reports what a human probably got wrong: a bad value for an operator
+ * the plugin knows, or a quote that never closes. Unknown operators pass.
+ */
+export function validateQuery(query: string): QueryDiagnostic | null {
+	const quoteCount = (query.match(/"/g) ?? []).length;
+	if (quoteCount % 2 === 1) {
+		return {
+			messageKey: "unclosedQuote",
+			operator: "",
+			tokenStart: query.lastIndexOf('"'),
+			tokenEnd: query.length,
+		};
+	}
+
+	// The same shape as tokenize(), with positions kept.
+	const re = /(-?)([\p{L}\p{N}_]+:)?"([^"]*)"|(\S+)/gu;
+	let m: RegExpExecArray | null;
+	while ((m = re.exec(query)) !== null) {
+		const token = m[3] !== undefined ? `${m[1]}${m[2] ?? ""}${m[3]}` : m[4];
+		const body = token.startsWith("-") && token.length > 1 ? token.slice(1) : token;
+		const colon = body.indexOf(":");
+		if (colon <= 0) continue;
+		const key = body.slice(0, colon).toLowerCase();
+		if (!KNOWN_OPERATORS.has(key)) continue;
+		if (!isValidArg(key, body.slice(colon + 1))) {
+			return { messageKey: "badValue", operator: key, tokenStart: m.index, tokenEnd: re.lastIndex };
+		}
+	}
+	return null;
+}
+
 function windowOpens(facts: NodeFacts, windowDays: number): number {
 	if (windowDays <= 7) return facts.opens7;
 	if (windowDays <= 30) return facts.opens30;

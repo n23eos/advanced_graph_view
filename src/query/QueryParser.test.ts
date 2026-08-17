@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { parseQuery, matchesQuery } from "./QueryParser";
+import { parseQuery, matchesQuery, validateQuery } from "./QueryParser";
 import type { NodeFacts } from "../encoding/metrics";
 
 const NOW = new Date("2026-07-19T12:00:00Z").getTime();
@@ -146,5 +146,60 @@ describe("content operator", () => {
 	test("russian alias слово: works", () => {
 		const q = parseQuery("слово:тест");
 		expect(matchesQuery(q, facts({}), NOW, (n) => n === "тест")).toBe(true);
+	});
+});
+
+describe("validateQuery (F-03 diagnostics)", () => {
+	test("valid queries produce no diagnostic", () => {
+		for (const query of [
+			"",
+			"кибернетика",
+			'path:"my notes" tag:#idea',
+			"opened:30d>5 links:>2 -edited:<30d",
+			"created:>2024-01-01",
+		]) {
+			expect(validateQuery(query)).toBeNull();
+		}
+	});
+
+	test("unknown operators stay plain text and never error", () => {
+		expect(validateQuery("foo:bar size:>x")).toBeNull();
+	});
+
+	test("an unclosed quote is reported with its position", () => {
+		const diagnostic = validateQuery('tag:#idea "unfinished');
+		expect(diagnostic?.messageKey).toBe("unclosedQuote");
+		expect(diagnostic?.tokenStart).toBe(10);
+		expect(diagnostic?.tokenEnd).toBe(21);
+	});
+
+	test("a bad value for a known numeric operator is reported", () => {
+		const diagnostic = validateQuery("tag:#ok links:abc");
+		expect(diagnostic?.messageKey).toBe("badValue");
+		expect(diagnostic?.operator).toBe("links");
+		expect(diagnostic?.tokenStart).toBe(8);
+		expect(diagnostic?.tokenEnd).toBe(17);
+	});
+
+	test("a bad date for created/edited is reported", () => {
+		expect(validateQuery("created:>notadate")?.messageKey).toBe("badValue");
+		expect(validateQuery("edited:tomorrow-ish")?.operator).toBe("edited");
+	});
+
+	test("a malformed windowed opened condition is reported", () => {
+		expect(validateQuery("opened:5x")?.messageKey).toBe("badValue");
+	});
+
+	test("an empty value after a known operator is reported", () => {
+		expect(validateQuery("links:")?.messageKey).toBe("badValue");
+		expect(validateQuery("tag:")?.messageKey).toBe("badValue");
+	});
+
+	test("negation does not hide a bad value", () => {
+		expect(validateQuery("-links:abc")?.operator).toBe("links");
+	});
+
+	test("negated valid terms stay valid", () => {
+		expect(validateQuery("-links:>3 -tag:#done")).toBeNull();
 	});
 });
