@@ -20,6 +20,7 @@ function build(overrides: Partial<SearchCallbacks> = {}) {
 		onSavePreset: vi.fn(),
 		onPresetApplied: vi.fn(),
 		onManagePresets: vi.fn(),
+		onTasksMenu: vi.fn(),
 		...overrides,
 	};
 	const host = document.body.createDiv();

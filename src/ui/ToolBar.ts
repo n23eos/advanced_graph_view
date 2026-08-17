@@ -124,6 +124,12 @@ export class ToolBar {
 		this.applyActive();
 	}
 
+	/** Programmatic tool switch (task actions, command palette) — same path
+	 *  as a click, so UI and callback can never diverge. */
+	selectTool(tool: CursorTool): void {
+		this.setTool(tool);
+	}
+
 	/** GraphView reports which path pick is expected next. */
 	setPathStage(stage: "start" | "end"): void {
 		this.pathStage = stage;

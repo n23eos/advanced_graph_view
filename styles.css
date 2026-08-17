@@ -798,6 +798,50 @@
 	max-width: calc(100% - 24px);
 }
 
+/* F-11: breadcrumb strip inside the focus/explore bar. */
+.graph-insight-breadcrumb {
+	flex-basis: 100%;
+	display: flex;
+	gap: 2px;
+	align-items: center;
+	font-size: var(--font-ui-smaller);
+	overflow: hidden;
+}
+
+.graph-insight-breadcrumb-crumb {
+	padding: 0 5px;
+	background: none;
+	box-shadow: none;
+	color: var(--text-muted);
+	cursor: pointer;
+	max-width: 140px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.graph-insight-breadcrumb-crumb.is-active {
+	color: var(--text-normal);
+	border: 1px solid var(--interactive-accent);
+	border-radius: var(--radius-s);
+}
+
+.graph-insight-breadcrumb-crumb:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+.graph-insight-breadcrumb-sep {
+	color: var(--text-faint);
+}
+
+.graph-insight-breadcrumb-remove {
+	padding: 0 3px;
+	background: none;
+	box-shadow: none;
+	cursor: pointer;
+}
+
 /* F-08: tool status line + standing-mode badges under the icon row. */
 .graph-insight-toolbar-statusrow {
 	flex-basis: 100%;

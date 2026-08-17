@@ -116,6 +116,29 @@ export default class GraphInsightPlugin extends Plugin {
 		});
 
 		this.addCommand({
+			id: "export-topic-map",
+			name: t("topicmap.export"),
+			checkCallback: (checking) => {
+				const view = this.getGraphView();
+				if (!view?.canExportTopicMap()) return false;
+				if (!checking) view.exportCurrentTopicMap();
+				return true;
+			},
+		});
+
+		// F-01: one hotkey-able command per canned task.
+		for (const action of GraphInsightView.TASK_ACTIONS) {
+			this.addCommand({
+				id: `task-${action.id}`,
+				name: t(action.labelKey),
+				callback: async () => {
+					await this.activateView();
+					this.getGraphView()?.runTask(action.id);
+				},
+			});
+		}
+
+		this.addCommand({
 			id: "focus-current-note",
 			name: t("command.focusNote"),
 			callback: async () => {

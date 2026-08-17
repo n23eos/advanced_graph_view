@@ -34,6 +34,22 @@ import { adaptPhysicsToGraphSize } from "../ui/layoutDensity";
 import type { LayoutRule, PhysicsParams } from "../workers/layoutEngine";
 import { formatPhysicsDiff, physicsDiff, recommendedPhysics } from "../ui/physicsReset";
 import { responsiveMode, type ResponsiveMode } from "../ui/responsive";
+import { ensureBuiltinPreset } from "./builtinPresets";
+import type { BuiltinPresetId } from "./presetNames";
+import { NavigationTrail } from "../explore/navigationTrail";
+import { renderBreadcrumb } from "../ui/breadcrumb";
+import {
+	nextAvailableName,
+	topicMapMarkdown,
+	type TopicMapInput,
+	type TopicMapSource,
+} from "../export/topicMapMarkdown";
+import { buildNeighborhood } from "../analysis/neighborhood";
+import {
+	ExportConflictModal,
+	TopicMapExportModal,
+	type TopicMapExportDraft,
+} from "../ui/TopicMapExportModal";
 import { MetricsClient, type GraphMetrics } from "../workers/MetricsClient";
 import {
 	contentNeedles, parseQuery, matchesQuery, validateQuery,
@@ -288,6 +304,8 @@ export class GraphInsightView extends ItemView {
 			onCommit: (query) => {
 				const trimmed = query.trim();
 				this.searchParseError = undefined;
+				// Any new commit is a view-state change: the task's undo expires.
+				this.taskQueryUndo = null;
 				if (trimmed) {
 					const diagnostic = validateQuery(trimmed);
 					if (diagnostic) {
@@ -311,11 +329,13 @@ export class GraphInsightView extends ItemView {
 				this.hardQuery = null;
 				this.hardQueryText = "";
 				this.searchParseError = undefined;
+				this.taskQueryUndo = null;
 				this.recomputeVisual();
 			},
 			onSavePreset: (query) => this.savePreset(query),
 			onPresetApplied: (id) => void this.markPresetUsed(id),
 			onManagePresets: () => this.openPresetManager(),
+			onTasksMenu: (anchor) => this.showTasksMenu(anchor),
 		});
 		this.searchBar.setPresets(sortSearchPresets(this.plugin.settings.presets));
 		this.filterChips = new FilterChips(this.searchBar.filtersHost, {
@@ -442,7 +462,7 @@ export class GraphInsightView extends ItemView {
 					return;
 				case "Backspace":
 					claim();
-					this.exploreSession?.back();
+					this.exploreBack();
 					return;
 				case " ":
 					// Space = let go: stay in the mode, pick the next note
@@ -508,16 +528,178 @@ export class GraphInsightView extends ItemView {
 
 	// ── Focus mode ────────────────────────────────────────────────────
 
-	private enterFocus(nodeId: number): void {
+	/** F-11: session-only histories behind the breadcrumbs; never persisted. */
+	private focusTrail: NavigationTrail | null = null;
+	private exploreTrail: NavigationTrail | null = null;
+
+	private enterFocus(nodeId: number, fromTrail = false): void {
 		this.focusRootId = nodeId;
+		if (!fromTrail && this.model) {
+			this.focusTrail ??= new NavigationTrail("focus");
+			const node = this.model.nodes[nodeId];
+			this.focusTrail.push({ path: node.path, label: node.name });
+		}
 		this.renderFocusBar();
 		this.recomputeVisual();
 	}
 
 	private exitFocus(): void {
 		this.focusRootId = null;
+		this.focusTrail = null;
 		this.focusBar?.hide();
 		this.recomputeVisual();
+	}
+
+	/** Shared by both bars: crumbs render into `host`, clicks land in `go`. */
+	private renderTrail(host: HTMLElement, trail: NavigationTrail, go: (nodeId: number) => void): void {
+		const strip = host.createDiv({ cls: "graph-insight-breadcrumb" });
+		renderBreadcrumb(
+			strip,
+			trail,
+			(path) => this.model?.pathToId.get(path) === undefined,
+			this.responsiveModeState !== "full",
+			{
+				onCrumb: (index) => {
+					const target = trail.jumpTo(index);
+					const id = target ? this.model?.pathToId.get(target.path) : undefined;
+					if (id !== undefined) go(id);
+				},
+				onRemove: (index) => {
+					trail.removeAt(index);
+					if (trail === this.focusTrail) this.renderFocusBar();
+					else this.renderExploreBar();
+				},
+			}
+		);
+	}
+
+	// ── F-12: topic map export ────────────────────────────────────────
+
+	/** The one cluster left visible when a cluster filter hides all others —
+	 *  the "unambiguous cluster" the export can act on. */
+	private singleVisibleCluster(): number | null {
+		if (!this.metrics || this.hiddenClusters.size === 0) return null;
+		const visible: number[] = [];
+		for (let c = 0; c < this.metrics.communityCount; c++) {
+			if (!this.hiddenClusters.has(c)) visible.push(c);
+		}
+		return visible.length === 1 ? visible[0] : null;
+	}
+
+	/** Whether the command palette entry has anything to export. */
+	canExportTopicMap(): boolean {
+		return this.focusRootId !== null || this.exploreFocus !== null || this.singleVisibleCluster() !== null;
+	}
+
+	/** Command entry: pick the active source (focus > explore > cluster). */
+	exportCurrentTopicMap(): void {
+		if (this.focusRootId !== null) {
+			this.openTopicMapExport("focus", this.focusRootId);
+			return;
+		}
+		if (this.exploreFocus) {
+			this.openTopicMapExport("explore", this.exploreFocus.centerId);
+			return;
+		}
+		const cluster = this.singleVisibleCluster();
+		if (cluster === null || !this.metrics || !this.model) return;
+		const nodeIds: number[] = [];
+		for (let i = 0; i < this.model.nodes.length; i++) {
+			if (this.metrics.community[i] === cluster) nodeIds.push(i);
+		}
+		this.openTopicMapExport("cluster", null, nodeIds);
+	}
+
+	private openTopicMapExport(
+		source: TopicMapSource,
+		rootId: number | null,
+		flatIds: number[] = []
+	): void {
+		if (!this.model) return;
+		const root = rootId !== null ? this.model.nodes[rootId] : null;
+		new TopicMapExportModal(
+			this.app,
+			{
+				name: root ? `${t("topicmap.modalTitle")} — ${root.name}` : t("topicmap.modalTitle"),
+				// §13.4: default next to the root note; vault root for lasso.
+				folder: root ? root.path.slice(0, Math.max(root.path.lastIndexOf("/"), 0)) : "",
+				depth: Math.min(Math.max(this.focusDepth, 1), 4),
+				includeDirections: true,
+				includeMetrics: true,
+				includeInternalLinks: true,
+			},
+			rootId !== null,
+			(draft) => void this.writeTopicMap(source, rootId, flatIds, draft)
+		).open();
+	}
+
+	private async writeTopicMap(
+		source: TopicMapSource,
+		rootId: number | null,
+		flatIds: number[],
+		draft: TopicMapExportDraft
+	): Promise<void> {
+		if (!this.model) return;
+		const input: TopicMapInput =
+			rootId !== null
+				? { kind: "rooted", neighborhood: buildNeighborhood(this.model, rootId, draft.depth) }
+				: { kind: "flat", model: this.model, nodeIds: flatIds };
+		const body = topicMapMarkdown(input, {
+			source,
+			generatedAt: new Date().toISOString(),
+			includeDirections: draft.includeDirections,
+			includeMetrics: draft.includeMetrics,
+			includeInternalLinks: draft.includeInternalLinks,
+		});
+
+		const folder = draft.folder.replace(/^\/+|\/+$/g, "");
+		const fileName = `${draft.name.replace(/[\\/:]/g, "-")}.md`;
+		const target = folder ? `${folder}/${fileName}` : fileName;
+		const taken = (path: string) => this.app.vault.getAbstractFileByPath(path) !== null;
+
+		if (!taken(target)) {
+			await this.createTopicMapFile(target, folder, body);
+			return;
+		}
+		new ExportConflictModal(this.app, fileName, (choice) => {
+			if (choice === "cancel") return;
+			if (choice === "copy") {
+				void this.createTopicMapFile(nextAvailableName(target, taken), folder, body);
+				return;
+			}
+			const existing = this.app.vault.getAbstractFileByPath(target);
+			if (existing instanceof TFile) {
+				this.app.vault
+					.modify(existing, body)
+					.then(() => new Notice(t("notice.topicMapExported", { name: existing.path })))
+					.catch(() => new Notice(t("notice.topicMapFailed")));
+			} else {
+				// The file vanished between the conflict check and the choice.
+				new Notice(t("notice.topicMapFailed"));
+			}
+		}).open();
+	}
+
+	private async createTopicMapFile(path: string, folder: string, body: string): Promise<void> {
+		try {
+			if (folder && this.app.vault.getAbstractFileByPath(folder) === null) {
+				await this.app.vault.createFolder(folder);
+			}
+			await this.app.vault.create(path, body);
+			new Notice(t("notice.topicMapExported", { name: path }));
+		} catch {
+			// vault.create never leaves a half-written file behind.
+			new Notice(t("notice.topicMapFailed"));
+		}
+	}
+
+	/** Backspace and the Back button both walk the same trail model (F-11). */
+	private exploreBack(): void {
+		const target = this.exploreTrail?.back();
+		if (!target) return;
+		const id = this.model?.pathToId.get(target.path);
+		if (id !== undefined) this.exploreSession?.travelTo(id);
+		this.renderExploreBar();
 	}
 
 	get isFocused(): boolean {
@@ -647,8 +829,16 @@ export class GraphInsightView extends ItemView {
 			this.renderFocusBar();
 			this.recomputeVisual();
 		});
+		const exportButton = this.focusBar.createEl("button", { text: t("topicmap.modalTitle") });
+		exportButton.setAttribute("aria-label", t("topicmap.export"));
+		exportButton.addEventListener("click", () => {
+			if (this.focusRootId !== null) this.openTopicMapExport("focus", this.focusRootId);
+		});
 		const exit = this.focusBar.createEl("button", { text: t("focus.exit") });
 		exit.addEventListener("click", () => this.exitFocus());
+		if (this.focusTrail && this.focusTrail.items.length > 1) {
+			this.renderTrail(this.focusBar, this.focusTrail, (id) => this.enterFocus(id, true));
+		}
 	}
 
 	// ── Explore mode ──────────────────────────────────────────────────
@@ -670,6 +860,9 @@ export class GraphInsightView extends ItemView {
 		}
 
 		const reanchoring = this.exploreDetached;
+		// A re-anchor continues the same trip; only a fresh entry starts a
+		// new history (F-11). The trail never survives leaving the mode.
+		if (!reanchoring || !this.exploreTrail) this.exploreTrail = new NavigationTrail("explore");
 		if (!this.exploreOverride) {
 			this.exploreOverride = true;
 			this.applyExploreOverride();
@@ -688,6 +881,10 @@ export class GraphInsightView extends ItemView {
 			{
 				onFocusChanged: (id, neighbors) => {
 					this.exploreFocus = { centerId: id, neighbors };
+					// Every arrival lands in the trail; back/breadcrumb flights
+					// arrive at the already-active crumb, which push() ignores.
+					const node = this.model?.nodes[id];
+					if (node) this.exploreTrail?.push({ path: node.path, label: node.name });
 					this.recomputeVisual();
 					this.renderExploreBar();
 				},
@@ -740,6 +937,7 @@ export class GraphInsightView extends ItemView {
 		this.exploreSession?.stop();
 		this.exploreSession = null;
 		this.exploreFocus = null;
+		this.exploreTrail = null;
 		this.exploreDetached = false;
 		this.focusBar?.hide();
 		this.cameraWidget?.setExploring(false);
@@ -805,12 +1003,20 @@ export class GraphInsightView extends ItemView {
 		open.setAttribute("aria-label", t("explore.open.hint"));
 		open.addEventListener("click", () => this.openNode(centerId, !this.plugin.settings.openInSidePane));
 		const back = this.focusBar.createEl("button", { text: t("explore.back") });
-		back.addEventListener("click", () => this.exploreSession?.back());
+		back.addEventListener("click", () => this.exploreBack());
 		const detach = this.focusBar.createEl("button", { text: t("explore.detach") });
 		detach.setAttribute("aria-label", t("explore.detach.hint"));
 		detach.addEventListener("click", () => this.detachExplore());
+		const exportButton = this.focusBar.createEl("button", { text: t("topicmap.modalTitle") });
+		exportButton.setAttribute("aria-label", t("topicmap.export"));
+		exportButton.addEventListener("click", () => {
+			if (this.exploreFocus) this.openTopicMapExport("explore", this.exploreFocus.centerId);
+		});
 		const exit = this.focusBar.createEl("button", { text: t("explore.exit") });
 		exit.addEventListener("click", () => void this.exitExplore());
+		if (this.exploreTrail && this.exploreTrail.items.length > 1) {
+			this.renderTrail(this.focusBar, this.exploreTrail, (id) => this.exploreSession?.travelTo(id));
+		}
 	}
 
 	private currentFocusDistances(): Int16Array | null {
@@ -1025,6 +1231,12 @@ export class GraphInsightView extends ItemView {
 		const menu = new Menu();
 		menu.addItem((item) => item.setTitle(t("menu.selected", { count: nodeIds.length })).setDisabled(true));
 		menu.addSeparator();
+		menu.addItem((item) =>
+			item
+				.setTitle(t("topicmap.export"))
+				.setIcon("map")
+				.onClick(() => this.openTopicMapExport("lasso", null, nodeIds))
+		);
 		menu.addItem((item) => item.setTitle(t("menu.hideSelected")).setIcon("eye-off").onClick(() => {
 			for (const id of nodeIds) this.hiddenNodes.add(id);
 			this.panel?.setHiddenNodeCount(this.hiddenNodes.size);
@@ -1766,6 +1978,80 @@ export class GraphInsightView extends ItemView {
 		this.panel?.setViewPresets(this.presetRows(next));
 		this.panel?.setSelectedPreset(null);
 		new Notice(t("notice.presetDeleted", { name: presetDisplayName(preset) }));
+	}
+
+	// ── F-01: canned task actions ─────────────────────────────────────
+
+	/** The query a diagnostic task cleared; restorable until the next commit
+	 *  or clear (see the search callbacks). */
+	private taskQueryUndo: string | null = null;
+
+	/** Stable action list: what the Tasks… menu and the commands both run. */
+	static readonly TASK_ACTIONS = [
+		{ id: "explore-topic", labelKey: "task.exploreTopic" },
+		{ id: "attention-map", labelKey: "task.attention", presetId: "attention-map", diagnostic: true },
+		{ id: "orphans", labelKey: "task.orphans", presetId: "orphans", diagnostic: true },
+		{ id: "broken-links", labelKey: "task.broken", presetId: "broken-links", diagnostic: true },
+		{ id: "recent", labelKey: "task.recent", presetId: "recent", diagnostic: false },
+		{ id: "hubs-clusters", labelKey: "task.structure", presetId: "hubs-clusters", diagnostic: false },
+	] as const;
+
+	/** Entry point shared by the menu and the per-action commands. */
+	runTask(taskId: (typeof GraphInsightView.TASK_ACTIONS)[number]["id"]): void {
+		const action = GraphInsightView.TASK_ACTIONS.find((task) => task.id === taskId);
+		if (!action) return;
+		if (!("presetId" in action)) {
+			// «Исследовать тему»: turn on the Links tool, keep every filter.
+			this.toolBar?.selectTool("links");
+			return;
+		}
+		void this.runTaskPreset(action.presetId, action.diagnostic);
+	}
+
+	private async runTaskPreset(builtinId: BuiltinPresetId, diagnostic: boolean): Promise<void> {
+		const ensured = ensureBuiltinPreset(this.plugin.settings.viewPresets, builtinId);
+		if (!ensured) return;
+		if (ensured.presets !== this.plugin.settings.viewPresets) {
+			// The user hand-deleted the bundled preset — restore it first.
+			await this.plugin.saveViewPresets([...ensured.presets]);
+			this.panel?.setViewPresets(this.presetRows(this.plugin.settings.viewPresets));
+		}
+		if (diagnostic) this.clearHardQueryForTask();
+		await this.applyViewPreset(ensured.index);
+	}
+
+	/** Diagnostic tasks need the whole vault visible: drop the hard query but
+	 *  keep it one click away until the next view-state change. */
+	private clearHardQueryForTask(): void {
+		if (!this.hardQueryText) return;
+		const cleared = this.hardQueryText;
+		this.taskQueryUndo = cleared;
+		this.hardQuery = null;
+		this.hardQueryText = "";
+		this.searchParseError = undefined;
+		this.recomputeVisual();
+
+		const fragment = document.createDocumentFragment();
+		fragment.append(t("notice.queryCleared", { query: cleared }));
+		const undo = document.createElement("button");
+		undo.textContent = t("notice.undo");
+		fragment.append(" ", undo);
+		const notice = new Notice(fragment, 10000);
+		undo.addEventListener("click", () => {
+			notice.hide();
+			if (this.taskQueryUndo === null) return;
+			this.taskQueryUndo = null;
+			this.searchBar?.applyQuery(cleared);
+		});
+	}
+
+	private showTasksMenu(anchor: HTMLElement): void {
+		const menu = new Menu();
+		for (const action of GraphInsightView.TASK_ACTIONS) {
+			menu.addItem((item) => item.setTitle(t(action.labelKey)).onClick(() => this.runTask(action.id)));
+		}
+		const rect = anchor.getBoundingClientRect();
+		menu.showAtPosition({ x: rect.left, y: rect.bottom + 4 });
 	}
 
 	private responsiveModeState: ResponsiveMode = "full";

@@ -22,6 +22,8 @@ export interface SearchCallbacks {
 	onPresetApplied(id: string): void;
 	/** Open the saved-filter manager (F-09). */
 	onManagePresets(): void;
+	/** Open the canned-tasks menu (F-01). */
+	onTasksMenu(anchor: HTMLElement): void;
 }
 
 /** Dropdown values: saved presets travel by id, tag/folder rows by query. */
@@ -167,6 +169,13 @@ export class SearchBar {
 		});
 		manageButton.setAttribute("aria-label", t("preset.manage"));
 		manageButton.addEventListener("click", () => this.callbacks.onManagePresets());
+
+		// F-01: canned tasks. Hidden in minimal mode; commands keep it reachable.
+		const tasksButton = this.root.createEl("button", {
+			text: t("task.menu"),
+			cls: "graph-insight-searchbar-btn graph-insight-searchbar-secondary",
+		});
+		tasksButton.addEventListener("click", () => this.callbacks.onTasksMenu(tasksButton));
 
 		const clearButton = this.root.createEl("button", { text: "✕", cls: "graph-insight-searchbar-btn" });
 		clearButton.setAttribute("aria-label", t("search.clear"));
