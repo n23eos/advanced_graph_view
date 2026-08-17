@@ -9,6 +9,7 @@ import { usageToCsv } from "../export/exporters";
 import { t } from "../i18n";
 import { ConfirmModal } from "../ui/ConfirmModal";
 import { buildProfile, mergeProfile } from "./profile";
+import { isLayoutRule } from "./normalize";
 import { DEFAULT_SETTINGS } from "./schema";
 import type GraphInsightPlugin from "../main";
 
@@ -34,6 +35,12 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 				type: "group",
 				heading: t("settings.group.tracking"),
 				items: [
+					{
+						name: t("settings.showOnboarding"),
+						desc: t("settings.showOnboarding.desc"),
+						aliases: ["onboarding", "tour", "intro", "help"],
+						action: () => this.plugin.showOnboarding(),
+					},
 					{
 						name: t("settings.openThreshold"),
 						desc: t("settings.openThreshold.desc"),
@@ -184,6 +191,11 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 			return;
 		}
 		await this.plugin.replaceSettings(merged);
+		// mergeProfile already fell back to "links"; tell the user once why.
+		const panel = (parsed as { panel?: { layoutRule?: unknown } }).panel;
+		if (panel && "layoutRule" in panel && !isLayoutRule(panel.layoutRule)) {
+			new Notice(t("notice.layoutRuleUnknown"));
+		}
 		new Notice(t("notice.profileImported"));
 		this.update();
 	}

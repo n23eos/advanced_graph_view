@@ -31,12 +31,20 @@ import { Legend } from "../ui/Legend";
 import { LayoutClient } from "../workers/LayoutClient";
 import { AutoFitGate, shouldFitOnSettle } from "./autoFitGate";
 import { adaptPhysicsToGraphSize } from "../ui/layoutDensity";
-import type { LayoutRule } from "../workers/layoutEngine";
+import type { LayoutRule, PhysicsParams } from "../workers/layoutEngine";
+import { formatPhysicsDiff, physicsDiff, recommendedPhysics } from "../ui/physicsReset";
+import { responsiveMode, type ResponsiveMode } from "../ui/responsive";
 import { MetricsClient, type GraphMetrics } from "../workers/MetricsClient";
-import { contentNeedles, parseQuery, matchesQuery, type ParsedQuery } from "../query/QueryParser";
-import { SearchBar } from "../ui/SearchBar";
+import {
+	contentNeedles, parseQuery, matchesQuery, validateQuery,
+	type ParsedQuery, type QueryDiagnostic,
+} from "../query/QueryParser";
+import { SearchBar, type SearchMode } from "../ui/SearchBar";
+import type { SearchPreset } from "../settings/schema";
+import { sortSearchPresets } from "../settings/searchPresets";
+import { SearchPresetModal } from "../ui/SearchPresetModal";
+import { SearchPresetManagerModal } from "../ui/SearchPresetManagerModal";
 import { FilterChips, type FilterSelection } from "../ui/FilterChips";
-import { OnboardingModal } from "../ui/OnboardingModal";
 import { PromptModal } from "../ui/PromptModal";
 import { TimelineBar, type TimelineMode } from "../ui/TimelineBar";
 import { CameraWidget } from "../ui/CameraWidget";
@@ -121,6 +129,14 @@ export class GraphInsightView extends ItemView {
 	private softQuery: ParsedQuery | null = null;
 	/** Committed (Enter) query: non-matches are hidden entirely. */
 	private hardQuery: ParsedQuery | null = null;
+	/** Text of the committed query, shown as the removable chip. */
+	private hardQueryText = "";
+	/** Last commit's syntax problem; the previous valid filter stays applied. */
+	private searchParseError: QueryDiagnostic | undefined;
+	/** In-flight content index scans; > 0 renders "Indexing…". */
+	private contentIndexJobs = 0;
+	/** Counts from the last recomputeVisual pass, reused by pushSearchUi. */
+	private searchCounts = { softMatched: 0, visible: 0, total: 0 };
 	private focusRootId: number | null = null;
 	private focusDepth = 2;
 	private timeline: TimelineBar | null = null;
@@ -182,10 +198,19 @@ export class GraphInsightView extends ItemView {
 		this.renderer = new GraphRenderer({
 			onNodeHover: (nodeId, clientX, clientY) => this.showTooltip(nodeId, clientX, clientY),
 			onNodeClick: (nodeId, event) => this.handleNodeClick(nodeId, event),
-			// While explore mode is detached a click re-anchors it, so the
-			// second half of a double-click must not also open the note.
+			// F-02: a double-click enters Focus around the node and never opens
+			// the note — the same under every cursor tool. Explore keeps its own
+			// semantics: one transition, never two.
 			onNodeDoubleClick: (nodeId) => {
-				if (!this.exploreDetached) this.openNode(nodeId, false);
+				if (this.isExploring) {
+					if (this.exploreDetached) {
+						this.renderer?.setSelected(nodeId);
+						void this.enterExplore(nodeId);
+					}
+					return;
+				}
+				this.renderer?.setSelected(nodeId);
+				this.enterFocus(nodeId);
 			},
 			onNodeMiddleClick: (nodeId) => this.openNode(nodeId, true),
 			onNodeContextMenu: (nodeId, event) => this.showNodeMenu(nodeId, event),
@@ -247,8 +272,8 @@ export class GraphInsightView extends ItemView {
 					...state,
 					physics: { ...state.physics, freeLayout: enabled },
 				})),
-				onOffsetChange: (x, y) => this.renderer?.setViewCenterOffset(x, y),
 				onFit: () => this.renderer?.fitAll(),
+				onReset: () => this.renderer?.resetCamera(),
 				onToggleUI: (hidden) => this.contentEl.toggleClass("graph-insight-ui-hidden", hidden),
 				onToggleExplore: () => void (this.exploreSession ? this.exitExplore() : this.enterExplore()),
 			}
@@ -257,10 +282,24 @@ export class GraphInsightView extends ItemView {
 		this.searchBar = new SearchBar(container, {
 			onQueryChange: (query) => {
 				this.softQuery = query.trim() ? parseQuery(query) : null;
+				this.searchParseError = undefined;
 				this.recomputeVisual();
 			},
 			onCommit: (query) => {
-				this.hardQuery = query.trim() ? parseQuery(query) : null;
+				const trimmed = query.trim();
+				this.searchParseError = undefined;
+				if (trimmed) {
+					const diagnostic = validateQuery(trimmed);
+					if (diagnostic) {
+						// A broken query never becomes the hard filter — the last
+						// valid one stays applied and the bar shows what's wrong.
+						this.searchParseError = diagnostic;
+						this.pushSearchUi();
+						return;
+					}
+				}
+				this.hardQuery = trimmed ? parseQuery(trimmed) : null;
+				this.hardQueryText = trimmed;
 				this.softQuery = null;
 				this.recomputeVisual();
 				// content:/слово: terms need note text — build the index
@@ -270,11 +309,15 @@ export class GraphInsightView extends ItemView {
 			onClear: () => {
 				this.softQuery = null;
 				this.hardQuery = null;
+				this.hardQueryText = "";
+				this.searchParseError = undefined;
 				this.recomputeVisual();
 			},
-			onSavePreset: (query) => void this.savePreset(query),
+			onSavePreset: (query) => this.savePreset(query),
+			onPresetApplied: (id) => void this.markPresetUsed(id),
+			onManagePresets: () => this.openPresetManager(),
 		});
-		this.searchBar.setPresets(this.plugin.settings.presets);
+		this.searchBar.setPresets(sortSearchPresets(this.plugin.settings.presets));
 		this.filterChips = new FilterChips(this.searchBar.filtersHost, {
 			onChange: (selection) => {
 				this.chipFilter = selection;
@@ -320,8 +363,20 @@ export class GraphInsightView extends ItemView {
 				onToggleFollow: (enabled) => void this.plugin.setFollowActiveNote(enabled),
 				onToggleSidePane: (enabled) => void this.plugin.setOpenInSidePane(enabled),
 				onOpenLocalGraph: () => void this.plugin.activateLocalGraph(),
+				onOverflowMenu: (anchor) => this.showOverflowMenu(anchor),
 			}
 		);
+
+		// F-04: the floating UI adapts to the pane's width, not the window's.
+		// Attribute + status text only — the canvas is never rebuilt for this.
+		if (typeof ResizeObserver !== "undefined") {
+			const observer = new ResizeObserver((entries) => {
+				const width = entries[0]?.contentRect.width ?? container.clientWidth;
+				this.applyResponsiveMode(responsiveMode(width));
+			});
+			observer.observe(container);
+			this.register(() => observer.disconnect());
+		}
 
 		this.focusBar = container.createDiv({ cls: "graph-insight-focusbar" });
 		this.focusBar.hide();
@@ -360,8 +415,8 @@ export class GraphInsightView extends ItemView {
 		// themes — both have to be re-read, not just repainted.
 		this.registerEvent(this.app.workspace.on("css-change", () => this.handleThemeChange()));
 
-		if (!this.plugin.settings.onboardingShown) {
-			new OnboardingModal(this.app, () => void this.plugin.markOnboardingShown()).open();
+		if (this.plugin.settings.onboardingState === "never-seen") {
+			this.plugin.showOnboarding();
 		}
 	}
 
@@ -413,6 +468,7 @@ export class GraphInsightView extends ItemView {
 		if (!this.model) return;
 		if (this.pathAnchor === null || this.pathAnchor === nodeId) {
 			this.pathAnchor = nodeId;
+			this.toolBar?.setPathStage("end");
 			new Notice(t("notice.pathStart", { name: this.model.nodes[nodeId].name }));
 			return;
 		}
@@ -423,6 +479,7 @@ export class GraphInsightView extends ItemView {
 			nodeId
 		);
 		this.pathAnchor = null;
+		this.toolBar?.setPathStage("start");
 		if (path.length === 0) {
 			new Notice(t("notice.pathNone"));
 			this.renderer?.setAlphaFactors(null);
@@ -777,11 +834,19 @@ export class GraphInsightView extends ItemView {
 		const contentMatcher = (needle: string, path: string) =>
 			this.contentIndex.get(needle)?.has(path) ?? true;
 
-		let hidden: Uint8Array | null = null;
-		const ensureHidden = () => (hidden ??= new Uint8Array(count));
+		// One scratch mask, handed to the renderer only when something is
+		// actually hidden — and counted below without a second query pass.
+		const hiddenScratch = new Uint8Array(count);
+		let hiddenCount = 0;
+		const hide = (i: number) => {
+			if (hiddenScratch[i] === 0) {
+				hiddenScratch[i] = 1;
+				hiddenCount++;
+			}
+		};
 		if (this.hardQuery) {
 			for (let i = 0; i < count; i++) {
-				if (!matchesQuery(this.hardQuery, this.facts[i], now, contentMatcher)) ensureHidden()[i] = 1;
+				if (!matchesQuery(this.hardQuery, this.facts[i], now, contentMatcher)) hide(i);
 			}
 		}
 		// Tag/folder dropdowns: OR within a list, AND between the two lists.
@@ -795,33 +860,38 @@ export class GraphInsightView extends ItemView {
 				const folderOk =
 					pickedFolders.size === 0 ||
 					[...pickedFolders].some((f) => facts.folder === f || facts.folder.startsWith(`${f}/`));
-				if (!tagOk || !folderOk) ensureHidden()[i] = 1;
+				if (!tagOk || !folderOk) hide(i);
 			}
 		}
 		if (this.hiddenClusters.size > 0 && this.metrics) {
 			for (let i = 0; i < count; i++) {
-				if (this.hiddenClusters.has(this.metrics.community[i])) ensureHidden()[i] = 1;
+				if (this.hiddenClusters.has(this.metrics.community[i])) hide(i);
 			}
 		}
 		if (this.timelineCutoff !== null) {
 			for (let i = 0; i < count; i++) {
 				const ts = this.timelineMode === "created" ? this.facts[i].ctime : this.facts[i].mtime;
-				if (ts >= this.timelineCutoff) ensureHidden()[i] = 1;
+				if (ts >= this.timelineCutoff) hide(i);
 			}
 		}
-		for (const id of this.hiddenNodes) ensureHidden()[id] = 1;
+		for (const id of this.hiddenNodes) hide(id);
+		const hidden = hiddenCount > 0 ? hiddenScratch : null;
 		this.hiddenMask = hidden;
 		this.renderer.setHiddenMask(hidden);
 
 		let factors: Float32Array | null = null;
 		let highlight: Uint8Array | null = null;
+		let softMatched = 0;
 		if (this.softQuery) {
 			factors = new Float32Array(count);
 			highlight = new Uint8Array(count);
 			for (let i = 0; i < count; i++) {
 				const matched = matchesQuery(this.softQuery, this.facts[i], now, contentMatcher);
 				factors[i] = matched ? 1 : 0.12;
-				if (matched) highlight[i] = 1;
+				if (matched) {
+					highlight[i] = 1;
+					softMatched++;
+				}
 			}
 		}
 		// Filter chips narrow the graph — brighten the survivors with the
@@ -867,6 +937,24 @@ export class GraphInsightView extends ItemView {
 			this.renderer.setHighlightMask(highlight);
 		}
 		this.renderer.setAlphaFactors(factors);
+
+		// The counters come from the exact masks just applied — never a
+		// second query pass (§9: one pass per frame on 50k nodes).
+		this.searchCounts = { softMatched, visible: count - hiddenCount, total: count };
+		this.pushSearchUi();
+	}
+
+	/** Report mode, counts and errors to the search bar. */
+	private pushSearchUi(): void {
+		const mode: SearchMode = this.softQuery ? "highlight" : this.hardQuery ? "filter" : "idle";
+		this.searchBar?.setUiState({
+			mode,
+			query: this.hardQueryText,
+			matchedCount: mode === "highlight" ? this.searchCounts.softMatched : this.searchCounts.visible,
+			totalCount: this.searchCounts.total,
+			isIndexingContent: this.contentIndexJobs > 0,
+			parseError: this.searchParseError,
+		});
 	}
 
 	/** Scan note bodies for content-search needles not yet indexed. */
@@ -875,16 +963,24 @@ export class GraphInsightView extends ItemView {
 		if (missing.length === 0) return;
 		const files = this.app.vault.getMarkdownFiles();
 		for (const needle of missing) this.contentIndex.set(needle, new Set());
-		for (const file of files) {
-			let text: string;
-			try {
-				text = (await this.app.vault.cachedRead(file)).toLowerCase();
-			} catch {
-				continue;
+		// While the scan runs the bar says "Indexing…" instead of a count that
+		// would wrongly read as the final (often zero) result.
+		this.contentIndexJobs++;
+		this.pushSearchUi();
+		try {
+			for (const file of files) {
+				let text: string;
+				try {
+					text = (await this.app.vault.cachedRead(file)).toLowerCase();
+				} catch {
+					continue;
+				}
+				for (const needle of missing) {
+					if (text.includes(needle)) this.contentIndex.get(needle)!.add(file.path);
+				}
 			}
-			for (const needle of missing) {
-				if (text.includes(needle)) this.contentIndex.get(needle)!.add(file.path);
-			}
+		} finally {
+			this.contentIndexJobs--;
 		}
 		this.recomputeVisual();
 	}
@@ -1017,11 +1113,60 @@ export class GraphInsightView extends ItemView {
 		return presets.map((preset) => ({ name: presetDisplayName(preset) }));
 	}
 
-	private async savePreset(query: string): Promise<void> {
-		const name = query.length > 24 ? `${query.slice(0, 24)}…` : query;
-		await this.plugin.savePresets([...this.plugin.settings.presets, { name, query }]);
-		this.searchBar?.setPresets(this.plugin.settings.presets);
-		new Notice(t("notice.filterPresetSaved"));
+	/** F-09: explicit naming instead of the old first-24-characters auto-name. */
+	private savePreset(query: string): void {
+		new SearchPresetModal(this.app, t("preset.modal.saveTitle"), { name: "", query }, (draft) => {
+			const now = Date.now();
+			void this.persistPresets([
+				...this.plugin.settings.presets,
+				{ id: crypto.randomUUID(), name: draft.name, query: draft.query, createdAt: now, updatedAt: now },
+			]).then(() => new Notice(t("notice.filterPresetSaved")));
+		}).open();
+	}
+
+	/** Save, then hand the freshly sorted list to the bar (and the caller). */
+	private async persistPresets(next: SearchPreset[]): Promise<SearchPreset[]> {
+		await this.plugin.savePresets(next);
+		const sorted = sortSearchPresets(this.plugin.settings.presets);
+		this.searchBar?.setPresets(sorted);
+		return sorted;
+	}
+
+	/** Applying a preset moves it to the top of the recently-used order. */
+	private async markPresetUsed(id: string): Promise<void> {
+		await this.persistPresets(
+			this.plugin.settings.presets.map((preset) =>
+				preset.id === id ? { ...preset, lastUsedAt: Date.now() } : preset
+			)
+		);
+	}
+
+	private openPresetManager(): void {
+		new SearchPresetManagerModal(this.app, sortSearchPresets(this.plugin.settings.presets), {
+			onApply: (preset) => {
+				this.searchBar?.applyQuery(preset.query);
+				void this.markPresetUsed(preset.id);
+			},
+			onUpdate: (next) =>
+				this.persistPresets(
+					this.plugin.settings.presets.map((preset) => (preset.id === next.id ? next : preset))
+				),
+			onDuplicate: (source) => {
+				const now = Date.now();
+				return this.persistPresets([
+					...this.plugin.settings.presets,
+					{
+						id: crypto.randomUUID(),
+						name: `${source.name}${t("preset.copySuffix")}`,
+						query: source.query,
+						createdAt: now,
+						updatedAt: now,
+					},
+				]);
+			},
+			onDelete: (preset) =>
+				this.persistPresets(this.plugin.settings.presets.filter((p) => p.id !== preset.id)),
+		}).open();
 	}
 
 	private async rebuildGraph(): Promise<void> {
@@ -1056,6 +1201,10 @@ export class GraphInsightView extends ItemView {
 		this.apply3D(this.plugin.settings.panel, false);
 		this.lastPhysics = "";
 		this.applyPhysics(this.plugin.settings.panel);
+		// The fresh worker knows nothing about the saved grouping rule, and the
+		// node ids behind this.facts have just changed — recompute from scratch.
+		this.appliedLayoutRule = null;
+		this.applyLayoutRule(this.plugin.settings.panel.layoutRule);
 		const panelState = this.plugin.settings.panel;
 		this.renderer.setLabelOptions(
 			panelState.labels.show, panelState.labels.fontSize, panelState.labels.zoomThreshold,
@@ -1553,11 +1702,16 @@ export class GraphInsightView extends ItemView {
 			onChange: (next) => {
 				// A manual tweak diverges from the preset, so it's no longer "applied".
 				this.activePresetIndex = null;
+				// Any hand-made physics change invalidates the reset's Undo (F-07).
+				if (next.physics !== this.plugin.settings.panel.physics) this.physicsUndo = null;
 				void this.plugin.savePanelState(next);
 				this.applyAllPanelState(next);
 			},
+			onPhysicsReset: () => void this.resetPhysics(),
+			onSectionToggle: (id, open) => {
+				if (id === "physics") void this.plugin.saveCollapsedSections({ physics: !open });
+			},
 			onReheat: () => this.regroup(),
-			onLayoutRule: (rule) => this.applyLayoutRule(rule),
 			onClusterClick: (index) => this.zoomToCluster(index),
 			onClusterToggle: (index) => this.toggleCluster(index),
 			onTrailReplay: () => this.replayTrail(),
@@ -1571,7 +1725,7 @@ export class GraphInsightView extends ItemView {
 			},
 			onPresetDelete: (index) => void this.deleteViewPreset(index),
 			onModeChange: (mode) => void this.plugin.savePanelMode(mode),
-		}, this.plugin.settings.panelMode);
+		}, this.plugin.settings.panelMode, this.plugin.settings.collapsedSections);
 	}
 
 	// ── View presets ──────────────────────────────────────────────────
@@ -1580,6 +1734,8 @@ export class GraphInsightView extends ItemView {
 		const preset = this.plugin.settings.viewPresets[index];
 		if (!preset) return;
 		this.activePresetIndex = index;
+		// The preset brings its own physics — the reset's Undo no longer applies.
+		this.physicsUndo = null;
 		this.autoFit.request();
 		await this.updatePanelState(() => preset.panel);
 		new Notice(t("notice.presetApplied", { name: presetDisplayName(preset) }));
@@ -1612,6 +1768,99 @@ export class GraphInsightView extends ItemView {
 		new Notice(t("notice.presetDeleted", { name: presetDisplayName(preset) }));
 	}
 
+	private responsiveModeState: ResponsiveMode = "full";
+
+	private applyResponsiveMode(mode: ResponsiveMode): void {
+		if (mode === this.responsiveModeState) return;
+		this.responsiveModeState = mode;
+		this.contentEl.setAttribute("data-graph-responsive", mode);
+		this.toolBar?.setResponsiveMode(mode);
+	}
+
+	/** F-04: everything the narrow widths hide, reachable from one menu —
+	 *  and, through Obsidian's Menu, from the keyboard. */
+	private showOverflowMenu(anchor: HTMLElement): void {
+		const menu = new Menu();
+		menu.addItem((item) =>
+			item
+				.setTitle(t("tool.follow"))
+				.setIcon("locate-fixed")
+				.setChecked(this.plugin.settings.followActiveNote)
+				.onClick(() => void this.plugin.setFollowActiveNote(!this.plugin.settings.followActiveNote))
+		);
+		menu.addItem((item) =>
+			item
+				.setTitle(t("tool.sidePane"))
+				.setIcon("panel-right")
+				.setChecked(this.plugin.settings.openInSidePane)
+				.onClick(() => void this.plugin.setOpenInSidePane(!this.plugin.settings.openInSidePane))
+		);
+		menu.addItem((item) =>
+			item
+				.setTitle(t("tool.localGraph"))
+				.setIcon("orbit")
+				.onClick(() => void this.plugin.activateLocalGraph())
+		);
+		menu.addSeparator();
+		menu.addItem((item) =>
+			item.setTitle(t("camera.fit")).setIcon("maximize").onClick(() => this.renderer?.fitAll())
+		);
+		menu.addItem((item) =>
+			item.setTitle(t("camera.reset")).setIcon("rotate-ccw").onClick(() => this.renderer?.resetCamera())
+		);
+		menu.addItem((item) =>
+			item
+				.setTitle(t("camera.explore"))
+				.setIcon("compass")
+				.setChecked(this.isExploring)
+				.onClick(() => void (this.exploreSession ? this.exitExplore() : this.enterExplore()))
+		);
+		menu.addSeparator();
+		menu.addItem((item) =>
+			item.setTitle(t("preset.manage")).setIcon("list").onClick(() => this.openPresetManager())
+		);
+		const rect = anchor.getBoundingClientRect();
+		menu.showAtPosition({ x: rect.left, y: rect.bottom + 4 });
+	}
+
+	/** Undo target for "restore recommended physics", valid until the next
+	 *  physics change (F-07). */
+	private physicsUndo: PhysicsParams | null = null;
+
+	/** F-07: swap the whole physics block for the recommended baseline in one
+	 *  atomic update, list what changed, and offer Undo in the Notice. */
+	private async resetPhysics(): Promise<void> {
+		const settings = this.plugin.settings;
+		const active =
+			this.activePresetIndex !== null
+				? settings.viewPresets[this.activePresetIndex] ?? null
+				: null;
+		const baseline = recommendedPhysics(active, settings.panel.view3d.enabled);
+		const diff = physicsDiff(settings.panel.physics, baseline);
+		if (diff.length === 0) return;
+		const previous = settings.panel.physics;
+		await this.updatePanelState((state) => ({ ...state, physics: { ...baseline } }));
+		this.physicsUndo = previous;
+
+		const fragment = document.createDocumentFragment();
+		fragment.append(t("notice.physicsReset", { diff: formatPhysicsDiff(diff) }));
+		const undo = document.createElement("button");
+		undo.textContent = t("notice.undo");
+		fragment.append(" ", undo);
+		const notice = new Notice(fragment, 10000);
+		undo.addEventListener("click", () => {
+			notice.hide();
+			void this.undoPhysicsReset();
+		});
+	}
+
+	private async undoPhysicsReset(): Promise<void> {
+		if (!this.physicsUndo) return;
+		const previous = this.physicsUndo;
+		this.physicsUndo = null;
+		await this.updatePanelState((state) => ({ ...state, physics: previous }));
+	}
+
 	/** Apply every visual consequence of a panel state, in one place. */
 	private applyAllPanelState(state: PanelState): void {
 		this.applyEncoding(state);
@@ -1619,6 +1868,7 @@ export class GraphInsightView extends ItemView {
 		this.redrawBubbles();
 		this.syncTimelineAndTrail(state);
 		this.applyPhysics(state);
+		this.applyLayoutRule(state.layoutRule);
 		this.renderer?.setLabelOptions(
 			state.labels.show, state.labels.fontSize, state.labels.zoomThreshold,
 			state.labels.maxCount, state.labels.scaleWithZoom
@@ -1719,10 +1969,16 @@ export class GraphInsightView extends ItemView {
 		this.layout?.reheat(1);
 	}
 
+	/** The rule the layout worker currently groups by; null after a rebuild so
+	 *  the persisted rule is recomputed against the fresh facts. */
+	private appliedLayoutRule: LayoutRule | null = null;
+
 	/** Choose what pulls notes together: their links (default force layout), or
-	 *  a shared tag / folder clustering them into clumps. */
+	 *  a shared tag / folder clustering them into clumps. No-op when the rule
+	 *  is already applied, so panel tweaks don't reheat the layout for nothing. */
 	private applyLayoutRule(rule: LayoutRule): void {
-		if (!this.layout) return;
+		if (!this.layout || rule === this.appliedLayoutRule) return;
+		this.appliedLayoutRule = rule;
 		this.layout.setCluster(rule === "links" ? null : computeGroups(rule, this.facts, Date.now()));
 		this.layout.reheat(0.6);
 	}
@@ -1747,7 +2003,10 @@ export class GraphInsightView extends ItemView {
 		this.hiddenClusters.clear();
 		this.softQuery = null;
 		this.hardQuery = null;
+		this.hardQueryText = "";
+		this.searchParseError = undefined;
 		this.pathAnchor = null;
+		this.toolBar?.setPathStage("start");
 		this.focusRootId = null;
 		this.focusBar?.hide();
 		this.chipFilter = { tags: new Set(), folders: new Set() };

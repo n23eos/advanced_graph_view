@@ -94,6 +94,7 @@ export const en = {
 
 	// ── Physics ───────────────────────────────────────────────────────
 	"physics.layoutRule": "Layout rules",
+	"physics.reset": "Restore recommended values",
 	"physics.rule.links": "Links",
 	"physics.rule.tags": "Tags",
 	"physics.rule.folders": "Folders",
@@ -145,6 +146,26 @@ export const en = {
 	"search.group.presets": "Presets",
 	"search.group.tags": "Tags",
 	"search.group.folders": "Folders",
+	"search.status.highlighted": "Highlighted: {count}",
+	"search.status.shown": "Shown: {count} of {total}",
+	"search.status.indexing": "Indexing…",
+	"search.hint.commit": "Enter — keep only matches",
+	"search.error.unclosedQuote": "Unclosed quote",
+	"search.error.badValue": "Invalid value for {operator}",
+	"preset.manage": "Manage saved filters",
+	"preset.modal.saveTitle": "Save filter",
+	"preset.modal.editTitle": "Edit filter",
+	"preset.name": "Name",
+	"preset.query": "Query",
+	"preset.save": "Save",
+	"preset.cancel": "Cancel",
+	"preset.apply": "Apply",
+	"preset.edit": "Edit",
+	"preset.duplicate": "Duplicate",
+	"preset.delete": "Delete",
+	"preset.deleteConfirm": "Delete filter \"{name}\"?",
+	"preset.nameRequired": "Name is required (1–80 characters)",
+	"preset.copySuffix": " (copy)",
 
 	// ── Filter chips ──────────────────────────────────────────────────
 	"filters.tags": "Tags",
@@ -176,12 +197,19 @@ export const en = {
 	"tool.sidePane": "Side pane",
 	"tool.sidePane.hint": "A click opens the note in a pane beside the graph, and the next note replaces it there",
 	"tool.depth": "Neighborhood steps",
+	"tool.status.open": "Open — click a note",
+	"tool.status.links": "Links — pick a note",
+	"tool.status.pathStart": "Path — pick the start",
+	"tool.status.pathEnd": "Path — pick the end note",
+	"tool.status.hide": "Hide — click a note",
+	"tool.status.pin": "Pin — click or drag a note",
 
 	// ── Camera widget ─────────────────────────────────────────────────
 	"camera.toggleUi": "Hide or show all panels",
 	"camera.threeD": "3D",
 	"camera.free": "Free",
 	"camera.fit": "Fit whole graph",
+	"camera.reset": "Reset camera",
 	"camera.explore": "Explore",
 	"camera.explore.hint": "Hop the camera from note to note along links",
 
@@ -262,6 +290,7 @@ export const en = {
 
 	// ── Commands ──────────────────────────────────────────────────────
 	"command.openView": "Open graph view",
+	"command.showOnboarding": "Show the intro tour",
 	"command.ribbon": "Open Advanced Graph View",
 	"command.focusNote": "Focus current note in graph",
 	"command.toggleOrphans": "Toggle orphan highlight",
@@ -284,6 +313,7 @@ export const en = {
 	// ── Local 3D graph pane ───────────────────────────────────────────
 	"localGraph.toggle3d": "Toggle 3D",
 	"tool.localGraph": "Local 3D graph",
+	"toolbar.more": "More actions",
 	"localGraph.title": "Local 3D graph",
 	"localGraph.depth": "Depth",
 	"localGraph.export": "Export to Markdown",
@@ -331,6 +361,8 @@ export const en = {
 	"settings.resetAll": "Reset all plugin data",
 	"settings.resetAll.desc": "Usage statistics and node positions. Settings are kept.",
 	"settings.group.profile": "Settings profile",
+	"settings.showOnboarding": "Show the intro tour",
+	"settings.showOnboarding.desc": "Reopen the three-step tour: pick a note, try a filter, launch Explore.",
 	"settings.exportProfile": "Export settings",
 	"settings.exportProfile.desc": "Download your view presets, filters and preferences as a file you can carry to another vault.",
 	"settings.importProfile": "Import settings",
@@ -340,6 +372,9 @@ export const en = {
 	"settings.resetSettings.confirm": "Every preference goes back to its default and your own view presets are removed. This cannot be undone.",
 	"settings.resetAll.confirm": "The whole open-count log and all saved node positions are deleted. This cannot be undone.",
 	"notice.profileImported": "Settings imported",
+	"notice.physicsReset": "Physics restored: {diff}",
+	"notice.undo": "Undo",
+	"notice.layoutRuleUnknown": "Unknown layout rule in the profile — Links is used instead",
 	"notice.profileInvalid": "That file is not an Advanced Graph View settings profile",
 	"notice.settingsReset": "Settings reset to defaults",
 	"confirm.title": "Are you sure?",
@@ -351,14 +386,14 @@ export const en = {
 
 	// ── Onboarding ────────────────────────────────────────────────────
 	"onboarding.title": "Advanced Graph View — what is different",
-	"onboarding.step1.title": "1 · Nodes encode metrics",
-	"onboarding.step1.body":
-		"Size = PageRank (actual importance), color = edit recency. The panel on the left reassigns the channels: opens, links, age, folders, tags, clusters.",
-	"onboarding.step2.title": "2 · Layers and filters",
-	"onboarding.step2.body":
-		"Layers highlight orphans, dead ends and broken links. The search bar understands path:, tag:, opened:>10, edited:<30d. Double-click a node for focus mode, Shift+drag for lasso.",
-	"onboarding.step3.title": "3 · Clusters and 3D",
-	"onboarding.step3.body":
-		"Color by Cluster to see communities, switch on 3D in the bottom-right widget to fly through the graph, and pick a color scheme in the panel.",
-	"onboarding.dismiss": "Got it, do not show again",
+	"onboarding.step1.title": "1 · Pick a note",
+	"onboarding.step1.body": "Click a node to select it. A double-click focuses its neighborhood without opening the note.",
+	"onboarding.step2.title": "2 · Try a filter",
+	"onboarding.step2.body": "Type in the search bar to highlight matches, then press Enter to keep only what you found.",
+	"onboarding.step3.title": "3 · Launch Explore",
+	"onboarding.step3.body": "Start Explore from the camera widget and fly the graph link by link. Esc leaves the mode.",
+	"onboarding.next": "Next",
+	"onboarding.back": "Back",
+	"onboarding.skip": "Skip",
+	"onboarding.never": "Don't show again",
 } as const;

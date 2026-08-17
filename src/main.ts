@@ -25,7 +25,10 @@ import {
 	DEFAULT_SETTINGS,
 	type GraphInsightSettings,
 	type LocalGraphSettings,
+	type OnboardingState,
 } from "./settings/schema";
+import { OnboardingModal } from "./ui/OnboardingModal";
+import { normalizeSettings } from "./settings/normalize";
 import type { PanelMode, PanelState } from "./ui/ControlPanel";
 import type { SearchPreset } from "./ui/SearchBar";
 import type { ViewPreset } from "./view/builtinPresets";
@@ -48,26 +51,9 @@ export default class GraphInsightPlugin extends Plugin {
 		// tab is built — those read their labels once, at construction time.
 		initI18n(getLanguage());
 
-		const saved = (await this.loadData()) as Partial<GraphInsightSettings> | null;
-		// Deep-merge the panel so settings saved by older versions pick up
-		// newly added fields (overlays, showBubbles) from defaults.
-		this.settings = {
-			...DEFAULT_SETTINGS,
-			...(saved ?? {}),
-			hoverPreview: { ...DEFAULT_SETTINGS.hoverPreview, ...(saved?.hoverPreview ?? {}) },
-			chipFilter: { ...DEFAULT_SETTINGS.chipFilter, ...(saved?.chipFilter ?? {}) },
-			panel: {
-				...DEFAULT_SETTINGS.panel,
-				...(saved?.panel ?? {}),
-				channels: { ...DEFAULT_SETTINGS.panel.channels, ...(saved?.panel?.channels ?? {}) },
-				overlays: { ...DEFAULT_SETTINGS.panel.overlays, ...(saved?.panel?.overlays ?? {}) },
-				physics: { ...DEFAULT_SETTINGS.panel.physics, ...(saved?.panel?.physics ?? {}) },
-				labels: { ...DEFAULT_SETTINGS.panel.labels, ...(saved?.panel?.labels ?? {}) },
-				edges: { ...DEFAULT_SETTINGS.panel.edges, ...(saved?.panel?.edges ?? {}) },
-				view3d: { ...DEFAULT_SETTINGS.panel.view3d, ...(saved?.panel?.view3d ?? {}) },
-			},
-			localGraph: { ...DEFAULT_SETTINGS.localGraph, ...(saved?.localGraph ?? {}) },
-		};
+		// All migration and deep-merge logic lives in normalizeSettings so it
+		// can be unit-tested against real old data.json payloads.
+		this.settings = normalizeSettings(await this.loadData());
 		// Softer-links migration: users still on the old stiff defaults get
 		// the new feel; anyone who moved the sliders keeps their values.
 		const physics = this.settings.panel.physics;
@@ -122,6 +108,12 @@ export default class GraphInsightPlugin extends Plugin {
 			callback: () => void this.activateView(),
 		});
 		this.addRibbonIcon("git-fork", t("command.ribbon"), () => void this.activateView());
+
+		this.addCommand({
+			id: "show-onboarding",
+			name: t("command.showOnboarding"),
+			callback: () => this.showOnboarding(),
+		});
 
 		this.addCommand({
 			id: "focus-current-note",
@@ -397,9 +389,19 @@ export default class GraphInsightPlugin extends Plugin {
 		await this.app.workspace.revealLeaf(leaf);
 	}
 
-	async markOnboardingShown(): Promise<void> {
-		this.settings = { ...this.settings, onboardingShown: true };
+	async saveCollapsedSections(collapsed: { physics: boolean }): Promise<void> {
+		this.settings = { ...this.settings, collapsedSections: collapsed };
 		await this.saveData(this.settings);
+	}
+
+	async setOnboardingState(state: OnboardingState): Promise<void> {
+		this.settings = { ...this.settings, onboardingState: state };
+		await this.saveData(this.settings);
+	}
+
+	/** From Settings or the command palette — always opens, whatever the state. */
+	showOnboarding(): void {
+		new OnboardingModal(this.app, (result) => void this.setOnboardingState(result)).open();
 	}
 
 	private async activateView(): Promise<void> {

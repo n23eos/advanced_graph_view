@@ -250,6 +250,7 @@
 	transform: translateX(-50%);
 	z-index: 11;
 	display: flex;
+	flex-wrap: wrap; /* the status row drops to its own line */
 	gap: 6px;
 	align-items: center;
 	padding: 6px 8px;
@@ -261,13 +262,94 @@
 }
 
 .graph-insight-searchbar input[type="text"] {
-	width: 320px;
+	/* F-04: track the pane width instead of a fixed 320 px. */
+	width: clamp(140px, 24vw, 320px);
 	font-size: var(--font-ui-small);
 }
 
 .graph-insight-searchbar-btn {
 	padding: 2px 8px;
 	cursor: pointer;
+}
+
+/* F-03: search state row — active-filter chip, live counter, Enter hint. */
+.graph-insight-search-statusrow {
+	flex-basis: 100%;
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+.graph-insight-search-chip {
+	display: inline-flex;
+	gap: 4px;
+	align-items: center;
+	padding: 1px 6px;
+	border: 1px solid var(--interactive-accent);
+	border-radius: var(--radius-s);
+	color: var(--text-normal);
+	background: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
+}
+
+.graph-insight-search-chip button {
+	padding: 0 2px;
+	background: none;
+	border: none;
+	cursor: pointer;
+	box-shadow: none;
+}
+
+.graph-insight-search-hint {
+	font-style: italic;
+}
+
+/* F-09: save/edit filter modal and the manager list. */
+.graph-insight-preset-row {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	margin-bottom: 8px;
+}
+
+.graph-insight-preset-label {
+	min-width: 70px;
+	color: var(--text-muted);
+}
+
+.graph-insight-preset-row input {
+	flex: 1;
+}
+
+.graph-insight-preset-error {
+	min-height: 1.2em;
+	color: var(--text-error);
+	font-size: var(--font-ui-smaller);
+}
+
+.graph-insight-preset-manager-row {
+	display: flex;
+	gap: 10px;
+	align-items: center;
+	justify-content: space-between;
+	padding: 6px 0;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.graph-insight-preset-manager-query {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+
+.graph-insight-preset-manager-actions {
+	display: flex;
+	gap: 4px;
+	flex-shrink: 0;
+}
+
+.graph-insight-searchbar input[type="text"].has-error {
+	border-color: var(--text-error);
 }
 
 .graph-insight-focusbar {
@@ -481,18 +563,9 @@
 	display: none;
 }
 
-.graph-insight-camera-label {
-	color: var(--text-muted);
-}
-
-.graph-insight-camera input[type="range"] {
-	width: 110px;
-	margin: 0;
-}
-
 /* Legend sits above the camera widget, which owns the bottom-right corner.
-   Widget height grew (eye row + X/Y sliders + fit button), so the legend
-   needs a matching offset and its own scroll for long category lists. */
+   The widget lost its X/Y sliders (F-06) but keeps room for the legend's
+   own scroll for long category lists. */
 .graph-insight-legend {
 	bottom: 172px;
 	max-height: calc(100% - 200px);
@@ -610,6 +683,7 @@
 	left: 12px;
 	z-index: 11;
 	display: flex;
+	flex-wrap: wrap; /* the status row drops to its own line (F-08) */
 	align-items: center;
 	gap: 2px;
 	padding: 3px;
@@ -668,6 +742,79 @@
 	background: var(--interactive-accent);
 	color: var(--text-on-accent);
 	border-color: var(--interactive-accent);
+}
+
+/* ── F-04: responsive floating UI ─────────────────────────────────────
+   The container carries data-graph-responsive="full|compact|minimal",
+   set from a ResizeObserver on the view (never the window). */
+
+.graph-insight-tool {
+	min-width: 28px; /* touch target (§8) */
+	min-height: 28px;
+}
+
+/* The overflow "…" appears only when something is actually hidden. */
+.graph-insight-toolbar-overflow {
+	display: none;
+}
+
+[data-graph-responsive="compact"] .graph-insight-toolbar-overflow,
+[data-graph-responsive="minimal"] .graph-insight-toolbar-overflow {
+	display: inline-flex;
+}
+
+/* compact: standing modes move into the overflow menu. */
+[data-graph-responsive="compact"] .graph-insight-toolbar-group,
+[data-graph-responsive="minimal"] .graph-insight-toolbar-group {
+	display: none;
+}
+
+/* minimal: search input + active tool + overflow only. */
+[data-graph-responsive="minimal"] .graph-insight-searchbar select.dropdown,
+[data-graph-responsive="minimal"] .graph-insight-searchbar-secondary,
+[data-graph-responsive="minimal"] .graph-insight-searchbar-filters,
+[data-graph-responsive="minimal"] .graph-insight-toolbar-depth,
+[data-graph-responsive="minimal"] .graph-insight-camera-secondary,
+[data-graph-responsive="minimal"] .graph-insight-search-hint {
+	display: none;
+}
+
+[data-graph-responsive="minimal"] .graph-insight-searchbar input[type="text"] {
+	width: clamp(110px, 40vw, 220px);
+}
+
+/* minimal: the control panel opens as a drawer over the canvas. */
+[data-graph-responsive="minimal"] .graph-insight-panel {
+	left: 8px;
+	right: 8px;
+	max-width: none;
+	max-height: 70%;
+	overflow-y: auto;
+}
+
+/* The focus/explore bars may wrap, but never past two lines (§F-04). */
+.graph-insight-focusbar {
+	flex-wrap: wrap;
+	max-width: calc(100% - 24px);
+}
+
+/* F-08: tool status line + standing-mode badges under the icon row. */
+.graph-insight-toolbar-statusrow {
+	flex-basis: 100%;
+	display: flex;
+	gap: 6px;
+	align-items: center;
+	padding: 1px 4px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+.graph-insight-toolbar-badge {
+	padding: 0 5px;
+	border: 1px solid var(--interactive-accent);
+	border-radius: var(--radius-s);
+	color: var(--text-normal);
+	background: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
 }
 
 .graph-insight-ui-hidden .graph-insight-toolbar {
