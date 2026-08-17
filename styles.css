@@ -26,7 +26,7 @@
 
 .graph-insight-panel {
 	position: absolute;
-	/* Sits below the top-left cursor toolbar. */
+	/* Below the full-width search row. */
 	top: 52px;
 	left: 12px;
 	z-index: 10;
@@ -243,9 +243,9 @@
 	text-overflow: ellipsis;
 }
 
-/* The whole top edge is one wrapping flex row: toolbar left, search
-   centered in the leftover space, focus/explore bar on its own line.
-   Blocks push each other instead of overlapping at any pane width. */
+/* The top edge belongs to search and filters alone: one full-width row,
+   with the focus/explore bar on its own line under it. The cursor tools
+   live bottom-left, out of the way (camera is bottom-right). */
 .graph-insight-topbar {
 	position: absolute;
 	top: 12px;
@@ -265,11 +265,11 @@
 }
 
 .graph-insight-searchbar {
-	order: 1;
-	margin-inline: auto;
+	flex: 1 1 auto;
 	max-width: 100%;
 	display: flex;
 	flex-wrap: wrap; /* the status row drops to its own line */
+	justify-content: center;
 	gap: 6px;
 	align-items: center;
 	padding: 6px 8px;
@@ -519,7 +519,8 @@
 
 /* Panel polish: tighter rows, full-width thin sliders, section separators */
 .graph-insight-panel {
-	max-height: calc(100% - 64px);
+	/* Leave room for the search row above and the cursor toolbar below. */
+	max-height: calc(100% - 140px);
 	overflow-y: auto;
 	min-width: 240px;
 }
@@ -695,9 +696,13 @@
 }
 
 .graph-insight-toolbar {
-	order: 0;
+	position: absolute;
+	left: 12px;
+	bottom: 12px;
+	z-index: 11;
+	max-width: 40%;
 	display: flex;
-	flex-wrap: wrap; /* the status row drops to its own line (F-08) */
+	flex-wrap: wrap; /* the status row gets its own line (F-08) */
 	align-items: center;
 	gap: 2px;
 	padding: 3px;
@@ -945,8 +950,10 @@
 	cursor: pointer;
 }
 
-/* F-08: tool status line + standing-mode badges under the icon row. */
+/* F-08: tool status line + standing-mode badges. The bar sits at the
+   bottom edge now, so the status reads ABOVE the icon row. */
 .graph-insight-toolbar-statusrow {
+	order: -1;
 	flex-basis: 100%;
 	display: flex;
 	gap: 6px;

@@ -371,7 +371,7 @@ export class GraphInsightView extends ItemView {
 		}
 
 		this.toolBar = new ToolBar(
-			topBar,
+			container,
 			this.cursorTool,
 			this.focusDepth,
 			this.plugin.settings.followActiveNote,
