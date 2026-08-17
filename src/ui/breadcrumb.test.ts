@@ -40,6 +40,20 @@ describe("renderBreadcrumb", () => {
 		expect(texts).toEqual(["a", "…", "e", "›", "f"]);
 	});
 
+	test("every crumb carries its full name as the hover tooltip", () => {
+		const host = document.body.createDiv();
+		const longName = "A very long note name that will be visually truncated";
+		renderBreadcrumb(
+			host,
+			{ items: [{ path: "long.md", label: longName }], activeIndex: 0 },
+			() => false,
+			false,
+			{ onCrumb: vi.fn(), onRemove: vi.fn() }
+		);
+		const crumb = host.querySelector("button.graph-insight-breadcrumb-crumb");
+		expect(crumb?.getAttribute("aria-label")).toBe(longName);
+	});
+
 	test("clicking a crumb reports its index; the active crumb is marked", () => {
 		const onCrumb = vi.fn();
 		const host = document.body.createDiv();

@@ -922,10 +922,17 @@
 	box-shadow: none;
 	color: var(--text-muted);
 	cursor: pointer;
-	max-width: 140px;
+	max-width: 160px;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+	/* Buttons center their text; centered + clipped shows the MIDDLE of a
+	   long name. Left-aligned, the name reads from its start with … at
+	   the end, and the full name lives in the hover tooltip. */
+	text-align: left;
+	display: inline-block;
+	flex-shrink: 1;
+	min-width: 0;
 }
 
 .graph-insight-breadcrumb-crumb.is-active {

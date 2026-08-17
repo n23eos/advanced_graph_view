@@ -42,6 +42,9 @@ export function renderBreadcrumb(
 			text: item.label,
 			cls: "graph-insight-breadcrumb-crumb",
 		});
+		// The visible text may be cut short — hovering shows the full name
+		// (Obsidian renders its tooltip from aria-label).
+		button.setAttribute("aria-label", item.label);
 		button.toggleClass("is-active", index === trail.activeIndex);
 		button.disabled = missing;
 		if (!missing) button.addEventListener("click", () => callbacks.onCrumb(index));
