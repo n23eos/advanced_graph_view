@@ -25,6 +25,7 @@ function makeCallbacks(): PanelCallbacks {
 		onModeChange: vi.fn(),
 		onPhysicsReset: vi.fn(),
 		onSectionToggle: vi.fn(),
+		onTasksMenu: vi.fn(),
 	};
 }
 
@@ -63,5 +64,18 @@ describe("layout rule selector (F-05)", () => {
 	test("the simple mode selector shows the same persisted value", () => {
 		const { host } = build({ ...DEFAULT_3D_PANEL, layoutRule: "hubs" }, "simple");
 		expect(layoutRuleSelect(host).value).toBe("hubs");
+	});
+});
+
+describe("tasks entry in the simple panel (F-01)", () => {
+	test("the simple panel offers the Tasks… menu through the host", () => {
+		const onTasksMenu = vi.fn();
+		const { host } = build(DEFAULT_3D_PANEL, "simple", { onTasksMenu });
+		const button = Array.from(host.querySelectorAll("button")).find(
+			(b) => b.textContent === "Tasks…"
+		);
+		expect(button).toBeDefined();
+		(button as HTMLButtonElement).click();
+		expect(onTasksMenu).toHaveBeenCalledTimes(1);
 	});
 });

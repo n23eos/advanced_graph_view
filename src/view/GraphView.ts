@@ -2101,6 +2101,7 @@ export class GraphInsightView extends ItemView {
 			onSectionToggle: (id, open) => {
 				if (id === "physics") void this.plugin.saveCollapsedSections({ physics: !open });
 			},
+			onTasksMenu: (anchor) => this.showTasksMenu(anchor),
 			onReheat: () => this.regroup(),
 			onClusterClick: (index) => this.zoomToCluster(index),
 			onClusterToggle: (index) => this.toggleCluster(index),

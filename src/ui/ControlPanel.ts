@@ -93,6 +93,8 @@ export interface PanelCallbacks {
 	onPhysicsReset(): void;
 	/** A section was opened/closed — the host persists what it cares about. */
 	onSectionToggle(id: string, open: boolean): void;
+	/** Open the canned-tasks menu (F-01) anchored to the panel's button. */
+	onTasksMenu(anchor: HTMLElement): void;
 }
 
 const NONE_VALUE = "__none__";
@@ -374,6 +376,13 @@ export class ControlPanel {
 	 *  on the toolbar, so this panel deliberately does not repeat them. */
 	private renderSimpleBody(): void {
 		const body = this.body.createDiv({ cls: "graph-insight-panel-section-body" });
+		// The same canned use cases as the search bar's Tasks… control — the
+		// simple panel is where a newcomer looks first.
+		const tasksButton = body.createEl("button", {
+			text: t("task.menu"),
+			cls: "graph-insight-panel-reset",
+		});
+		tasksButton.addEventListener("click", () => this.callbacks.onTasksMenu(tasksButton));
 		this.renderPresets(body);
 
 		this.channelSelect(
