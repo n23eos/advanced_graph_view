@@ -23,7 +23,11 @@ export interface ViewPreset {
 export type PanelSpec = Pick<
 	PanelState,
 	"channels" | "colorPreset" | "physics" | "labels" | "edges" | "nodeScale" | "view3d"
-> & { showBubbles?: boolean; overlays?: Partial<PanelState["overlays"]> };
+> & {
+	showBubbles?: boolean;
+	overlays?: Partial<PanelState["overlays"]>;
+	layoutRule?: PanelState["layoutRule"];
+};
 
 export function makePanel(spec: PanelSpec): PanelState {
 	return {
@@ -39,6 +43,7 @@ export function makePanel(spec: PanelSpec): PanelState {
 		edges: spec.edges,
 		nodeScale: spec.nodeScale,
 		view3d: spec.view3d,
+		layoutRule: spec.layoutRule ?? "links",
 	};
 }
 

@@ -35,6 +35,8 @@ export interface PanelState {
 	/** Multiplier on node circle radius. */
 	nodeScale: number;
 	view3d: View3DOptions;
+	/** Which relation drives the force layout. Persisted since F-05. */
+	layoutRule: LayoutRule;
 }
 
 export interface View3DOptions {
@@ -79,8 +81,6 @@ export interface PanelCallbacks {
 	onPresetDelete(index: number): void;
 	onChange(state: PanelState): void;
 	onReheat(): void;
-	/** Change what pulls notes together: links, shared tag, or shared folder. */
-	onLayoutRule(rule: LayoutRule): void;
 	onClusterClick(index: number): void;
 	onClusterToggle(index: number): void;
 	onTrailReplay(): void;
@@ -89,6 +89,10 @@ export interface PanelCallbacks {
 	onResetViewState(): void;
 	/** Switch between the simple and the expert panel. */
 	onModeChange(mode: PanelMode): void;
+	/** F-07: restore the recommended physics values (host owns the baseline). */
+	onPhysicsReset(): void;
+	/** A section was opened/closed — the host persists what it cares about. */
+	onSectionToggle(id: string, open: boolean): void;
 }
 
 const NONE_VALUE = "__none__";
@@ -116,8 +120,15 @@ export class ControlPanel {
 		host: HTMLElement,
 		private state: PanelState,
 		private readonly callbacks: PanelCallbacks,
-		private mode: PanelMode = "expert"
+		private mode: PanelMode = "expert",
+		collapsedSections?: { physics: boolean }
 	) {
+		// The physics collapse survives restarts (F-07); other sections keep
+		// their session-only static default.
+		if (collapsedSections) {
+			if (collapsedSections.physics) ControlPanel.openSections.delete("physics");
+			else ControlPanel.openSections.add("physics");
+		}
 		this.root = host.createDiv({ cls: "graph-insight-panel" });
 
 		const header = this.root.createDiv({ cls: "graph-insight-panel-header" });
@@ -307,6 +318,11 @@ export class ControlPanel {
 		clusters.createDiv({ cls: "graph-insight-panel-hint", text: t("clusters.hint") });
 
 		const physics = this.section("physics", t("panel.section.physics"));
+		const physicsResetButton = physics.createEl("button", {
+			text: t("physics.reset"),
+			cls: "graph-insight-panel-reset",
+		});
+		physicsResetButton.addEventListener("click", () => this.callbacks.onPhysicsReset());
 		this.layoutRuleSelect(physics);
 		this.physicsSlider(physics, t("physics.repel"), 1, 300, 1, this.state.physics.repel, (value) => {
 			this.setState({ ...this.state, physics: { ...this.state.physics, repel: value } });
@@ -387,13 +403,13 @@ export class ControlPanel {
 		body.createDiv({ cls: "graph-insight-panel-hint", text: t("simple.hint") });
 	}
 
-	/** Not part of PanelState — applies immediately on change and always shows
-	 *  "Links" (the default rule) after a rebuild. Shared by both modes. */
+	/** Persisted in PanelState since F-05, so the selector always reflects the
+	 *  saved value and survives rebuilds and mode switches. Shared by both modes. */
 	private layoutRuleSelect(parent: HTMLElement): void {
 		this.channelSelect(
 			parent,
 			t("physics.layoutRule"),
-			"links",
+			this.state.layoutRule,
 			{
 				links: t("physics.rule.links"),
 				tags: t("physics.rule.tags"),
@@ -403,7 +419,7 @@ export class ControlPanel {
 				recency: t("physics.rule.recency"),
 				hubs: t("physics.rule.hubs"),
 			},
-			(value) => this.callbacks.onLayoutRule((value ?? "links") as LayoutRule),
+			(value) => this.setState({ ...this.state, layoutRule: (value ?? "links") as LayoutRule }),
 			false
 		);
 	}
@@ -558,6 +574,7 @@ export class ControlPanel {
 			const open = this.openSections.has(id);
 			chevron.setText(open ? "▾" : "▸");
 			content.toggleClass("is-hidden", !open);
+			this.callbacks.onSectionToggle(id, open);
 		});
 		return content;
 	}
