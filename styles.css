@@ -243,12 +243,31 @@
 	text-overflow: ellipsis;
 }
 
-.graph-insight-searchbar {
+/* The whole top edge is one wrapping flex row: toolbar left, search
+   centered in the leftover space, focus/explore bar on its own line.
+   Blocks push each other instead of overlapping at any pane width. */
+.graph-insight-topbar {
 	position: absolute;
 	top: 12px;
-	left: 50%;
-	transform: translateX(-50%);
+	left: 12px;
+	right: 12px;
 	z-index: 11;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-start;
+	gap: 8px;
+	/* The row itself must not eat canvas clicks between its blocks. */
+	pointer-events: none;
+}
+
+.graph-insight-topbar > * {
+	pointer-events: auto;
+}
+
+.graph-insight-searchbar {
+	order: 1;
+	margin-inline: auto;
+	max-width: 100%;
 	display: flex;
 	flex-wrap: wrap; /* the status row drops to its own line */
 	gap: 6px;
@@ -353,11 +372,9 @@
 }
 
 .graph-insight-focusbar {
-	position: absolute;
-	top: 56px;
-	left: 50%;
-	transform: translateX(-50%);
-	z-index: 11;
+	order: 2;
+	flex-basis: 100%;
+	justify-content: center;
 	display: flex;
 	gap: 10px;
 	align-items: center;
@@ -678,10 +695,7 @@
 }
 
 .graph-insight-toolbar {
-	position: absolute;
-	top: 12px;
-	left: 12px;
-	z-index: 11;
+	order: 0;
 	display: flex;
 	flex-wrap: wrap; /* the status row drops to its own line (F-08) */
 	align-items: center;
@@ -795,13 +809,13 @@
 /* The focus/explore bars may wrap, but never past two lines (§F-04). */
 .graph-insight-focusbar {
 	flex-wrap: wrap;
-	max-width: calc(100% - 24px);
 }
 
 /* ── F-10: "What changed?" panel ─────────────────────────────────────── */
 .graph-insight-changes {
 	position: absolute;
-	top: 56px;
+	/* Below the top row even when it wraps onto a second line. */
+	top: 100px;
 	right: 12px;
 	z-index: 12;
 	width: 300px;

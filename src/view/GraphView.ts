@@ -305,7 +305,12 @@ export class GraphInsightView extends ItemView {
 			}
 		);
 
-		this.searchBar = new SearchBar(container, {
+		// One flexible top row for the toolbar, the search bar and the
+		// focus/explore bar: flow layout instead of absolute positioning, so
+		// the blocks wrap under each other instead of overlapping (F-04).
+		const topBar = container.createDiv({ cls: "graph-insight-topbar" });
+
+		this.searchBar = new SearchBar(topBar, {
 			onQueryChange: (query) => {
 				this.softQuery = query.trim() ? parseQuery(query) : null;
 				this.searchParseError = undefined;
@@ -366,7 +371,7 @@ export class GraphInsightView extends ItemView {
 		}
 
 		this.toolBar = new ToolBar(
-			container,
+			topBar,
 			this.cursorTool,
 			this.focusDepth,
 			this.plugin.settings.followActiveNote,
@@ -408,7 +413,7 @@ export class GraphInsightView extends ItemView {
 			this.register(() => observer.disconnect());
 		}
 
-		this.focusBar = container.createDiv({ cls: "graph-insight-focusbar" });
+		this.focusBar = topBar.createDiv({ cls: "graph-insight-focusbar" });
 		this.focusBar.hide();
 
 		this.timeline = new TimelineBar(container, {
