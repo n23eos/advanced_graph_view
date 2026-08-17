@@ -3,8 +3,27 @@
  * Kept free of the Obsidian runtime so settings logic can be unit-tested.
  */
 import type { PanelMode, PanelState } from "../ui/ControlPanel";
-import type { SearchPreset } from "../ui/SearchBar";
 import { DEFAULT_3D_PANEL, type ViewPreset } from "../view/builtinPresets";
+
+/** Where the user is in the first-run tour. Replaces the old boolean
+ *  `onboardingShown`; `disabled` is "don't show me this again". */
+export type OnboardingState = "never-seen" | "dismissed" | "completed" | "disabled";
+
+export const ONBOARDING_STATES: readonly OnboardingState[] = [
+	"never-seen", "dismissed", "completed", "disabled",
+];
+
+/** A saved search filter. Older versions stored only { name, query };
+ *  normalizeSettings backfills id and timestamps on load. */
+export interface SearchPreset {
+	id: string;
+	name: string;
+	query: string;
+	createdAt: number;
+	updatedAt: number;
+	/** Bumped on apply; drives the "recently used first" ordering (F-09). */
+	lastUsedAt?: number;
+}
 
 export interface GraphInsightSettings {
 	panel: PanelState;
@@ -14,7 +33,10 @@ export interface GraphInsightSettings {
 	panelMode: PanelMode;
 	viewPresets: ViewPreset[];
 	presets: SearchPreset[];
-	onboardingShown: boolean;
+	onboardingState: OnboardingState;
+	/** Which expert-panel sections start collapsed. UI preference only —
+	 *  never part of a view preset. */
+	collapsedSections: { physics: boolean };
 	/** Version of the built-in view presets last seeded. Lower than
 	 *  VIEW_PRESET_VERSION triggers a one-time re-seed + retire migration. */
 	viewPresetsVersion: number;
@@ -62,5 +84,6 @@ export const DEFAULT_SETTINGS: GraphInsightSettings = {
 	presets: [],
 	viewPresets: [],
 	viewPresetsVersion: 0,
-	onboardingShown: false,
+	onboardingState: "never-seen",
+	collapsedSections: { physics: true },
 };

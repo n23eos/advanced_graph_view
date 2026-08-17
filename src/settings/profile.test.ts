@@ -50,12 +50,37 @@ describe("mergeProfile", () => {
 	});
 
 	test("keeps this vault's own state rather than importing it", () => {
-		const current = { ...DEFAULT_SETTINGS, onboardingShown: true, viewPresetsVersion: 7 };
+		const current = { ...DEFAULT_SETTINGS, onboardingState: "disabled" as const, viewPresetsVersion: 7 };
 
 		const restored = mergeProfile(current, buildProfile(settings));
 
-		expect(restored?.onboardingShown).toBe(true);
+		expect(restored?.onboardingState).toBe("disabled");
 		expect(restored?.viewPresetsVersion).toBe(7);
+	});
+
+	test("replaces an unknown layout rule with links instead of rejecting the profile", () => {
+		const foreign = {
+			...buildProfile(settings),
+			panel: { ...settings.panel, layoutRule: "banana" as never },
+		};
+
+		const restored = mergeProfile(DEFAULT_SETTINGS, foreign);
+
+		expect(restored?.panel.layoutRule).toBe("links");
+	});
+
+	test("backfills id and timestamps on presets from an old-format profile", () => {
+		const legacy = {
+			version: PROFILE_VERSION,
+			panel: settings.panel,
+			presets: [{ name: "Work", query: "tag:#work" }],
+		};
+
+		const restored = mergeProfile(DEFAULT_SETTINGS, legacy);
+
+		expect(restored?.presets[0].name).toBe("Work");
+		expect(restored?.presets[0].id).toBeTruthy();
+		expect(restored?.presets[0].createdAt).toBeTypeOf("number");
 	});
 
 	test("fills in fields the profile is missing from the current settings", () => {

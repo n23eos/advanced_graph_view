@@ -4,6 +4,7 @@
  * behind — they describe one vault, not a way of working.
  */
 import type { GraphInsightSettings } from "./schema";
+import { normalizePanel, normalizeSearchPresets, normalizeViewPresets } from "./normalize";
 import { PANEL_MODES, type PanelMode, type PanelState } from "../ui/ControlPanel";
 
 /** Bump only on a breaking change: an older plugin refuses a newer profile. */
@@ -52,10 +53,18 @@ export function mergeProfile(
 
 	return {
 		...current,
-		panel: isObject(profile.panel) ? { ...current.panel, ...profile.panel } : current.panel,
+		// normalizePanel/normalizeSearchPresets accept profiles written by
+		// older versions: missing layoutRule, presets without id/timestamps.
+		panel: isObject(profile.panel)
+			? normalizePanel({ ...current.panel, ...profile.panel })
+			: current.panel,
 		panelMode: isPanelMode(profile.panelMode) ? profile.panelMode : current.panelMode,
-		viewPresets: Array.isArray(profile.viewPresets) ? profile.viewPresets : current.viewPresets,
-		presets: Array.isArray(profile.presets) ? profile.presets : current.presets,
+		viewPresets: Array.isArray(profile.viewPresets)
+			? normalizeViewPresets(profile.viewPresets)
+			: current.viewPresets,
+		presets: Array.isArray(profile.presets)
+			? normalizeSearchPresets(profile.presets, Date.now())
+			: current.presets,
 		openDwellSeconds:
 			typeof profile.openDwellSeconds === "number"
 				? profile.openDwellSeconds
