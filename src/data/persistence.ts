@@ -5,6 +5,7 @@
  */
 import type { App } from "obsidian";
 import { normalizeUsageLog, type UsageLog } from "./UsageTracker";
+import { normalizeSnapshotStore, type SnapshotStore } from "./graphSnapshots";
 
 /** [x, y] in old saves, [x, y, z] since the pseudo-3D update. */
 export type PositionMap = Record<string, [number, number] | [number, number, number]>;
@@ -109,5 +110,34 @@ export class PluginDataStore {
 
 	savePositions(saved: SavedPositions): Promise<void> {
 		return this.writeJson("positions.json", saved);
+	}
+
+	/** F-10 history. A corrupt file is quarantined (never deleted) and the
+	 *  history simply starts over — the rest of the plugin keeps working. */
+	async loadSnapshots(): Promise<SnapshotStore | null> {
+		const raw = await this.readJson<unknown>("snapshots.json");
+		if (raw === null) return null;
+		const store = normalizeSnapshotStore(raw);
+		if (store === null) {
+			await this.quarantine("snapshots.json");
+			return null;
+		}
+		return store;
+	}
+
+	saveSnapshots(store: SnapshotStore): Promise<void> {
+		return this.writeJson("snapshots.json", store);
+	}
+
+	/** "Reset all plugin data" clears the history; "reset settings" must not. */
+	async removeSnapshots(): Promise<void> {
+		const path = `${this.dataDir}/snapshots.json`;
+		try {
+			if (await this.app.vault.adapter.exists(path)) {
+				await this.app.vault.adapter.remove(path);
+			}
+		} catch (error) {
+			console.error("Advanced Graph View: failed to remove snapshots.json", error);
+		}
 	}
 }
