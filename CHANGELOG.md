@@ -5,6 +5,17 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0-beta.3] — 2026-08-17
+
+Pre-release: a readability fix for the breadcrumb trail.
+
+### Fixed
+
+- **Breadcrumb names read from their start.** Buttons center their text, so
+  a clipped long note name used to show its middle. Crumbs are now
+  left-aligned with a trailing ellipsis, and every crumb carries its full
+  note name as the hover tooltip.
+
 ## [0.8.0-beta.2] — 2026-08-17
 
 Pre-release: stage C of the UI polish spec — the vault's change history —
