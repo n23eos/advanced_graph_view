@@ -29,6 +29,15 @@ import {
 } from "./settings/schema";
 import { OnboardingModal } from "./ui/OnboardingModal";
 import { normalizeSettings } from "./settings/normalize";
+import {
+	applyRetention,
+	buildSnapshot,
+	emptySnapshotStore,
+	shouldCapture,
+	type SnapshotStore,
+} from "./data/graphSnapshots";
+import type { GraphMetrics } from "./workers/MetricsClient";
+import type { GraphModel } from "./data/GraphStore";
 import type { PanelMode, PanelState } from "./ui/ControlPanel";
 import type { SearchPreset } from "./ui/SearchBar";
 import type { ViewPreset } from "./view/builtinPresets";
@@ -96,6 +105,7 @@ export default class GraphInsightPlugin extends Plugin {
 
 		const loaded = await this.dataStore.loadUsage();
 		this.usageLog = loaded ? compactLog(loaded, Date.now()) : emptyLog();
+		this.snapshotStore = (await this.dataStore.loadSnapshots()) ?? emptySnapshotStore();
 
 		this.registerView(GRAPH_INSIGHT_VIEW_TYPE, (leaf) => new GraphInsightView(leaf, this));
 		this.registerView(INSIGHTS_VIEW_TYPE, (leaf) => new InsightsView(leaf, this));
@@ -113,6 +123,15 @@ export default class GraphInsightPlugin extends Plugin {
 			id: "show-onboarding",
 			name: t("command.showOnboarding"),
 			callback: () => this.showOnboarding(),
+		});
+
+		this.addCommand({
+			id: "open-changes",
+			name: t("changes.open"),
+			callback: async () => {
+				await this.activateView();
+				this.getGraphView()?.toggleChangesPanel();
+			},
 		});
 
 		this.addCommand({
@@ -410,6 +429,31 @@ export default class GraphInsightPlugin extends Plugin {
 		if (!leaf) return;
 		await leaf.setViewState({ type: LOCAL_GRAPH_VIEW_TYPE, active: true });
 		await this.app.workspace.revealLeaf(leaf);
+	}
+
+	/** F-10 history; loaded on start, appended after successful metrics. */
+	snapshotStore: SnapshotStore = emptySnapshotStore();
+
+	private capturingSnapshot = false;
+
+	/** Called by the view after a successful metrics run — the only moment a
+	 *  snapshot may be captured, and at most once per 24 h. */
+	async maybeCaptureSnapshot(model: GraphModel, metrics: GraphMetrics): Promise<void> {
+		// Two views can report metrics back-to-back; one capture at a time.
+		if (this.capturingSnapshot) return;
+		const now = Date.now();
+		if (!shouldCapture(this.snapshotStore, now)) return;
+		this.capturingSnapshot = true;
+		try {
+			const next = applyRetention(
+				{ version: 1, snapshots: [...this.snapshotStore.snapshots, buildSnapshot(model, metrics, now)] },
+				now
+			);
+			this.snapshotStore = next;
+			await this.dataStore.saveSnapshots(next);
+		} finally {
+			this.capturingSnapshot = false;
+		}
 	}
 
 	async saveCollapsedSections(collapsed: { physics: boolean }): Promise<void> {

@@ -50,6 +50,16 @@ import {
 	TopicMapExportModal,
 	type TopicMapExportDraft,
 } from "../ui/TopicMapExportModal";
+import { ChangesPanel, type ChangesData } from "../ui/ChangesPanel";
+import { ChangesClient } from "../workers/ChangesClient";
+import {
+	coolingClusters,
+	notesChangedSince,
+	type ChangeCategory,
+	type LinkChange,
+	type TopologyDiff,
+} from "../analysis/graphChanges";
+import { closestSnapshotBefore } from "../data/graphSnapshots";
 import { MetricsClient, type GraphMetrics } from "../workers/MetricsClient";
 import {
 	contentNeedles, parseQuery, matchesQuery, validateQuery,
@@ -571,6 +581,155 @@ export class GraphInsightView extends ItemView {
 				},
 			}
 		);
+	}
+
+	// ── F-10: what changed ────────────────────────────────────────────
+
+	private changesPanel: ChangesPanel | null = null;
+	private changesClient: ChangesClient | null = null;
+	/** Runtime only: never part of a view preset, never persisted (§6.2). */
+	private changesSelection: { periodDays: 7 | 30; category: ChangeCategory | null } = {
+		periodDays: 7,
+		category: null,
+	};
+	private changesData: ChangesData | null = null;
+	/** Node ids the selected category highlights, folded into recomputeVisual. */
+	private changesHighlight: Set<number> | null = null;
+
+	/** Command + overflow menu entry. Closing keeps the selected category —
+	 *  only "Reset changes" clears it (§F-10). */
+	toggleChangesPanel(): void {
+		if (this.changesPanel?.isShown) {
+			this.changesPanel.hide();
+			return;
+		}
+		this.ensureChangesPanel();
+		this.changesPanel?.show();
+		void this.refreshChanges();
+	}
+
+	private ensureChangesPanel(): void {
+		if (this.changesPanel) return;
+		this.changesPanel = new ChangesPanel(this.contentEl, {
+			onPeriodChange: (days) => {
+				this.changesSelection = { ...this.changesSelection, periodDays: days };
+				this.changesPanel?.setState(days, this.changesSelection.category);
+				void this.refreshChanges();
+			},
+			onCategorySelect: (category) => this.selectChangesCategory(category),
+			onOpenNote: (path) => {
+				const id = this.model?.pathToId.get(path);
+				if (id !== undefined) this.openNode(id, !this.plugin.settings.openInSidePane);
+			},
+			onFocusLink: (link) => this.focusChangesLink(link),
+			onFocusCluster: (id) => this.renderer?.zoomToNodes(this.clusterNodeIds(id)),
+			onClose: () => this.changesPanel?.hide(),
+		});
+		this.changesPanel.setState(this.changesSelection.periodDays, this.changesSelection.category);
+	}
+
+	private async refreshChanges(): Promise<void> {
+		if (!this.model) return;
+		this.changesPanel?.setData(null); // skeleton — the view stays interactive
+		const now = Date.now();
+		const periodStart = now - this.changesSelection.periodDays * 24 * 60 * 60 * 1000;
+		const snapshot = closestSnapshotBefore(this.plugin.snapshotStore, periodStart);
+
+		const nodes = this.model.nodes.map((node) => ({
+			path: node.path,
+			ctime: this.facts[node.id]?.ctime ?? 0,
+			mtime: this.facts[node.id]?.mtime ?? 0,
+		}));
+		const { newNotes, editedNotes } = notesChangedSince(nodes, periodStart);
+
+		const hasMetrics = this.metrics !== null;
+		const cooling = this.metrics
+			? coolingClusters(
+					this.plugin.usageLog,
+					this.model,
+					this.metrics.community,
+					this.metrics.communityCount,
+					this.changesSelection.periodDays,
+					now
+				).map((id) => ({ id, label: this.clusterNames[id] ?? `#${id}` }))
+			: [];
+
+		let diff: TopologyDiff = { addedLinks: [], removedLinks: [], growingHubs: [] };
+		if (snapshot) {
+			this.changesClient ??= new ChangesClient();
+			try {
+				diff = await this.changesClient.compute(snapshot, this.model, this.metrics?.pagerank ?? null);
+			} catch {
+				// A second refresh while one runs: keep the empty diff.
+			}
+		}
+
+		this.changesData = {
+			hasHistory: snapshot !== null,
+			hasMetrics,
+			newNotes,
+			editedNotes,
+			addedLinks: diff.addedLinks,
+			removedLinks: diff.removedLinks,
+			growingHubs: hasMetrics || diff.growingHubs.length > 0 ? diff.growingHubs : [],
+			coolingClusters: cooling,
+		};
+		this.changesPanel?.setData(this.changesData);
+		this.applyChangesMask();
+	}
+
+	private selectChangesCategory(category: ChangeCategory | null): void {
+		this.changesSelection = { ...this.changesSelection, category };
+		this.changesPanel?.setState(this.changesSelection.periodDays, category);
+		this.applyChangesMask();
+	}
+
+	/** Fold the selected category into a highlight set; recomputeVisual owns
+	 *  the masks, so no rebuild and no extra pass (§F-10). */
+	private applyChangesMask(): void {
+		const { category } = this.changesSelection;
+		const data = this.changesData;
+		if (!category || !data || !this.model) {
+			this.changesHighlight = null;
+			this.recomputeVisual();
+			return;
+		}
+		const ids = new Set<number>();
+		const addPath = (path: string) => {
+			const id = this.model?.pathToId.get(path);
+			if (id !== undefined) ids.add(id);
+		};
+		switch (category) {
+			case "new-notes": data.newNotes.forEach(addPath); break;
+			case "edited-notes": data.editedNotes.forEach(addPath); break;
+			case "growing-hubs": data.growingHubs.forEach(addPath); break;
+			case "added-links":
+			case "removed-links": {
+				const links = category === "added-links" ? data.addedLinks : data.removedLinks;
+				for (const link of links) {
+					addPath(link.fromPath);
+					addPath(link.toPath);
+				}
+				break;
+			}
+			case "cooling-clusters":
+				for (const cluster of data.coolingClusters) {
+					for (const id of this.clusterNodeIds(cluster.id)) ids.add(id);
+				}
+				break;
+		}
+		this.changesHighlight = ids;
+		this.recomputeVisual();
+	}
+
+	/** A link row focuses both ends and lights the edge up, like the path tool. */
+	private focusChangesLink(link: LinkChange): void {
+		const from = this.model?.pathToId.get(link.fromPath);
+		const to = this.model?.pathToId.get(link.toPath);
+		if (from === undefined || to === undefined) return;
+		this.renderer?.setPathHighlight([from, to]);
+		this.pathDrawn = true;
+		this.renderer?.zoomToNodes([from, to]);
 	}
 
 	// ── F-12: topic map export ────────────────────────────────────────
@@ -1116,6 +1275,13 @@ export class GraphInsightView extends ItemView {
 				if (this.overlayMask[i] === 1) highlight[i] = 1;
 			}
 		}
+		// F-10: the selected changes category glows the same way.
+		if (this.changesHighlight && this.changesHighlight.size > 0) {
+			highlight ??= new Uint8Array(count);
+			for (const id of this.changesHighlight) {
+				if (id < count) highlight[id] = 1;
+			}
+		}
 		const distances = this.currentFocusDistances();
 		if (distances) {
 			factors ??= new Float32Array(count).fill(1);
@@ -1417,6 +1583,11 @@ export class GraphInsightView extends ItemView {
 		// node ids behind this.facts have just changed — recompute from scratch.
 		this.appliedLayoutRule = null;
 		this.applyLayoutRule(this.plugin.settings.panel.layoutRule);
+		// F-10: node ids just changed — the old highlight indices are garbage.
+		// The data itself is path-based; recompute it if the panel is open.
+		this.changesHighlight = null;
+		this.changesData = null;
+		if (this.changesPanel?.isShown) void this.refreshChanges();
 		const panelState = this.plugin.settings.panel;
 		this.renderer.setLabelOptions(
 			panelState.labels.show, panelState.labels.fontSize, panelState.labels.zoomThreshold,
@@ -1526,6 +1697,8 @@ export class GraphInsightView extends ItemView {
 	private handleMetricsResult(metrics: GraphMetrics): void {
 		if (!this.model || this.facts.length !== metrics.pagerank.length) return;
 		this.metrics = metrics;
+		// F-10: metrics succeeded — the only moment history may grow.
+		void this.plugin.maybeCaptureSnapshot(this.model, metrics);
 
 		const clusterContent: ClusterContent[] = Array.from(
 			{ length: metrics.communityCount },
@@ -2105,6 +2278,9 @@ export class GraphInsightView extends ItemView {
 		menu.addItem((item) =>
 			item.setTitle(t("preset.manage")).setIcon("list").onClick(() => this.openPresetManager())
 		);
+		menu.addItem((item) =>
+			item.setTitle(t("changes.open")).setIcon("history").onClick(() => this.toggleChangesPanel())
+		);
 		const rect = anchor.getBoundingClientRect();
 		menu.showAtPosition({ x: rect.left, y: rect.bottom + 4 });
 	}
@@ -2375,6 +2551,10 @@ export class GraphInsightView extends ItemView {
 		await this.savePositions();
 		this.layout?.stop();
 		this.layout = null;
+		this.changesClient?.stop();
+		this.changesClient = null;
+		this.changesPanel?.destroy();
+		this.changesPanel = null;
 		this.metricsClient?.stop();
 		this.metricsClient = null;
 		this.searchBar?.destroy();

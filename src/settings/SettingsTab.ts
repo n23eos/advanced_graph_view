@@ -5,6 +5,7 @@ import {
 	type SettingDefinitionItem,
 } from "obsidian";
 import { emptyLog } from "../data/UsageTracker";
+import { emptySnapshotStore } from "../data/graphSnapshots";
 import { usageToCsv } from "../export/exporters";
 import { t } from "../i18n";
 import { ConfirmModal } from "../ui/ConfirmModal";
@@ -258,6 +259,9 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 		this.plugin.usageLog = emptyLog();
 		await this.plugin.dataStore.saveUsage(this.plugin.usageLog);
 		await this.plugin.dataStore.savePositions({ positions: {}, pins: [] });
+		// F-10: the topology history goes with "all data" (reset settings keeps it).
+		this.plugin.snapshotStore = emptySnapshotStore();
+		await this.plugin.dataStore.removeSnapshots();
 		new Notice(t("notice.dataReset"));
 	}
 }
