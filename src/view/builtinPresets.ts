@@ -61,6 +61,20 @@ export const DEFAULT_3D_PANEL = makePanel({
 	view3d: { enabled: true, depthSource: "physics", focal: 900 },
 });
 
+/** F-01: task actions address bundled presets by their stable builtinId —
+ *  never by localized name or index. A preset the user hand-deleted is
+ *  restored from the bundled defaults; the input list is never mutated. */
+export function ensureBuiltinPreset(
+	presets: readonly ViewPreset[],
+	builtinId: BuiltinPresetId
+): { presets: readonly ViewPreset[]; index: number } | null {
+	const index = presets.findIndex((preset) => preset.builtinId === builtinId);
+	if (index >= 0) return { presets, index };
+	const bundled = DEFAULT_VIEW_PRESETS.find((preset) => preset.builtinId === builtinId);
+	if (!bundled) return null;
+	return { presets: [...presets, bundled], index: presets.length };
+}
+
 /** Bump when DEFAULT_VIEW_PRESETS changes so existing installs re-seed. */
 export const VIEW_PRESET_VERSION = 8;
 /** Default preset names retired in newer versions — removed on migration. */

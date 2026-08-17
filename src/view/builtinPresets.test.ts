@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { DEFAULT_VIEW_PRESETS, RETIRED_VIEW_PRESETS } from "./builtinPresets";
+import { describe, expect, it, test } from "vitest";
+import { DEFAULT_VIEW_PRESETS, RETIRED_VIEW_PRESETS, ensureBuiltinPreset } from "./builtinPresets";
 import { en } from "../i18n/locales/en";
 
 const byId = (id: string) => DEFAULT_VIEW_PRESETS.find((preset) => preset.builtinId === id);
@@ -59,5 +59,32 @@ describe("bundled view presets", () => {
 		const panel = byId("attention-map")?.panel;
 		expect(panel?.channels.size).toBe("pagerank");
 		expect(panel?.channels.color).toBe("opens-90");
+	});
+});
+
+describe("ensureBuiltinPreset (F-01)", () => {
+	test("finds an existing preset by its stable id, list untouched", () => {
+		const presets = [...DEFAULT_VIEW_PRESETS];
+		const ensured = ensureBuiltinPreset(presets, "orphans");
+		expect(ensured?.presets).toBe(presets);
+		expect(ensured && presets[ensured.index].builtinId).toBe("orphans");
+	});
+
+	test("restores a deleted builtin from the bundled defaults", () => {
+		const without = DEFAULT_VIEW_PRESETS.filter((preset) => preset.builtinId !== "orphans");
+		const ensured = ensureBuiltinPreset(without, "orphans");
+		expect(ensured).not.toBeNull();
+		expect(ensured!.presets).toHaveLength(without.length + 1);
+		expect(ensured!.presets[ensured!.index].builtinId).toBe("orphans");
+		// The input list is never mutated.
+		expect(without.some((preset) => preset.builtinId === "orphans")).toBe(false);
+	});
+
+	test("lookup ignores localized or renamed display names", () => {
+		const renamed = DEFAULT_VIEW_PRESETS.map((preset) =>
+			preset.builtinId === "recent" ? { ...preset, name: "Недавнее" } : preset
+		);
+		const ensured = ensureBuiltinPreset(renamed, "recent");
+		expect(ensured && renamed[ensured.index].name).toBe("Недавнее");
 	});
 });
