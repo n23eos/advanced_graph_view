@@ -5,6 +5,36 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0-beta.2] — 2026-08-17
+
+Pre-release: stage C of the UI polish spec — the vault's change history —
+plus layout fixes from beta.1 feedback.
+
+### Added
+
+- **"What changed?" panel** (overflow menu or the command palette): pick
+  7 or 30 days and browse six categories — new notes, edited notes, added
+  links, removed links, growing hubs, cooling clusters. A note row opens
+  the note, a link row focuses both ends and lights the edge up, a cluster
+  zooms to its members; the selected category highlights on the graph and
+  survives closing the panel until an explicit reset.
+- **Topology history behind it**: a snapshot of paths, links, PageRank and
+  clusters is captured after a successful metrics run, at most once per
+  day. Retention keeps roughly two months of weekly plus half a year of
+  monthly snapshots under a 64 MB cap; a corrupt history file is set
+  aside, never deleted, and the panel degrades gracefully while history
+  accumulates. Graphs over 10 000 notes diff in a worker. "Reset all
+  plugin data" clears the history; "reset settings" keeps it.
+- **Tasks… in the simple panel** — the same canned use cases as the
+  search-bar control, now also where a newcomer looks first.
+
+### Fixed
+
+- **Top controls no longer overlap.** Search and filters own the full top
+  row (the focus/explore bar wraps under it), and the cursor toolbar
+  docked bottom-left, mirroring the camera widget — no more collisions at
+  any pane width.
+
 ## [0.8.0-beta.1] — 2026-08-17
 
 Pre-release: the UX polish milestone (stages A and B of the UI polish spec).

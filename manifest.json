@@ -1,7 +1,7 @@
 {
 	"id": "graph-insight",
 	"name": "Advanced Graph View",
-	"version": "0.8.0-beta.1",
+	"version": "0.8.0-beta.2",
 	"minAppVersion": "1.13.0",
 	"description": "Explore large vaults as an interactive 3D graph with clusters, PageRank, color schemes and metric-driven node encoding.",
 	"author": "n23eos",
