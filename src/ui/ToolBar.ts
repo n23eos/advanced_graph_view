@@ -4,6 +4,7 @@
  */
 import { setIcon } from "obsidian";
 import { t } from "../i18n";
+import type { ResponsiveMode } from "./responsive";
 
 export type CursorTool = "open" | "links" | "path" | "hide" | "pin";
 
@@ -13,6 +14,8 @@ export interface ToolBarCallbacks {
 	onToggleFollow(enabled: boolean): void;
 	onToggleSidePane(enabled: boolean): void;
 	onOpenLocalGraph(): void;
+	/** F-04: open the overflow menu with the actions hidden at this width. */
+	onOverflowMenu(anchor: HTMLElement): void;
 }
 
 /** Lucide icon names — theme-tinted, so every glyph shares one tone. */
@@ -31,6 +34,12 @@ export class ToolBar {
 	private depthValue: HTMLElement;
 	private followButton!: HTMLElement;
 	private sidePaneButton!: HTMLElement;
+	private statusEl!: HTMLElement;
+	private badgesEl!: HTMLElement;
+	/** Which of the two path picks comes next; only meaningful for "path". */
+	private pathStage: "start" | "end" = "start";
+	/** In compact/minimal the status shows the tool's short name only (F-04). */
+	private responsiveMode: ResponsiveMode = "full";
 
 	constructor(
 		host: HTMLElement,
@@ -79,6 +88,14 @@ export class ToolBar {
 		localGraphButton.setAttribute("aria-label", t("tool.localGraph"));
 		localGraphButton.addEventListener("click", () => this.callbacks.onOpenLocalGraph());
 
+		// Visible only in compact/minimal (CSS); collects the hidden actions.
+		const overflowButton = this.root.createEl("button", {
+			cls: "graph-insight-tool graph-insight-toolbar-overflow",
+			text: "…",
+		});
+		overflowButton.setAttribute("aria-label", t("toolbar.more"));
+		overflowButton.addEventListener("click", () => this.callbacks.onOverflowMenu(overflowButton));
+
 		// Depth control lives inline; only meaningful in the neighborhood mode.
 		this.depthRow = this.root.createDiv({ cls: "graph-insight-toolbar-depth" });
 		const slider = this.depthRow.createEl("input", { type: "range" });
@@ -96,7 +113,52 @@ export class ToolBar {
 			this.callbacks.onDepthChange(Number(slider.value));
 		});
 
+		// F-08: what the active tool will do, as text — not a data attribute.
+		const statusRow = this.root.createDiv({ cls: "graph-insight-toolbar-statusrow" });
+		this.statusEl = statusRow.createSpan({
+			cls: "graph-insight-toolbar-status",
+			attr: { "aria-live": "polite" },
+		});
+		this.badgesEl = statusRow.createDiv({ cls: "graph-insight-toolbar-badges" });
+
 		this.applyActive();
+	}
+
+	/** GraphView reports which path pick is expected next. */
+	setPathStage(stage: "start" | "end"): void {
+		this.pathStage = stage;
+		this.renderStatus();
+	}
+
+	/** Narrow views keep the badge row but shorten the instruction (F-04). */
+	setResponsiveMode(mode: ResponsiveMode): void {
+		this.responsiveMode = mode;
+		this.renderStatus();
+	}
+
+	private statusText(): string {
+		if (this.responsiveMode !== "full") return t(`tool.${this.tool}`);
+		if (this.tool === "path") {
+			return this.pathStage === "start" ? t("tool.status.pathStart") : t("tool.status.pathEnd");
+		}
+		const byTool = {
+			open: "tool.status.open",
+			links: "tool.status.links",
+			hide: "tool.status.hide",
+			pin: "tool.status.pin",
+		} as const;
+		return t(byTool[this.tool]);
+	}
+
+	private renderStatus(): void {
+		this.statusEl.setText(this.statusText());
+		this.badgesEl.empty();
+		if (this.following) {
+			this.badgesEl.createSpan({ cls: "graph-insight-toolbar-badge", text: t("tool.follow") });
+		}
+		if (this.sidePane) {
+			this.badgesEl.createSpan({ cls: "graph-insight-toolbar-badge", text: t("tool.sidePane") });
+		}
 	}
 
 	/** Reflect the state without firing the callback — for the command palette,
@@ -113,6 +175,7 @@ export class ToolBar {
 
 	private setTool(tool: CursorTool): void {
 		this.tool = tool;
+		this.pathStage = "start";
 		this.applyActive();
 		this.callbacks.onToolChange(tool);
 	}
@@ -124,10 +187,7 @@ export class ToolBar {
 		this.depthRow.toggleClass("is-hidden", this.tool !== "links");
 		this.followButton?.toggleClass("is-active", this.following);
 		this.sidePaneButton?.toggleClass("is-active", this.sidePane);
-	}
-
-	setStatus(text: string): void {
-		this.root.setAttribute("data-status", text);
+		this.renderStatus();
 	}
 
 	destroy(): void {
