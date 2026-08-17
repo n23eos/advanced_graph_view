@@ -93,8 +93,9 @@ export class ExploreSession {
 		this.controller.jump();
 	}
 
-	back(): void {
-		this.controller.back();
+	/** F-11: fly to any node from the breadcrumb history. */
+	travelTo(nodeId: number): void {
+		this.controller.goTo(nodeId);
 	}
 
 	stop(): void {

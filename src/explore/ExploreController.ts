@@ -38,6 +38,8 @@ export class ExploreController {
 	private isRewinding = false;
 	private jumpRequested = false;
 	private backRequested = false;
+	/** F-11: a breadcrumb/back target — any node, not just an aimed link. */
+	private goRequest: number | null = null;
 	private visited: number[];
 
 	constructor(
@@ -105,9 +107,27 @@ export class ExploreController {
 		this.backRequested = true;
 	}
 
+	/** F-11: fly straight to a trail node picked in the breadcrumb. The
+	 *  NavigationTrail owns where this lands in the history. */
+	goTo(nodeId: number): void {
+		this.goRequest = nodeId;
+	}
+
 	/** Advance the flight clock by `dt` seconds and report what changed. */
 	update(dt: number): ExploreStep {
 		if (this.phaseValue === "flying") return this.advanceFlight(dt);
+
+		if (this.goRequest !== null) {
+			const target = this.goRequest;
+			this.goRequest = null;
+			this.backRequested = false;
+			this.jumpRequested = false;
+			// A plain forward departure: the arrival appends to `visited`, so
+			// the invariant "currentId is the last visited node" always holds.
+			// The breadcrumb's own history lives in NavigationTrail.
+			if (target !== this.currentIdValue) return this.depart(target, false);
+			return QUIET_STEP;
+		}
 
 		if (this.backRequested) {
 			this.backRequested = false;
