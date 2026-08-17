@@ -1,6 +1,7 @@
 /**
  * Bottom-right widget: a row of Obsidian-style icon toggles (hide UI, 3D,
- * free layout), camera center X/Y sliders and a fit-all button.
+ * free layout), fit / reset camera icon buttons and the Explore switch.
+ * Panning lives on mouse gestures; the old X/Y sliders are gone (F-06).
  */
 import { setIcon } from "obsidian";
 import { t } from "../i18n";
@@ -9,21 +10,18 @@ import type { View3DOptions } from "./ControlPanel";
 export interface CameraWidgetCallbacks {
 	onToggle3D(enabled: boolean): void;
 	onToggleFreeLayout(enabled: boolean): void;
-	onOffsetChange(x: number, y: number): void;
+	/** Frame the whole graph; never touches orientation. */
 	onFit(): void;
+	/** Deterministic home view: zero pan/orbit/zoom, then fit. */
+	onReset(): void;
 	onToggleUI(hidden: boolean): void;
 	onToggleExplore(): void;
 }
 
-const OFFSET_RANGE = 600;
-
 export class CameraWidget {
 	private root: HTMLElement;
-	private body: HTMLElement;
 	private button3d: HTMLButtonElement;
 	private buttonFree: HTMLButtonElement;
-	private sliderX: HTMLInputElement;
-	private sliderY: HTMLInputElement;
 	private exploreButton: HTMLElement;
 	private uiHidden = false;
 
@@ -53,21 +51,17 @@ export class CameraWidget {
 		});
 		this.buttonFree.toggleClass("is-active", freeLayout);
 
-		this.body = this.root.createDiv();
+		const fitButton = this.iconButton(header, "maximize", t("camera.fit"), () => this.callbacks.onFit());
+		fitButton.addClass("graph-insight-camera-secondary");
+		const resetButton = this.iconButton(header, "rotate-ccw", t("camera.reset"), () =>
+			this.callbacks.onReset()
+		);
+		resetButton.addClass("graph-insight-camera-secondary");
 
-		this.sliderX = this.offsetSlider("X");
-		this.sliderY = this.offsetSlider("Y");
-
-		const fit = this.body.createEl("button", { text: t("camera.fit"), cls: "graph-insight-camera-fit" });
-		fit.addEventListener("click", () => {
-			this.sliderX.value = "0";
-			this.sliderY.value = "0";
-			this.callbacks.onFit();
-		});
-
-		this.exploreButton = this.body.createEl("button", {
+		const body = this.root.createDiv();
+		this.exploreButton = body.createEl("button", {
 			text: t("camera.explore"),
-			cls: "graph-insight-camera-fit",
+			cls: "graph-insight-camera-fit graph-insight-camera-secondary",
 		});
 		this.exploreButton.setAttribute("aria-label", t("camera.explore.hint"));
 		this.exploreButton.addEventListener("click", () => this.callbacks.onToggleExplore());
@@ -90,20 +84,6 @@ export class CameraWidget {
 		button.setAttribute("aria-label", label);
 		button.addEventListener("click", onClick);
 		return button;
-	}
-
-	private offsetSlider(label: string): HTMLInputElement {
-		const row = this.body.createDiv({ cls: "graph-insight-camera-row" });
-		row.createSpan({ cls: "graph-insight-camera-label", text: label });
-		const slider = row.createEl("input", { type: "range" });
-		slider.min = String(-OFFSET_RANGE);
-		slider.max = String(OFFSET_RANGE);
-		slider.step = "10";
-		slider.value = "0";
-		slider.addEventListener("input", () => {
-			this.callbacks.onOffsetChange(Number(this.sliderX.value), Number(this.sliderY.value));
-		});
-		return slider;
 	}
 
 	/** Keep in step when 3D/free-layout is toggled from the main panel. */
