@@ -5,6 +5,59 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0-beta.1] — 2026-08-17
+
+Pre-release: the UX polish milestone (stages A and B of the UI polish spec).
+Settings from older versions migrate automatically on the first load.
+
+### Added
+
+- **Tasks… menu** next to the search bar: six canned jobs — explore a topic,
+  find forgotten important notes, clean up orphans, find broken links, see
+  recent activity, understand the vault structure. Each is also a command,
+  so any of them can get a hotkey. Diagnostic tasks clear the active hard
+  filter and offer Undo in the notice.
+- **Visible search states.** Typing highlights matches and shows
+  "Highlighted: N"; Enter turns the query into a hard filter with
+  "Shown: N of M" and a removable chip. A hint explains Enter until the
+  first use, `content:` searches say "Indexing…" instead of a premature
+  zero, and a broken query reports the offending operator instead of
+  silently becoming the filter. Escape first closes suggestions, then clears.
+- **Tool status line** under the toolbar: what a click will do right now,
+  including which of the two Path picks is expected, plus Follow / Side pane
+  badges. Screen-reader friendly (`aria-live`).
+- **Breadcrumb history in Focus and Explore.** Backspace, the Back button
+  and breadcrumb clicks walk one shared trail (up to 50 steps); narrow panes
+  collapse the middle into an ellipsis; deleted notes show up disabled and
+  can be removed from the trail.
+- **Topic map export.** Turn the current Focus neighborhood, Explore
+  surroundings, lasso selection or a single visible cluster into a Markdown
+  note: overview, central notes, BFS levels with link directions, links
+  inside the map. Name conflicts offer Overwrite / Create a copy / Cancel.
+- **Saved filters grew up**: explicit names instead of the first 24
+  characters, plus a manager with Apply / Edit / Duplicate / Delete and a
+  recently-used-first list. Invalid queries cannot be saved.
+- **"Restore recommended values"** in the Physics section: shows what will
+  change, applies atomically, and offers Undo until the next physics tweak.
+- **A three-step intro tour** (pick a note, try a filter, launch Explore)
+  with Next / Back / Skip / Don't show again — reopenable from Settings and
+  the command palette.
+- **Responsive floating UI.** The controls adapt to the pane's own width:
+  full (≥900 px), compact (600–899 px) and minimal (<600 px) with an
+  overflow menu for everything the width hides.
+
+### Changed
+
+- **Double-click now enters Focus mode and never opens the note** — under
+  every cursor tool. Single clicks wait one double-click window (350 ms), so
+  Hide/Pin/Path no longer fire on the first half of a double-click.
+- **The layout rule (Links/Tags/Folders/…) is remembered** — it survives
+  reloads, mode switches, and rides along in view presets.
+- **The camera widget lost its X/Y sliders**; panning stays on mouse
+  gestures. Fit whole graph and the new Reset camera are separate buttons —
+  Reset returns to a deterministic home view.
+- The Physics section's collapsed state persists between sessions.
+
 ## [0.7.2] — 2026-08-10
 
 ### Fixed
