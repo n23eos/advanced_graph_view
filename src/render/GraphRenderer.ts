@@ -10,6 +10,7 @@ import { convexHull, type Point } from "../analysis/hull";
 import { pointInPolygon } from "../analysis/geometry";
 import type { GraphModel } from "../data/GraphStore";
 import { DRAG_THRESHOLD_PX, dragTargetPosition, isDragGesture } from "./dragMath";
+import { ClickDispatcher } from "./clickDispatcher";
 import { EdgeMesh } from "./EdgeMesh";
 import { DEAD_ZONE_PX, MAX_AIM_ANGLE, pickAimedNeighbor } from "../explore/aiming";
 import { HOVER_RADIUS_PX, pickNodeAt } from "./hitTest";
@@ -41,9 +42,11 @@ const EDGE_ALPHA = 0.25;
 const NEW_LABELS_PER_FRAME = 4;
 const CULL_MIN_INTERVAL_MS = 30;
 const MIN_LABEL_SCREEN_PX = 8;
-const DOUBLE_CLICK_MS = 350;
 const HULL_FILL_ALPHA = 0.1;
 const HULL_PADDING = 18;
+/** Starting 3D orientation, shared by the 2D→3D toggle and Reset camera. */
+const DEFAULT_3D_YAW = 0.5;
+const DEFAULT_3D_PITCH = -0.3;
 /** Pin rings: present enough to spot, quiet enough not to compete with nodes. */
 const PIN_RING_ALPHA = 0.8;
 const PIN_RING_WIDTH = 1.2;
@@ -384,8 +387,8 @@ export class GraphRenderer {
 		const turningOn = enabled && !this.camera.enabled;
 		this.camera.enabled = enabled;
 		if (turningOn) {
-			this.camera.yaw = 0.5;
-			this.camera.pitch = -0.3;
+			this.camera.yaw = DEFAULT_3D_YAW;
+			this.camera.pitch = DEFAULT_3D_PITCH;
 			// Sit the camera outside the cloud looking at its center, so orbiting
 			// spins the whole scene around the center instead of turning in place.
 			this.frameCloud();
@@ -400,24 +403,15 @@ export class GraphRenderer {
 		this.reproject();
 	}
 
-	private lastOffsetX = 0;
-	private lastOffsetY = 0;
-
-	/** Shift the camera center by screen-space pixels from the view middle. */
-	setViewCenterOffset(dx: number, dy: number): void {
-		if (!this.app || !this.viewport) return;
+	/** Deterministic home view (F-06): in 3D the orbit returns to the same
+	 *  orientation the 2D→3D toggle starts with, then the whole graph is
+	 *  framed — which also rebuilds pan and zoom from scratch in 2D. */
+	resetCamera(): void {
 		if (this.camera.enabled) {
-			this.camera.strafe(dx - this.lastOffsetX, dy - this.lastOffsetY);
-			this.lastOffsetX = dx;
-			this.lastOffsetY = dy;
-			this.reproject();
-			return;
+			this.camera.yaw = DEFAULT_3D_YAW;
+			this.camera.pitch = DEFAULT_3D_PITCH;
 		}
-		this.lastOffsetX = dx;
-		this.lastOffsetY = dy;
-		const view = this.app.canvas;
-		// Keep current zoom; recenter world origin at view middle + offset.
-		this.viewport.centerOn(-dx / this.viewport.scale, -dy / this.viewport.scale, view.clientWidth, view.clientHeight);
+		this.fitAll();
 	}
 
 	/** Position the 3D camera outside the cloud, pulled back along its look
@@ -1253,8 +1247,11 @@ export class GraphRenderer {
 	/** Node under a pressed middle mouse button, resolved on release. */
 	private middlePressedId: number | null = null;
 	private draggingId: number | null = null;
-	private lastClickAt = 0;
-	private lastClickId: number | null = null;
+	/** Holds a single click back for one double-click window (F-02). */
+	private clickDispatcher = new ClickDispatcher({
+		onClick: (nodeId, event) => this.callbacks.onNodeClick(nodeId, event),
+		onDoubleClick: (nodeId) => this.callbacks.onNodeDoubleClick(nodeId),
+	});
 	private orbiting = false;
 	private orbitLastX = 0;
 	private orbitLastY = 0;
@@ -1501,15 +1498,7 @@ export class GraphRenderer {
 			this.callbacks.onNodeDragEnd(this.draggingId);
 			this.draggingId = null;
 		} else if (this.pressedId !== null && this.pressedEvent) {
-			const now = performance.now();
-			if (this.lastClickId === this.pressedId && now - this.lastClickAt < DOUBLE_CLICK_MS) {
-				this.callbacks.onNodeDoubleClick(this.pressedId);
-				this.lastClickId = null;
-			} else {
-				this.callbacks.onNodeClick(this.pressedId, this.pressedEvent);
-				this.lastClickId = this.pressedId;
-				this.lastClickAt = now;
-			}
+			this.clickDispatcher.press(this.pressedId, this.pressedEvent);
 		}
 		this.pressedId = null;
 		this.pressedEvent = null;
@@ -1574,6 +1563,7 @@ export class GraphRenderer {
 	}
 
 	destroy(): void {
+		this.clickDispatcher.cancel();
 		this.viewport?.destroy();
 		this.edgeMesh?.destroy();
 		this.edgeMesh = null;
