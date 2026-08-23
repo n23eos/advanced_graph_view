@@ -1,6 +1,6 @@
 {
 	"name": "graph-insight",
-	"version": "0.8.0-beta.3",
+	"version": "0.8.0",
 	"description": "Advanced graph view plugin for Obsidian — explore large vaults as an interactive 3D graph with clusters, PageRank and metric-driven node encoding.",
 	"main": "main.js",
 	"scripts": {
