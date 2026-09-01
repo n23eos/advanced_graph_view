@@ -1,6 +1,3 @@
-> **⭐ [Star the repo](https://github.com/n23eos/advanced_graph_view)** — that's how other people find it.
-
-
 # Advanced Graph View
 
 ![Advanced Graph View demo](assets/advanced_graph_view_demo.gif)
@@ -9,7 +6,13 @@
 
 ![Advanced Graph View — Nebula color scheme on a 9k-note vault](assets/advanced_graph_view_nebula.jpg)
 
-An advanced replacement for Obsidian's Graph View, built for large vaults (5,000–50,000 notes) where the default graph turns into a hairball. The graph becomes an analysis tool instead of a decoration: it shows what you actually use, where your knowledge hubs are, and how your vault grew over time.
+**Advanced Graph View replaces Obsidian's built-in graph for vaults of 5,000 to 50,000 notes, where the default view collapses into a hairball.** Any metric can drive node size, color or glow: PageRank, how often a note is opened, edit recency, note age, link counts, folder, tag or cluster. Rendering runs on WebGL through Pixi.js with the force layout in a Web Worker, so 10,000 nodes stay interactive. Louvain clustering names communities by TF-IDF, and overlays mark orphans, dead ends and broken links. Note opens are logged locally and compacted by day, month and year, exportable to CSV or erasable at any time.
+
+<div align="center">
+
+[![Star on GitHub](https://img.shields.io/github/stars/n23eos/advanced_graph_view?style=for-the-badge&logo=github&label=Star%20this%20repo&color=FFD700&labelColor=1a1a1a)](https://github.com/n23eos/advanced_graph_view)
+
+</div>
 
 > **Desktop only.** The renderer leans on WebGL and two Web Workers; the plugin declares `isDesktopOnly: true` and will not load on Obsidian mobile.
 
