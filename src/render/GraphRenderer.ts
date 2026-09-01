@@ -27,6 +27,7 @@ import {
 	MAX_NODE_RADIUS,
 } from "./nodeAppearance";
 import { createNodeTexture, createStarTexture, STAR_SIZE_FACTOR } from "./NodeTexture";
+import { SMOOTH_FACTOR, easePositions } from "./positionSmoothing";
 import { Camera3D } from "./projection";
 import { Viewport } from "./Viewport";
 import { isMeaningfulResize } from "./resizeGate";
@@ -200,8 +201,16 @@ export class GraphRenderer {
 	private labelHalo = 0x000000;
 
 	private model: GraphModel | null = null;
-	/** Raw xyz world positions (stride 3) straight from the layout worker. */
+	/** Raw xyz world positions (stride 3), eased toward the worker's latest
+	 *  frame — this is what actually gets drawn. */
 	private positions3: Float32Array | null = null;
+	/** The worker's latest frame; `positions3` chases it every rendered frame. */
+	private targetPositions3: Float32Array | null = null;
+	/** true while `positions3` is still short of `targetPositions3`. */
+	private smoothing = false;
+	/** false until the first worker frame lands, so a fresh model snaps into
+	 *  place instead of blooming out of the origin. */
+	private hasWorkerFrame = false;
 	/** Static z override (cluster/age depth modes); null = physics z. */
 	private depthOverride: Float32Array | null = null;
 	/** Per-node perspective scale from the last projection. */
@@ -297,6 +306,9 @@ export class GraphRenderer {
 		if (!this.app || !this.nodeTexture || !this.colors) return;
 		this.model = model;
 		this.positions3 = new Float32Array(model.nodes.length * 3);
+		this.targetPositions3 = null;
+		this.smoothing = false;
+		this.hasWorkerFrame = false;
 		this.positions = new Float32Array(model.nodes.length * 2);
 		this.depthScales = new Float32Array(model.nodes.length);
 		this.radii = new Float32Array(model.nodes.length);
@@ -334,12 +346,14 @@ export class GraphRenderer {
 		this.cullDirty = true;
 	}
 
-	/** New xyz frame from the layout worker (stride 3). */
+	/** New xyz frame from the layout worker (stride 3). It becomes the target
+	 *  the drawn positions ease toward; see `positionSmoothing`. */
 	updatePositions(positions3: Float32Array): void {
 		// While a drag is active the local pointer position is fresher than the
 		// worker frame (the worker echoes the previous drag-move), so keep the
 		// local coords — otherwise the grabbed node rubber-bands behind the
-		// cursor as stale frames overwrite it.
+		// cursor as stale frames overwrite it. Copying them into the target too
+		// leaves the grabbed node with a zero gap, so easing never tugs it back.
 		if (
 			this.draggingId !== null &&
 			this.positions3 &&
@@ -350,8 +364,24 @@ export class GraphRenderer {
 			positions3[i + 1] = this.positions3[i + 1];
 			positions3[i + 2] = this.positions3[i + 2];
 		}
-		this.positions3 = positions3;
-		this.reproject();
+		this.targetPositions3 = positions3;
+
+		// First frame of a model, or a node-count change: adopt it outright.
+		// Easing from a zeroed array would explode the graph out of the origin
+		// and hand `fitAll` a knot to frame.
+		if (
+			!this.hasWorkerFrame ||
+			!this.positions3 ||
+			this.positions3.length !== positions3.length
+		) {
+			this.positions3 = new Float32Array(positions3);
+			this.hasWorkerFrame = true;
+			this.smoothing = false;
+			this.reproject();
+			return;
+		}
+
+		this.smoothing = true;
 	}
 
 	/** Re-run the camera projection into the 2D pipeline arrays. */
@@ -930,6 +960,18 @@ export class GraphRenderer {
 	private renderFrame(): void {
 		if (this.contextLost) return;
 		if (!this.model || !this.positions || !this.radii) return;
+
+		// Close part of the gap to the worker's latest frame. Once the graph is
+		// settled `smoothing` goes false and the projection stops re-running,
+		// so an idle canvas costs nothing.
+		if (this.smoothing && this.positions3 && this.targetPositions3) {
+			this.smoothing = easePositions(
+				this.positions3,
+				this.targetPositions3,
+				SMOOTH_FACTOR
+			);
+			this.reproject();
+		}
 
 		if (this.positionsDirty) {
 			const threeD = this.camera.enabled && this.depthScales;

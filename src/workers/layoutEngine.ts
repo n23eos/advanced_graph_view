@@ -14,6 +14,7 @@ import {
 	type SimulationNodeDatum3D,
 } from "d3-force-3d";
 import { computeLayoutSeed } from "./layoutSeed";
+import { createSpringForce, type SpringLink } from "./springForce";
 import { nextTickDelay } from "./tickPacing";
 import { SETTLED_THETA, repulsionTheta } from "./repulsionAccuracy";
 
@@ -159,6 +160,20 @@ const CHARGE_STRENGTH = -50;
 const CHARGE_MAX_DISTANCE = 300;
 const LINK_DISTANCE = 40;
 
+/** Converts the link-strength slider into spring stiffness. Tuned so that at
+ *  the default elasticity the spring plus the leftover forceLink add up to
+ *  roughly the tension the old formula produced — the slider keeps its feel. */
+const SPRING_GAIN = 2.5;
+/** Edge damping at elasticity 0 …and at elasticity 1. Low damping is what
+ *  makes a stretched edge sail past its rest length and snap back. */
+const SPRING_DAMPING_INERT = 0.9;
+const SPRING_DAMPING_BOUNCY = 0.15;
+/** Velocity damping used only while a node is being dragged. Lower friction
+ *  lets the tow travel two or three hops out instead of dying on the first
+ *  neighbor. It changes how fast equilibrium is reached, never where it is,
+ *  so the graph does not contract on grab. */
+const DRAG_VELOCITY_DECAY = 0.35;
+
 /** Big graphs need proportionally weaker centering or they collapse into
  *  a solid blob: pull must balance repulsion over a sqrt(N)-sized radius. */
 function scaledCentering(base: number, nodeCount: number): number {
@@ -189,13 +204,27 @@ export function createLayoutEngine(
 	// Cluster-by-group attraction, persisted across re-inits.
 	const cluster = createClusterForce();
 	let clusterGroups: Int32Array | null = null;
+	// Hooke springs on the edges; blended against forceLink by `elasticity`.
+	const spring = createSpringForce();
 	// true = physics off (the "Отключить физику" toggle): sim never ticks.
 	let physicsDisabled = false;
 
-	// Elastic links are simply stiffer springs; the extra alphaMin keeps a
-	// residual jiggle so a stretched graph visibly snaps back.
+	// `elasticity` crossfades between two ways of holding an edge together.
+	// At 0 it is pure forceLink: a positional constraint that slides endpoints
+	// onto the rest distance and stops dead. As it rises, forceLink hands over
+	// to a real spring that overshoots and rebounds — the rubber-band feel.
 	const effectiveLinkStrength = () =>
-		Math.min(2, params.linkStrength * (1 + params.elasticity * 1.5));
+		params.linkStrength * (1 - params.elasticity);
+
+	const applySpringParams = () => {
+		spring.setParams({
+			stiffness: params.linkStrength * params.elasticity * SPRING_GAIN,
+			restLength: params.linkDistance,
+			damping:
+				SPRING_DAMPING_INERT +
+				(SPRING_DAMPING_BOUNCY - SPRING_DAMPING_INERT) * params.elasticity,
+		});
+	};
 
 	const effectiveCentering = () => {
 		const scaled = scaledCentering(params.centering, nodes.length);
@@ -315,14 +344,24 @@ export function createLayoutEngine(
 			nodes.push(node);
 		}
 
+		// Two separate arrays on purpose: d3's forceLink rewrites `source` and
+		// `target` in place, swapping the numeric ids for node objects. The
+		// spring indexes `nodes` by id, so it needs an untouched copy.
 		const links = [];
+		const springLinks: SpringLink[] = [];
+		const degrees = new Int32Array(message.nodeCount);
 		for (let e = 0; e < message.weights.length; e++) {
-			links.push({
-				source: message.edges[e * 2],
-				target: message.edges[e * 2 + 1],
-				weight: message.weights[e],
-			});
+			const source = message.edges[e * 2];
+			const target = message.edges[e * 2 + 1];
+			const weight = message.weights[e];
+			links.push({ source, target, weight });
+			springLinks.push({ source, target, weight });
+			degrees[source]++;
+			degrees[target]++;
 		}
+		spring.setLinks(springLinks);
+		spring.setDegrees(degrees);
+		applySpringParams();
 
 		simulation = forceSimulation(nodes, dimensions)
 			.force(
@@ -344,6 +383,7 @@ export function createLayoutEngine(
 			.force("y", forceY(0).strength(effectiveCentering()))
 			.force("z", dimensions === 3 ? forceZ(0).strength(effectiveCentering()) : null)
 			.force("collide", forceCollide(params.collideRadius ?? 0).strength(0.7))
+			.force("spring", spring)
 			.force("cluster", cluster)
 			.alphaMin(ALPHA_MIN)
 			.velocityDecay(params.velocityDecay)
@@ -415,6 +455,7 @@ export function createLayoutEngine(
 						if (zForce) zForce.strength(effectiveCentering());
 						(simulation.force("collide") as ReturnType<typeof forceCollide>)
 							.radius(params.collideRadius ?? 0);
+						applySpringParams();
 					}
 					break;
 				}
@@ -453,6 +494,10 @@ export function createLayoutEngine(
 					// hop by hop. Forces stay at settle values — no contraction.
 					simulation.alphaTarget(DRAG_ALPHA_TARGET);
 					if (simulation.alpha() < DRAG_GRAB_ALPHA) simulation.alpha(DRAG_GRAB_ALPHA);
+					// Ease off the friction so the tow reaches past the first hop.
+					simulation.velocityDecay(
+						Math.min(params.velocityDecay, DRAG_VELOCITY_DECAY)
+					);
 					if (!running) startTimer(DRAG_INTERVAL_MS);
 					break;
 				}
@@ -480,6 +525,7 @@ export function createLayoutEngine(
 					}
 					// Stop warming and let the sim cool where it is — no rebound.
 					simulation.alphaTarget(0);
+					simulation.velocityDecay(params.velocityDecay);
 					break;
 				}
 				case "pin": {

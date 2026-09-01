@@ -143,6 +143,67 @@ describe("dragging a node", () => {
 		expect(moved[1]).toBeGreaterThan(moved[2]);
 	});
 
+	test("the tow carries past the first hop at the damping presets ship with", () => {
+		// The presets run velocityDecay around 0.55, and at that friction the
+		// far end of a chain used to barely twitch — the graph read as loose
+		// beads rather than one connected thing. drag-start now caps damping
+		// for the duration of the drag. Measured on this fixture: hop three
+		// moved ~139 units before the cap and ~326 after it.
+		const { engine, sent } = makeEngine();
+		engine.handle({
+			type: "init",
+			nodeCount: 4,
+			edges: new Uint32Array([0, 1, 1, 2, 2, 3]),
+			weights: new Float32Array([1, 1, 1]),
+			positions: new Float32Array([0, 0, 0, 40, 0, 0, 80, 0, 0, 120, 0, 0]),
+			paused: true,
+		});
+		engine.handle({ type: "params", params: { ...BASE_PARAMS, velocityDecay: 0.55 } });
+		stepTimes(engine, 600);
+		const before = [2, 3].map((id) => positionOf(sent, id));
+
+		// Act: haul the end of the chain a long way sideways
+		engine.handle({ type: "drag-start", id: 0 });
+		engine.handle({ type: "drag-move", id: 0, x: 0, y: 900, z: 0 });
+		stepTimes(engine, 40);
+
+		// Assert: hops two and three both come along for the ride
+		const moved = [2, 3].map((id, i) => {
+			const now = positionOf(sent, id);
+			return Math.hypot(now[0] - before[i][0], now[1] - before[i][1]);
+		});
+		expect(moved[0]).toBeGreaterThan(350);
+		expect(moved[1]).toBeGreaterThan(250);
+	});
+
+	test("releasing hands damping back to the user's setting", () => {
+		// drag-start drops velocityDecay so the tow travels. If drag-end forgot
+		// to put it back, every drag would permanently leave the graph slacker
+		// than the slider says.
+		const drift = (velocityDecay: number): number => {
+			const { engine, sent } = makeEngine();
+			engine.handle(STAR_INIT);
+			engine.handle({ type: "params", params: { ...BASE_PARAMS, velocityDecay } });
+			stepTimes(engine, 600);
+
+			engine.handle({ type: "drag-start", id: 0 });
+			engine.handle({ type: "drag-move", id: 0, x: 400, y: 400, z: 0 });
+			stepTimes(engine, 40);
+			engine.handle({ type: "drag-end" });
+
+			const before = [1, 2, 3].map((id) => positionOf(sent, id));
+			stepTimes(engine, 40);
+			return [1, 2, 3].reduce((total, id, i) => {
+				const now = positionOf(sent, id);
+				return total + Math.hypot(now[0] - before[i][0], now[1] - before[i][1]);
+			}, 0);
+		};
+
+		// Assert: heavy damping settles the release faster than light damping,
+		// which can only happen if the released sim is using params again.
+		expect(drift(0.8)).toBeLessThan(drift(0.3));
+	});
+
 	test("the graph does not contract while a node is dragged", () => {
 		// Regression (fix(drag): stop the whole graph contracting while dragging):
 		// grabbing a node used to boost centering, shrinking the entire layout.
