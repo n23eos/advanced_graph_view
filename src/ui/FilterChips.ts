@@ -16,31 +16,45 @@ export interface FilterChipsCallbacks {
 }
 
 export class FilterChips {
+	private static nextId = 0;
 	private root: HTMLElement;
-	private tagButton: HTMLElement;
-	private folderButton: HTMLElement;
+	private tagButton: HTMLButtonElement;
+	private folderButton: HTMLButtonElement;
 	private menu: HTMLElement;
+	private menuId: string;
 	private openKind: "tags" | "folders" | null = null;
 	private tags: string[] = [];
 	private folders: string[] = [];
 	private selection: FilterSelection = { tags: new Set(), folders: new Set() };
+	private filterFrame: number | null = null;
 
 	constructor(host: HTMLElement, private readonly callbacks: FilterChipsCallbacks) {
 		this.root = host.createDiv({ cls: "graph-insight-filters" });
+		this.menuId = `graph-insight-filter-menu-${FilterChips.nextId++}`;
 		this.tagButton = this.makeButton(t("filters.tags"));
 		this.folderButton = this.makeButton(t("filters.folders"));
 		this.tagButton.addEventListener("click", () => this.toggleMenu("tags"));
 		this.folderButton.addEventListener("click", () => this.toggleMenu("folders"));
 
 		this.menu = this.root.createDiv({ cls: "graph-insight-filter-menu" });
+		this.menu.id = this.menuId;
 		this.menu.hide();
+		this.menu.addEventListener("keydown", (event) => {
+			if (event.key !== "Escape") return;
+			event.preventDefault();
+			event.stopPropagation();
+			this.closeMenu(true);
+		});
 
 		// Click outside closes the dropdown.
 		document.addEventListener("click", this.handleOutsideClick, true);
 	}
 
-	private makeButton(label: string): HTMLElement {
+	private makeButton(label: string): HTMLButtonElement {
 		const button = this.root.createEl("button", { cls: "graph-insight-filter-btn", text: label });
+		button.setAttribute("aria-haspopup", "true");
+		button.setAttribute("aria-controls", this.menuId);
+		button.setAttribute("aria-expanded", "false");
 		return button;
 	}
 
@@ -63,14 +77,22 @@ export class FilterChips {
 		this.tags = tags;
 		this.folders = folders;
 		// Drop selections that no longer exist in the vault.
+		let selectionChanged = false;
 		for (const tag of [...this.selection.tags]) {
-			if (!tags.includes(tag)) this.selection.tags.delete(tag);
+			if (!tags.includes(tag)) {
+				this.selection.tags.delete(tag);
+				selectionChanged = true;
+			}
 		}
 		for (const folder of [...this.selection.folders]) {
-			if (!folders.includes(folder)) this.selection.folders.delete(folder);
+			if (!folders.includes(folder)) {
+				this.selection.folders.delete(folder);
+				selectionChanged = true;
+			}
 		}
 		this.refreshLabels();
 		if (this.openKind) this.renderMenu(this.openKind);
+		if (selectionChanged) this.emit();
 	}
 
 	private toggleMenu(kind: "tags" | "folders"): void {
@@ -81,16 +103,22 @@ export class FilterChips {
 		this.openKind = kind;
 		this.renderMenu(kind);
 		this.menu.show();
+		this.refreshExpandedState();
+		this.menu.querySelector<HTMLInputElement>("input[type=search]")?.focus();
 	}
 
-	private closeMenu(): void {
+	private closeMenu(restoreFocus = false): void {
+		const trigger = this.openKind === "tags" ? this.tagButton : this.folderButton;
+		if (this.filterFrame !== null) window.cancelAnimationFrame(this.filterFrame);
+		this.filterFrame = null;
 		this.openKind = null;
 		this.menu.hide();
+		this.refreshExpandedState();
+		if (restoreFocus) trigger.focus();
 	}
 
 	private renderMenu(kind: "tags" | "folders"): void {
 		this.menu.empty();
-		const values = kind === "tags" ? this.tags : this.folders;
 		const selected = kind === "tags" ? this.selection.tags : this.selection.folders;
 
 		const header = this.menu.createDiv({ cls: "graph-insight-filter-menu-header" });
@@ -102,23 +130,63 @@ export class FilterChips {
 			this.renderMenu(kind);
 		});
 
-		if (values.length === 0) {
-			this.menu.createDiv({ cls: "graph-insight-panel-hint", text: t("filters.empty") });
-			return;
+		const search = this.menu.createEl("input", {
+			type: "search",
+			cls: "graph-insight-filter-search",
+			placeholder: t("filters.search"),
+		});
+		search.setAttribute("aria-label", kind === "tags" ? t("filters.vaultTags") : t("filters.vaultFolders"));
+		search.addEventListener("input", () => {
+			if (this.filterFrame !== null) window.cancelAnimationFrame(this.filterFrame);
+			this.filterFrame = window.requestAnimationFrame(() => {
+				this.filterFrame = null;
+				this.renderList(kind, search.value);
+				// Restore after the visibility changes have reached layout/AX, not in
+				// the same frame that invalidated that tree.
+				window.requestAnimationFrame(() => search.focus({ preventScroll: true }));
+			});
+		});
+		this.renderList(kind, "");
+	}
+
+	private renderList(kind: "tags" | "folders", query: string): void {
+		const values = kind === "tags" ? this.tags : this.folders;
+		const selected = kind === "tags" ? this.selection.tags : this.selection.folders;
+		const needle = query.trim().toLocaleLowerCase();
+		let list = this.menu.querySelector<HTMLElement>(".graph-insight-filter-list");
+		if (!list) {
+			list = this.menu.createDiv({ cls: "graph-insight-filter-list" });
+			// Build the rows once per menu opening. Replacing this subtree on every
+			// keystroke makes native accessibility APIs drop the input focus.
+			const ordered = [...values].sort((a, b) => Number(selected.has(b)) - Number(selected.has(a)));
+			for (const value of ordered) {
+				const row = list.createEl("label", { cls: "graph-insight-filter-row" });
+				row.dataset.filterValue = value.toLocaleLowerCase();
+				const checkbox = row.createEl("input", { type: "checkbox" });
+				checkbox.checked = selected.has(value);
+				row.createSpan({ text: kind === "tags" ? `#${value}` : value });
+				checkbox.addEventListener("change", () => {
+					if (checkbox.checked) selected.add(value);
+					else selected.delete(value);
+					this.emit();
+					const search = this.menu.querySelector<HTMLInputElement>("input[type=search]");
+					this.renderList(kind, search?.value ?? "");
+				});
+			}
 		}
 
-		const list = this.menu.createDiv({ cls: "graph-insight-filter-list" });
-		for (const value of values) {
-			const row = list.createEl("label", { cls: "graph-insight-filter-row" });
-			const checkbox = row.createEl("input", { type: "checkbox" });
-			checkbox.checked = selected.has(value);
-			row.createSpan({ text: kind === "tags" ? `#${value}` : value });
-			checkbox.addEventListener("change", () => {
-				if (checkbox.checked) selected.add(value);
-				else selected.delete(value);
-				this.emit();
-			});
+		let visible = 0;
+		for (const row of list.querySelectorAll<HTMLElement>(".graph-insight-filter-row")) {
+			const checkbox = row.querySelector<HTMLInputElement>("input[type=checkbox]");
+			const show = !needle || checkbox?.checked === true || row.dataset.filterValue?.includes(needle) === true;
+			row.hidden = !show;
+			if (show) visible++;
 		}
+		let empty = this.menu.querySelector<HTMLElement>(".graph-insight-filter-empty");
+		if (visible === 0 && !empty) {
+			empty = this.menu.createDiv({ cls: "graph-insight-panel-hint graph-insight-filter-empty", text: t("filters.empty") });
+		}
+		if (visible > 0) empty?.remove();
 	}
 
 	private emit(): void {
@@ -138,9 +206,17 @@ export class FilterChips {
 		);
 		this.tagButton.toggleClass("is-active", tagCount > 0);
 		this.folderButton.toggleClass("is-active", folderCount > 0);
+		this.tagButton.setAttribute("aria-pressed", String(tagCount > 0));
+		this.folderButton.setAttribute("aria-pressed", String(folderCount > 0));
+	}
+
+	private refreshExpandedState(): void {
+		this.tagButton.setAttribute("aria-expanded", String(this.openKind === "tags"));
+		this.folderButton.setAttribute("aria-expanded", String(this.openKind === "folders"));
 	}
 
 	destroy(): void {
+		if (this.filterFrame !== null) window.cancelAnimationFrame(this.filterFrame);
 		document.removeEventListener("click", this.handleOutsideClick, true);
 		this.root.remove();
 	}

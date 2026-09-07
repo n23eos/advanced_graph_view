@@ -27,6 +27,18 @@ export function createStarTexture(renderer: Renderer): Texture {
 	return buildTexture(renderer, STAR_GLOW_SPREAD, STAR_GLOW_LAYERS, 0.09, 0.012);
 }
 
+/** Hollow style that remains distinct on both light and dark themes. */
+export function createRingTexture(renderer: Renderer): Texture {
+	const g = new Graphics();
+	const radius = NODE_TEXTURE_RADIUS * 0.82;
+	g.circle(NODE_TEXTURE_RADIUS, NODE_TEXTURE_RADIUS, radius);
+	g.fill({ color: 0xffffff, alpha: 0.12 });
+	g.stroke({ color: 0xffffff, alpha: 1, width: NODE_TEXTURE_RADIUS * 0.18 });
+	const texture = renderer.generateTexture({ target: g, resolution: 2 });
+	g.destroy();
+	return texture;
+}
+
 function buildTexture(
 	renderer: Renderer,
 	spread: number,

@@ -34,12 +34,14 @@ export class TimelineBar {
 		this.root = host.createDiv({ cls: "graph-insight-timeline" });
 
 		this.playButton = this.root.createEl("button", { text: "⏵" });
+		this.playButton.setAttribute("aria-label", t("layers.timeline"));
 		this.playButton.addEventListener("click", () => this.togglePlay());
 
 		const sliderWrap = this.root.createDiv({ cls: "graph-insight-timeline-slider" });
 		this.sparklineCanvas = sliderWrap.createEl("canvas", { cls: "graph-insight-timeline-spark" });
 		this.slider = sliderWrap.createEl("input", { type: "range" });
 		this.slider.min = "0";
+		this.slider.setAttribute("aria-label", `${t("layers.timeline")}: ${t("timeline.created")}`);
 		this.slider.addEventListener("input", () => {
 			this.stopPlay();
 			this.emitCutoff();
@@ -48,10 +50,12 @@ export class TimelineBar {
 		this.labelEl = this.root.createSpan({ cls: "graph-insight-timeline-label" });
 
 		const modeSelect = this.root.createEl("select", { cls: "dropdown" });
+		modeSelect.setAttribute("aria-label", t("layers.timeline"));
 		modeSelect.createEl("option", { text: t("timeline.created"), value: "created" });
 		modeSelect.createEl("option", { text: t("timeline.modified"), value: "modified" });
 		modeSelect.addEventListener("change", () => {
 			this.mode = modeSelect.value as TimelineMode;
+			this.slider.setAttribute("aria-label", `${t("layers.timeline")}: ${t(`timeline.${this.mode}`)}`);
 			this.callbacks.onModeChange(this.mode);
 		});
 
@@ -75,6 +79,13 @@ export class TimelineBar {
 		this.stopPlay();
 		this.root.hide();
 		this.callbacks.onCutoffChange(null);
+	}
+
+	/** Move to the all-time endpoint without emitting a duplicate callback. */
+	resetCutoff(): void {
+		this.stopPlay();
+		this.slider.value = this.slider.max;
+		this.updateLabel();
 	}
 
 	private currentIndex(): number {

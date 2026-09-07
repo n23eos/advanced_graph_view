@@ -10,7 +10,7 @@ import {
 	type View,
 	type WorkspaceLeaf,
 } from "obsidian";
-import { buildAdjacency, computeDistances, focusFalloff, shortestPath } from "../analysis/focus";
+import { buildAdjacency, computeDistances, focusFalloff, shortestPath, type Adjacency } from "../analysis/focus";
 import { nameClusters, type ClusterContent } from "../analysis/clusterNames";
 import { computeOverlayMask, countOverlayMatches } from "../analysis/overlays";
 import { buildGraphModel, type GraphModel } from "../data/GraphStore";
@@ -19,7 +19,9 @@ import { countRecentOpens } from "../data/UsageTracker";
 import type { PositionMap } from "../data/persistence";
 import { buildEncoding, type NodeEncoding } from "../encoding/encode";
 import { categoryColor } from "../encoding/colorScales";
+import { metricLabel } from "../encoding/metricLabels";
 import { activePreset, isLightTheme } from "../render/theme";
+import { effectiveNodeStyle } from "../render/nodeStyle";
 import type { NodeFacts } from "../encoding/metrics";
 import { ExploreSession } from "../explore/ExploreSession";
 import { DEFAULT_EXPLORE_TUNING } from "../explore/ExploreController";
@@ -65,12 +67,13 @@ import {
 	contentNeedles, parseQuery, matchesQuery, validateQuery,
 	type ParsedQuery, type QueryDiagnostic,
 } from "../query/QueryParser";
-import { SearchBar, type SearchMode } from "../ui/SearchBar";
+import { SearchBar, type SearchConstraint, type SearchMode } from "../ui/SearchBar";
 import type { SearchPreset } from "../settings/schema";
 import { sortSearchPresets } from "../settings/searchPresets";
 import { SearchPresetModal } from "../ui/SearchPresetModal";
 import { SearchPresetManagerModal } from "../ui/SearchPresetManagerModal";
 import { FilterChips, type FilterSelection } from "../ui/FilterChips";
+import { compileChipFilter } from "../ui/chipFilter";
 import { PromptModal } from "../ui/PromptModal";
 import { TimelineBar, type TimelineMode } from "../ui/TimelineBar";
 import { CameraWidget } from "../ui/CameraWidget";
@@ -131,6 +134,8 @@ export class GraphInsightView extends ItemView {
 	private panel: ControlPanel | null = null;
 	/** needle → set of matching paths, built lazily on Enter. */
 	private contentIndex = new Map<string, Set<string>>();
+	private contentIndexGeneration = 0;
+	private visualFrame: number | null = null;
 	private legend: Legend | null = null;
 	/** Pane beside the graph that notes open into while side-pane mode is on.
 	 *  Remembered by id, not by object: Obsidian can rebuild the leaf behind
@@ -138,6 +143,8 @@ export class GraphInsightView extends ItemView {
 	private companionLeafId: string | null = null;
 	/** Placeholder shown instead of a blank canvas when the vault has no notes. */
 	private emptyState: HTMLElement | null = null;
+	/** Distinguishes an empty result from a genuinely empty vault. */
+	private filteredEmptyState: HTMLElement | null = null;
 	private searchBar: SearchBar | null = null;
 	private filterChips: FilterChips | null = null;
 	/** Tag/folder picks from the dedicated dropdowns (OR inside, AND across). */
@@ -165,6 +172,8 @@ export class GraphInsightView extends ItemView {
 	private searchCounts = { softMatched: 0, visible: 0, total: 0 };
 	private focusRootId: number | null = null;
 	private focusDepth = 2;
+	private adjacencyCache: { model: GraphModel; value: Adjacency } | null = null;
+	private focusDistanceCache: { model: GraphModel; rootId: number; depth: number; value: Int16Array } | null = null;
 	private timeline: TimelineBar | null = null;
 	private cameraWidget: CameraWidget | null = null;
 	private timelineCutoff: number | null = null;
@@ -314,7 +323,7 @@ export class GraphInsightView extends ItemView {
 			onQueryChange: (query) => {
 				this.softQuery = query.trim() ? parseQuery(query) : null;
 				this.searchParseError = undefined;
-				this.recomputeVisual();
+				this.scheduleVisualRecompute();
 			},
 			onCommit: (query) => {
 				const trimmed = query.trim();
@@ -349,9 +358,11 @@ export class GraphInsightView extends ItemView {
 			},
 			onSavePreset: (query) => this.savePreset(query),
 			onPresetApplied: (id) => void this.markPresetUsed(id),
-			onManagePresets: () => this.openPresetManager(),
-			onTasksMenu: (anchor) => this.showTasksMenu(anchor),
-		});
+				onManagePresets: () => this.openPresetManager(),
+				onTasksMenu: (anchor) => this.showTasksMenu(anchor),
+				onConstraintRemove: (id) => this.removeConstraint(id),
+				onResetConstraints: () => void this.resetViewState(),
+			});
 		this.searchBar.setPresets(sortSearchPresets(this.plugin.settings.presets));
 		this.filterChips = new FilterChips(this.searchBar.filtersHost, {
 			onChange: (selection) => {
@@ -441,7 +452,11 @@ export class GraphInsightView extends ItemView {
 
 		await this.rebuildGraph();
 
-		this.registerEvent(this.app.metadataCache.on("resolved", () => this.rebuildDebounced()));
+		this.registerEvent(this.app.metadataCache.on("resolved", () => {
+			this.contentIndex.clear();
+			this.contentIndexGeneration++;
+			this.rebuildDebounced();
+		}));
 		this.registerEvent(
 			this.app.workspace.on("file-open", (file) => this.handleActiveNoteChanged(file))
 		);
@@ -457,6 +472,7 @@ export class GraphInsightView extends ItemView {
 
 	private handleKeyDown(event: KeyboardEvent): void {
 		if (!this.contentEl.isShown()) return;
+		if (this.app.workspace.getActiveViewOfType(GraphInsightView) !== this) return;
 		const target = event.target as HTMLElement | null;
 		// Don't hijack keys while the user is editing the search box etc.
 		if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
@@ -494,7 +510,7 @@ export class GraphInsightView extends ItemView {
 		if (this.focusRootId !== null) {
 			this.exitFocus();
 		} else if (this.hasActiveViewState()) {
-			this.resetViewState();
+				void this.resetViewState();
 		}
 	}
 
@@ -508,7 +524,7 @@ export class GraphInsightView extends ItemView {
 			return;
 		}
 		const path = shortestPath(
-			buildAdjacency(this.model),
+			this.graphAdjacency(),
 			this.model.nodes.length,
 			this.pathAnchor,
 			nodeId
@@ -1040,7 +1056,7 @@ export class GraphInsightView extends ItemView {
 		this.tooltip?.hide();
 		this.exploreSession = new ExploreSession(
 			this.renderer,
-			buildAdjacency(this.model),
+			this.graphAdjacency(),
 			centerId,
 			{
 				onFocusChanged: (id, neighbors) => {
@@ -1185,18 +1201,32 @@ export class GraphInsightView extends ItemView {
 
 	private currentFocusDistances(): Int16Array | null {
 		if (!this.model || this.focusRootId === null) return null;
-		return computeDistances(
-			buildAdjacency(this.model),
-			this.model.nodes.length,
-			this.focusRootId,
-			this.focusDepth
-		);
+		const cached = this.focusDistanceCache;
+		if (cached?.model === this.model && cached.rootId === this.focusRootId && cached.depth === this.focusDepth) {
+			return cached.value;
+		}
+		const value = computeDistances(this.graphAdjacency(), this.model.nodes.length, this.focusRootId, this.focusDepth);
+		this.focusDistanceCache = { model: this.model, rootId: this.focusRootId, depth: this.focusDepth, value };
+		return value;
+	}
+
+	private graphAdjacency(): Adjacency {
+		if (!this.model) return [];
+		if (this.adjacencyCache?.model === this.model) return this.adjacencyCache.value;
+		const value = buildAdjacency(this.model);
+		this.adjacencyCache = { model: this.model, value };
+		this.focusDistanceCache = null;
+		return value;
 	}
 
 	// ── Visual state composition ──────────────────────────────────────
 
 	/** One place that folds search/focus/hidden sets into renderer masks. */
 	private recomputeVisual(): void {
+		if (this.visualFrame !== null) {
+			window.cancelAnimationFrame(this.visualFrame);
+			this.visualFrame = null;
+		}
 		if (!this.renderer || !this.model) return;
 		const count = this.model.nodes.length;
 		const now = Date.now();
@@ -1222,15 +1252,10 @@ export class GraphInsightView extends ItemView {
 		// Tag/folder dropdowns: OR within a list, AND between the two lists.
 		const { tags: pickedTags, folders: pickedFolders } = this.chipFilter;
 		if (pickedTags.size > 0 || pickedFolders.size > 0) {
+			const chipMatcher = compileChipFilter(pickedTags, pickedFolders);
 			for (let i = 0; i < count; i++) {
 				const facts = this.facts[i];
-				const tagOk =
-					pickedTags.size === 0 ||
-					facts.tags.some((tag) => pickedTags.has(tag) || [...pickedTags].some((p) => tag.startsWith(`${p}/`)));
-				const folderOk =
-					pickedFolders.size === 0 ||
-					[...pickedFolders].some((f) => facts.folder === f || facts.folder.startsWith(`${f}/`));
-				if (!tagOk || !folderOk) hide(i);
+				if (!chipMatcher.matches(facts)) hide(i);
 			}
 		}
 		if (this.hiddenClusters.size > 0 && this.metrics) {
@@ -1260,7 +1285,7 @@ export class GraphInsightView extends ItemView {
 				factors[i] = matched ? 1 : 0.12;
 				if (matched) {
 					highlight[i] = 1;
-					softMatched++;
+					if (!hidden || hidden[i] !== 1) softMatched++;
 				}
 			}
 		}
@@ -1319,6 +1344,15 @@ export class GraphInsightView extends ItemView {
 		// second query pass (§9: one pass per frame on 50k nodes).
 		this.searchCounts = { softMatched, visible: count - hiddenCount, total: count };
 		this.pushSearchUi();
+		this.updateFilteredEmptyState(count - hiddenCount, this.activeConstraints().length > 0 || this.hardQuery !== null);
+	}
+
+	private scheduleVisualRecompute(): void {
+		if (this.visualFrame !== null) return;
+		this.visualFrame = window.requestAnimationFrame(() => {
+			this.visualFrame = null;
+			this.recomputeVisual();
+		});
 	}
 
 	/** Report mode, counts and errors to the search bar. */
@@ -1328,10 +1362,48 @@ export class GraphInsightView extends ItemView {
 			mode,
 			query: this.hardQueryText,
 			matchedCount: mode === "highlight" ? this.searchCounts.softMatched : this.searchCounts.visible,
+			visibleCount: this.searchCounts.visible,
 			totalCount: this.searchCounts.total,
 			isIndexingContent: this.contentIndexJobs > 0,
 			parseError: this.searchParseError,
+			constraints: this.activeConstraints(),
 		});
+	}
+
+	private activeConstraints(): SearchConstraint[] {
+		const constraints: SearchConstraint[] = [];
+		for (const tag of this.chipFilter.tags) {
+			constraints.push({ id: `tag:${encodeURIComponent(tag)}`, label: `#${tag}` });
+		}
+		for (const folder of this.chipFilter.folders) {
+			constraints.push({ id: `folder:${encodeURIComponent(folder)}`, label: folder });
+		}
+		for (const cluster of this.hiddenClusters) {
+			constraints.push({
+				id: `cluster:${cluster}`,
+				label: `${t("panel.section.clusters")}: ${this.clusterNames[cluster] ?? `#${cluster}`}`,
+			});
+		}
+		if (this.hiddenNodes.size > 0) {
+			constraints.push({ id: "hidden-nodes", label: `${t("layers.hidden")} · ${this.hiddenNodes.size}` });
+		}
+		if (this.timelineCutoff !== null) constraints.push({ id: "timeline", label: t("layers.timeline") });
+		return constraints;
+	}
+
+	private removeConstraint(id: string): void {
+		if (id.startsWith("tag:")) this.chipFilter.tags.delete(decodeURIComponent(id.slice(4)));
+		else if (id.startsWith("folder:")) this.chipFilter.folders.delete(decodeURIComponent(id.slice(7)));
+		else if (id.startsWith("cluster:")) this.hiddenClusters.delete(Number(id.slice(8)));
+		else if (id === "hidden-nodes") this.hiddenNodes.clear();
+		else if (id === "timeline") {
+			this.timelineCutoff = null;
+			this.timeline?.resetCutoff();
+		}
+		this.filterChips?.setSelection(this.chipFilter);
+		this.panel?.setHiddenNodeCount(this.hiddenNodes.size);
+		void this.plugin.saveChipFilter({ tags: [...this.chipFilter.tags], folders: [...this.chipFilter.folders] });
+		this.recomputeVisual();
 	}
 
 	/** Scan note bodies for content-search needles not yet indexed. */
@@ -1339,10 +1411,13 @@ export class GraphInsightView extends ItemView {
 		const missing = needles.filter((n) => !this.contentIndex.has(n));
 		if (missing.length === 0) return;
 		const files = this.app.vault.getMarkdownFiles();
+		const generation = this.contentIndexGeneration;
 		for (const needle of missing) this.contentIndex.set(needle, new Set());
 		// While the scan runs the bar says "Indexing…" instead of a count that
 		// would wrongly read as the final (often zero) result.
 		this.contentIndexJobs++;
+		this.filteredEmptyState?.remove();
+		this.filteredEmptyState = null;
 		this.pushSearchUi();
 		try {
 			for (const file of files) {
@@ -1352,6 +1427,7 @@ export class GraphInsightView extends ItemView {
 				} catch {
 					continue;
 				}
+				if (generation !== this.contentIndexGeneration) return;
 				for (const needle of missing) {
 					if (text.includes(needle)) this.contentIndex.get(needle)!.add(file.path);
 				}
@@ -1359,7 +1435,7 @@ export class GraphInsightView extends ItemView {
 		} finally {
 			this.contentIndexJobs--;
 		}
-		this.recomputeVisual();
+		if (generation === this.contentIndexGeneration) this.recomputeVisual();
 	}
 
 	// ── Menus ─────────────────────────────────────────────────────────
@@ -1622,10 +1698,25 @@ export class GraphInsightView extends ItemView {
 			this.emptyState = null;
 			return;
 		}
+		this.filteredEmptyState?.remove();
+		this.filteredEmptyState = null;
 		if (this.emptyState) return;
 		this.emptyState = this.contentEl.createDiv({ cls: "graph-insight-empty" });
 		this.emptyState.createDiv({ cls: "graph-insight-empty-title", text: t("empty.title") });
 		this.emptyState.createDiv({ cls: "graph-insight-empty-body", text: t("empty.body") });
+	}
+
+	private updateFilteredEmptyState(visibleCount: number, hasRestrictions: boolean): void {
+		if (visibleCount > 0 || !hasRestrictions || this.searchCounts.total === 0 || this.contentIndexJobs > 0) {
+			this.filteredEmptyState?.remove();
+			this.filteredEmptyState = null;
+			return;
+		}
+		if (this.filteredEmptyState) return;
+		this.filteredEmptyState = this.contentEl.createDiv({ cls: "graph-insight-empty graph-insight-filtered-empty" });
+		this.filteredEmptyState.createDiv({ cls: "graph-insight-empty-title", text: t("filters.empty") });
+		const reset = this.filteredEmptyState.createEl("button", { text: t("layers.showAll") });
+		reset.addEventListener("click", () => void this.resetViewState());
 	}
 
 	/**
@@ -1904,7 +1995,7 @@ export class GraphInsightView extends ItemView {
 	private applyEncoding(state: PanelState): void {
 		if (!this.renderer || this.facts.length === 0) return;
 		const preset = activePreset(state.colorPreset);
-		this.renderer.setVisualStyle(preset.glow === true, preset.backdrop ?? null);
+		this.renderer.setVisualStyle(effectiveNodeStyle(state.nodeStyle, isLightTheme()), preset.backdrop ?? null);
 		this.encoding = buildEncoding(
 			this.facts, state.channels, state.colorPreset, Date.now(), isLightTheme()
 		);
@@ -1968,6 +2059,10 @@ export class GraphInsightView extends ItemView {
 			meta.createDiv({
 				text: t("tooltip.edited", { date: new Date(facts.mtime).toLocaleDateString() }),
 			});
+			const channels = this.plugin.settings.panel.channels;
+			const encoding = this.tooltip.createDiv({ cls: "graph-insight-tooltip-encoding" });
+			if (channels.size) encoding.createSpan({ text: `${t("appearance.size")}: ${metricLabel(channels.size)}` });
+			if (channels.color) encoding.createSpan({ text: `${t("appearance.color")}: ${metricLabel(channels.color)}` });
 		}
 		this.tooltip.show();
 
@@ -2107,7 +2202,7 @@ export class GraphInsightView extends ItemView {
 			onClusterToggle: (index) => this.toggleCluster(index),
 			onTrailReplay: () => this.replayTrail(),
 			onShowHiddenNodes: () => this.resetHiddenNodes(),
-			onResetViewState: () => this.resetViewState(),
+			onResetViewState: () => void this.resetViewState(),
 			onPresetApply: (index) => void this.applyViewPreset(index),
 			onPresetSaveRequest: () => {
 				new PromptModal(this.app, t("prompt.presetTitle"), t("prompt.presetDefault"), (name) =>
@@ -2462,11 +2557,15 @@ export class GraphInsightView extends ItemView {
 			this.pathDrawn ||
 			this.chipFilter.tags.size > 0 ||
 			this.chipFilter.folders.size > 0
+			|| this.timelineCutoff !== null
+			|| this.changesHighlight !== null
 		);
 	}
 
 	/** One button to undo every temporary visual state. */
-	private resetViewState(): void {
+	private async resetViewState(): Promise<void> {
+		if (this.isExploring) await this.exitExplore();
+		if (this.focusRootId !== null) this.exitFocus();
 		this.hiddenNodes.clear();
 		this.hiddenClusters.clear();
 		this.softQuery = null;
@@ -2478,9 +2577,14 @@ export class GraphInsightView extends ItemView {
 		this.focusRootId = null;
 		this.focusBar?.hide();
 		this.chipFilter = { tags: new Set(), folders: new Set() };
+		this.timelineCutoff = null;
+		this.timeline?.resetCutoff();
+		this.changesSelection = { ...this.changesSelection, category: null };
+		this.changesHighlight = null;
+		this.changesPanel?.setState(this.changesSelection.periodDays, null);
 		this.filterChips?.setSelection(this.chipFilter);
 		void this.plugin.saveChipFilter({ tags: [], folders: [] });
-		this.searchBar?.clear();
+		this.searchBar?.resetInput();
 		this.renderer?.setSelected(null);
 		this.renderer?.setHighlightMask(null);
 		this.renderer?.setAlphaFactors(null);
@@ -2570,6 +2674,7 @@ export class GraphInsightView extends ItemView {
 		this.filterChips?.destroy();
 		this.filterChips = null;
 		if (this.trailReplayFrame !== null) window.cancelAnimationFrame(this.trailReplayFrame);
+		if (this.visualFrame !== null) window.cancelAnimationFrame(this.visualFrame);
 		this.timeline?.destroy();
 		this.timeline = null;
 		this.cameraWidget?.destroy();
@@ -2631,4 +2736,3 @@ function collectVocabulary(facts: NodeFacts[]): [string[], string[]] {
 	const byCount = (m: Map<string, number>) => [...m.entries()].sort((x, y) => y[1] - x[1]).map(([k]) => k);
 	return [byCount(tagCounts), byCount(folderCounts)];
 }
-

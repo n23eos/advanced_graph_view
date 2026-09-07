@@ -1,6 +1,7 @@
 import { describe, expect, it, test } from "vitest";
 import { DEFAULT_VIEW_PRESETS, RETIRED_VIEW_PRESETS, ensureBuiltinPreset } from "./builtinPresets";
 import { en } from "../i18n/locales/en";
+import { nodeStyleFromPreset } from "../render/nodeStyle";
 
 const byId = (id: string) => DEFAULT_VIEW_PRESETS.find((preset) => preset.builtinId === id);
 
@@ -20,6 +21,12 @@ describe("bundled view presets", () => {
 	it("never ships a preset whose name is on the retired list", () => {
 		const retired = DEFAULT_VIEW_PRESETS.filter((preset) => RETIRED_VIEW_PRESETS.has(preset.name));
 		expect(retired).toEqual([]);
+	});
+
+	it("preserves the palette-driven node appearance of every bundled preset", () => {
+		for (const preset of DEFAULT_VIEW_PRESETS) {
+			expect(preset.panel.nodeStyle).toBe(nodeStyleFromPreset(preset.panel.colorPreset));
+		}
 	});
 
 	it("leaves overlays off on the non-diagnostic presets", () => {

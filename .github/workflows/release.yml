@@ -18,7 +18,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
 
       - name: Install dependencies
@@ -64,8 +64,13 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.ref_name }}
         run: |
+          release_flags=()
+          if [[ "$TAG" == *-* ]]; then
+            release_flags+=(--prerelease)
+          fi
           gh release create "$TAG" \
             --title "Advanced Graph View $TAG" \
             --generate-notes \
+            "${release_flags[@]}" \
             main.js manifest.json styles.css \
             || gh release upload "$TAG" main.js manifest.json styles.css --clobber

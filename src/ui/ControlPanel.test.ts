@@ -79,3 +79,17 @@ describe("tasks entry in the simple panel (F-01)", () => {
 		expect(onTasksMenu).toHaveBeenCalledTimes(1);
 	});
 });
+
+describe("node style", () => {
+	test("expert mode exposes and persists the node style", () => {
+		const onChange = vi.fn();
+		const { host } = build({ ...DEFAULT_3D_PANEL, nodeStyle: "glow" }, "expert", { onChange });
+		const select = Array.from(host.querySelectorAll("select")).find((candidate) =>
+			Array.from(candidate.options).some((option) => option.value === "ring")
+		);
+		expect(select?.value).toBe("glow");
+		select!.value = "ring";
+		select!.dispatchEvent(new Event("change"));
+		expect((onChange.mock.calls[0][0] as PanelState).nodeStyle).toBe("ring");
+	});
+});

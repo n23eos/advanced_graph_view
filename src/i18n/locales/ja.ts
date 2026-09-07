@@ -44,6 +44,10 @@ export const ja: Translation = {
 	"appearance.color": "色",
 	"appearance.glow": "グロー",
 	"appearance.colorScheme": "配色",
+	"appearance.nodeStyle": "ノードスタイル",
+	"nodeStyle.flat": "フラット",
+	"nodeStyle.glow": "グロー",
+	"nodeStyle.ring": "リング",
 	"appearance.colorHint": "「色」チャンネルに指標を割り当てるとノードが着色されます。",
 	"appearance.nodeSize": "ノードの大きさ",
 
@@ -158,6 +162,7 @@ export const ja: Translation = {
 	"filters.vaultFolders": "保管庫のフォルダ",
 	"filters.clear": "クリア",
 	"filters.empty": "見つかりません",
+	"filters.search": "検索…",
 
 	"timeline.created": "作成日",
 	"timeline.modified": "更新日",

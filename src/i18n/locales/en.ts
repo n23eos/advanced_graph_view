@@ -52,6 +52,10 @@ export const en = {
 	"appearance.color": "Color",
 	"appearance.glow": "Glow",
 	"appearance.colorScheme": "Color scheme",
+	"appearance.nodeStyle": "Node style",
+	"nodeStyle.flat": "Flat",
+	"nodeStyle.glow": "Glow",
+	"nodeStyle.ring": "Ring",
 	"appearance.colorHint": "Pick a metric for the Color channel to colorize nodes.",
 	"appearance.nodeSize": "Node size",
 
@@ -176,6 +180,7 @@ export const en = {
 	"filters.vaultFolders": "Vault folders",
 	"filters.clear": "Clear",
 	"filters.empty": "Nothing found",
+	"filters.search": "Search…",
 
 	// ── Timeline ──────────────────────────────────────────────────────
 	"timeline.created": "Created",

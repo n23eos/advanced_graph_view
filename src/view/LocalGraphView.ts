@@ -13,7 +13,8 @@ import { GraphRenderer } from "../render/GraphRenderer";
 import { LayoutClient } from "../workers/LayoutClient";
 import { adaptPhysicsToGraphSize } from "../ui/layoutDensity";
 import { ringTints } from "../analysis/ringTints";
-import { activePreset } from "../render/theme";
+import { activePreset, isLightTheme } from "../render/theme";
+import { effectiveNodeStyle } from "../render/nodeStyle";
 import { degreeRadius } from "../render/nodeAppearance";
 import { AutoFitGate } from "./autoFitGate";
 import { t } from "../i18n";
@@ -231,7 +232,10 @@ export class LocalGraphView extends ItemView {
 		// Same scheme as the main graph, sampled by ring so distance reads as
 		// color instead of leaving the whole neighborhood one flat grey.
 		const preset = activePreset(this.plugin.settings.panel.colorPreset);
-		this.renderer.setVisualStyle(preset.glow === true, preset.backdrop ?? null);
+		this.renderer.setVisualStyle(
+			effectiveNodeStyle(this.plugin.settings.panel.nodeStyle, isLightTheme()),
+			preset.backdrop ?? null
+		);
 		// Size still comes from how linked a note is — a hub neighbor has to
 		// look like a hub — with the root scaled up as the anchor of the view.
 		const sizes = new Float32Array(sub.nodes.length);

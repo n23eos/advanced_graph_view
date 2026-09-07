@@ -44,6 +44,10 @@ export const ptBR: Translation = {
 	"appearance.color": "Cor",
 	"appearance.glow": "Brilho",
 	"appearance.colorScheme": "Esquema de cores",
+	"appearance.nodeStyle": "Estilo dos nós",
+	"nodeStyle.flat": "Plano",
+	"nodeStyle.glow": "Brilho",
+	"nodeStyle.ring": "Anel",
 	"appearance.colorHint": "Escolha uma métrica para o canal Cor para colorir os nós.",
 	"appearance.nodeSize": "Tamanho dos nós",
 
@@ -158,6 +162,7 @@ export const ptBR: Translation = {
 	"filters.vaultFolders": "Pastas do cofre",
 	"filters.clear": "Limpar",
 	"filters.empty": "Nada encontrado",
+	"filters.search": "Buscar…",
 
 	"timeline.created": "Criadas",
 	"timeline.modified": "Modificadas",

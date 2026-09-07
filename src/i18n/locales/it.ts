@@ -44,6 +44,10 @@ export const it: Translation = {
 	"appearance.color": "Colore",
 	"appearance.glow": "Bagliore",
 	"appearance.colorScheme": "Schema colori",
+	"appearance.nodeStyle": "Stile dei nodi",
+	"nodeStyle.flat": "Piatto",
+	"nodeStyle.glow": "Bagliore",
+	"nodeStyle.ring": "Anello",
 	"appearance.colorHint": "Scegli una metrica per il canale Colore per colorare i nodi.",
 	"appearance.nodeSize": "Dimensione nodo",
 
@@ -158,6 +162,7 @@ export const it: Translation = {
 	"filters.vaultFolders": "Cartelle del vault",
 	"filters.clear": "Cancella",
 	"filters.empty": "Nessun risultato",
+	"filters.search": "Cerca…",
 
 	"timeline.created": "Create",
 	"timeline.modified": "Modificate",

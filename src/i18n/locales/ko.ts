@@ -44,6 +44,10 @@ export const ko: Translation = {
 	"appearance.color": "색상",
 	"appearance.glow": "발광",
 	"appearance.colorScheme": "색 구성",
+	"appearance.nodeStyle": "노드 스타일",
+	"nodeStyle.flat": "평면",
+	"nodeStyle.glow": "광택",
+	"nodeStyle.ring": "링",
 	"appearance.colorHint": "‘색상’ 채널에 지표를 지정하면 노드에 색이 입혀집니다.",
 	"appearance.nodeSize": "노드 크기",
 
@@ -158,6 +162,7 @@ export const ko: Translation = {
 	"filters.vaultFolders": "보관함 폴더",
 	"filters.clear": "지우기",
 	"filters.empty": "결과 없음",
+	"filters.search": "검색…",
 
 	"timeline.created": "생성일",
 	"timeline.modified": "수정일",

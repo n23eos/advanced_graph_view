@@ -24,6 +24,13 @@ export interface SearchCallbacks {
 	onManagePresets(): void;
 	/** Open the canned-tasks menu (F-01). */
 	onTasksMenu(anchor: HTMLElement): void;
+	onConstraintRemove(id: string): void;
+	onResetConstraints(): void;
+}
+
+export interface SearchConstraint {
+	id: string;
+	label: string;
 }
 
 /** Dropdown values: saved presets travel by id, tag/folder rows by query. */
@@ -39,12 +46,16 @@ export interface SearchUiState {
 	/** The committed hard query, "" when none — shown as a removable chip. */
 	query: string;
 	matchedCount: number;
+	/** Nodes left visible after all view constraints, independent of soft highlighting. */
+	visibleCount?: number;
 	totalCount: number;
 	isIndexingContent: boolean;
 	parseError?: QueryDiagnostic;
+	constraints?: readonly SearchConstraint[];
 }
 
 const SUGGESTION_LIMIT = 12;
+let nextSearchId = 0;
 /** Blur-to-hide delay: long enough for a click on a suggestion to land first. */
 const SUGGEST_HIDE_DELAY_MS = 150;
 /** aria-live regions must not announce every keystroke (§8: max once per 300 ms). */
@@ -73,6 +84,7 @@ export class SearchBar {
 	private statusEl: HTMLElement;
 	private chipEl: HTMLElement;
 	private hintEl: HTMLElement;
+	private constraintsEl: HTMLElement;
 	/** Once the user commits a filter the Enter hint has done its job. */
 	private hasCommitted = false;
 	/** Trailing throttle so the aria-live status stays quiet while typing. */
@@ -88,7 +100,16 @@ export class SearchBar {
 			placeholder: t("search.placeholder"),
 		});
 		this.suggestBox = inputWrap.createDiv({ cls: "graph-insight-suggest" });
-		this.suggestBox.hide();
+		const searchId = `graph-insight-search-${nextSearchId++}`;
+		this.suggestBox.id = `${searchId}-suggestions`;
+		this.suggestBox.setAttribute("role", "listbox");
+		this.input.setAttribute("role", "combobox");
+		this.input.setAttribute("aria-label", t("search.placeholder"));
+		this.input.setAttribute("aria-autocomplete", "list");
+		this.input.setAttribute("aria-controls", this.suggestBox.id);
+		this.input.setAttribute("autocomplete", "off");
+		this.input.spellcheck = false;
+		this.dismissSuggestions();
 
 		this.input.addEventListener("input", () => {
 			this.callbacks.onQueryChange(this.input.value);
@@ -99,16 +120,22 @@ export class SearchBar {
 			if (this.blurTimer !== null) window.clearTimeout(this.blurTimer);
 			this.blurTimer = window.setTimeout(() => {
 				this.blurTimer = null;
-				this.suggestBox.hide();
+				this.dismissSuggestions();
 			}, SUGGEST_HIDE_DELAY_MS);
 		});
+		this.input.addEventListener("focus", () => {
+			if (this.blurTimer !== null) window.clearTimeout(this.blurTimer);
+			this.blurTimer = null;
+			this.updateSuggestions();
+		});
 		this.input.addEventListener("keydown", (event) => {
+			if (event.isComposing) return;
 			if (this.suggestions.length > 0 && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
 				event.preventDefault();
 				const delta = event.key === "ArrowDown" ? 1 : -1;
 				this.activeSuggestion =
 					(this.activeSuggestion + delta + this.suggestions.length) % this.suggestions.length;
-				this.renderSuggestions();
+				this.updateActiveSuggestion();
 				return;
 			}
 			if (event.key === "Tab" && this.suggestions.length > 0) {
@@ -122,16 +149,16 @@ export class SearchBar {
 					this.applySuggestion(this.suggestions[this.activeSuggestion]);
 					return;
 				}
-				this.suggestBox.hide();
+				this.dismissSuggestions();
 				this.hasCommitted = true;
 				this.callbacks.onCommit(this.input.value);
 			}
 			if (event.key === "Escape") {
+				event.preventDefault();
+				event.stopPropagation();
 				// First Escape only dismisses open suggestions; the next one clears.
 				if (this.suggestions.length > 0) {
-					this.suggestions = [];
-					this.activeSuggestion = -1;
-					this.suggestBox.hide();
+					this.dismissSuggestions();
 					return;
 				}
 				this.clear();
@@ -139,6 +166,7 @@ export class SearchBar {
 		});
 
 		this.presetSelect = this.root.createEl("select", { cls: "dropdown" });
+		this.presetSelect.setAttribute("aria-label", t("search.filters"));
 		this.presetSelect.addEventListener("change", () => {
 			const value = this.presetSelect.value;
 			if (value.startsWith(PRESET_VALUE_PREFIX)) {
@@ -188,15 +216,18 @@ export class SearchBar {
 			cls: "graph-insight-search-status",
 			attr: { "aria-live": "polite" },
 		});
+		this.statusEl.id = `${searchId}-status`;
+		this.input.setAttribute("aria-describedby", this.statusEl.id);
 		this.hintEl = statusRow.createDiv({ cls: "graph-insight-search-hint", text: t("search.hint.commit") });
 		this.hintEl.hide();
+		this.constraintsEl = statusRow.createDiv({ cls: "graph-insight-search-constraints" });
 	}
 
 	/** Render what the host computed: mode, counters, chip, errors, hints. */
 	setUiState(state: SearchUiState): void {
 		this.chipEl.empty();
 		if (state.query) {
-			this.chipEl.createSpan({ text: state.query });
+			this.chipEl.createSpan({ text: state.query, title: state.query });
 			const remove = this.chipEl.createEl("button", { text: "✕" });
 			remove.setAttribute("aria-label", t("search.clear"));
 			remove.addEventListener("click", () => this.clear());
@@ -211,6 +242,8 @@ export class SearchBar {
 		else this.hintEl.hide();
 
 		this.input.toggleClass("has-error", state.parseError !== undefined);
+		this.input.setAttribute("aria-invalid", String(state.parseError !== undefined));
+		this.renderConstraints(state.constraints ?? [], state.visibleCount ?? state.matchedCount);
 		if (state.parseError) {
 			// Errors preempt the throttle: the user just hit Enter and waits.
 			this.setStatusText(queryErrorText(state.parseError), true);
@@ -230,7 +263,31 @@ export class SearchBar {
 		if (state.mode === "highlight") {
 			return t("search.status.highlighted", { count: String(state.matchedCount) });
 		}
+		if ((state.constraints?.length ?? 0) > 0) {
+			return state.matchedCount === 0
+				? t("filters.empty")
+				: t("search.status.shown", { count: String(state.matchedCount), total: String(state.totalCount) });
+		}
 		return "";
+	}
+
+	private renderConstraints(constraints: readonly SearchConstraint[], visibleCount: number): void {
+		this.constraintsEl.empty();
+		this.constraintsEl.toggleClass("is-hidden", constraints.length === 0);
+		for (const constraint of constraints) {
+			const chip = this.constraintsEl.createDiv({ cls: "graph-insight-search-chip" });
+			chip.createSpan({ text: constraint.label, title: constraint.label });
+			const remove = chip.createEl("button", { text: "✕" });
+			remove.setAttribute("aria-label", `${t("search.clear")}: ${constraint.label}`);
+			remove.addEventListener("click", () => this.callbacks.onConstraintRemove(constraint.id));
+		}
+		if (constraints.length > 1 || visibleCount === 0) {
+			const reset = this.constraintsEl.createEl("button", {
+				cls: "graph-insight-searchbar-btn graph-insight-search-reset",
+				text: t("layers.showAll"),
+			});
+			reset.addEventListener("click", () => this.callbacks.onResetConstraints());
+		}
 	}
 
 	private setStatusText(text: string, immediate: boolean): void {
@@ -249,15 +306,20 @@ export class SearchBar {
 	}
 
 	clear(): void {
-		this.input.value = "";
-		this.suggestBox.hide();
+		this.resetInput();
 		this.callbacks.onClear();
+	}
+
+	/** Clear the control without firing host callbacks during a larger atomic reset. */
+	resetInput(): void {
+		this.input.value = "";
+		this.dismissSuggestions();
 	}
 
 	/** Put a query into the input and commit it as the hard filter. */
 	applyQuery(query: string): void {
 		this.input.value = query;
-		this.suggestBox.hide();
+		this.dismissSuggestions();
 		this.hasCommitted = true;
 		this.callbacks.onCommit(query);
 	}
@@ -330,14 +392,19 @@ export class SearchBar {
 			needle: string,
 			prefix: "tag" | "path",
 			icon: string
-		): Suggestion[] =>
-			values
-				.filter((value) => value.toLowerCase().includes(needle.toLowerCase()))
-				.slice(0, SUGGESTION_LIMIT)
-				.map((value) => ({
+		): Suggestion[] => {
+			const matches: Suggestion[] = [];
+			const normalizedNeedle = needle.toLowerCase();
+			for (const value of values) {
+				if (!value.toLowerCase().includes(normalizedNeedle)) continue;
+				matches.push({
 					label: `${icon} ${value}`,
 					token: `${negation}${prefix}:${value.includes(" ") ? `"${value}"` : value}`,
-				}));
+				});
+				if (matches.length === SUGGESTION_LIMIT) break;
+			}
+			return matches;
+		};
 
 		if (token.startsWith("tag:") || token.startsWith("#")) {
 			const needle = token.replace(/^tag:|^#/, "").replace(/^#/, "");
@@ -359,34 +426,56 @@ export class SearchBar {
 	private renderSuggestions(): void {
 		this.suggestBox.empty();
 		if (this.suggestions.length === 0) {
-			this.suggestBox.hide();
+			this.dismissSuggestions();
 			return;
 		}
 		this.suggestBox.show();
+		this.input.setAttribute("aria-expanded", "true");
 		this.suggestions.forEach((suggestion, index) => {
 			const row = this.suggestBox.createDiv({ cls: "graph-insight-suggest-row" });
-			if (index === this.activeSuggestion) row.addClass("is-active");
+			row.id = `${this.suggestBox.id}-${index}`;
+			row.setAttribute("role", "option");
+			row.setAttribute("title", suggestion.label);
 			row.setText(suggestion.label);
 			row.addEventListener("mousedown", (event) => {
 				event.preventDefault();
 				this.applySuggestion(suggestion);
 			});
 		});
+		this.updateActiveSuggestion();
 	}
 
-	private applySuggestion(suggestion: Suggestion): void {
-		const { token, start } = this.currentToken();
-		const value = this.input.value;
-		const cursor = this.input.selectionStart ?? value.length;
-		this.input.value = `${value.slice(0, start)}${suggestion.token}${value.slice(cursor)} `.replace(/\s+$/, " ");
-		this.input.focus();
-		const newCursor = start + suggestion.token.length + 1;
-		this.input.setSelectionRange(newCursor, newCursor);
+	private updateActiveSuggestion(): void {
+		Array.from(this.suggestBox.children).forEach((child, index) => {
+			const row = child as HTMLElement;
+			const active = index === this.activeSuggestion;
+			row.toggleClass("is-active", active);
+			row.setAttribute("aria-selected", String(active));
+			if (active) {
+				this.input.setAttribute("aria-activedescendant", row.id);
+				row.scrollIntoView?.({ block: "nearest" });
+			}
+		});
+	}
+
+	private dismissSuggestions(): void {
 		this.suggestions = [];
 		this.activeSuggestion = -1;
 		this.suggestBox.hide();
+		this.input.setAttribute("aria-expanded", "false");
+		this.input.removeAttribute("aria-activedescendant");
+	}
+
+	private applySuggestion(suggestion: Suggestion): void {
+		const { start } = this.currentToken();
+		const value = this.input.value;
+		const cursor = this.input.selectionStart ?? value.length;
+		this.input.value = `${value.slice(0, start)}${suggestion.token} ${value.slice(cursor).replace(/^\s+/, "")}`;
+		this.input.focus();
+		const newCursor = start + suggestion.token.length + 1;
+		this.input.setSelectionRange(newCursor, newCursor);
+		this.dismissSuggestions();
 		this.callbacks.onQueryChange(this.input.value);
-		void token;
 	}
 
 	destroy(): void {

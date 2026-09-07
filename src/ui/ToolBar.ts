@@ -189,10 +189,13 @@ export class ToolBar {
 	private applyActive(): void {
 		for (const [id, button] of this.buttons) {
 			button.toggleClass("is-active", id === this.tool);
+			button.setAttribute("aria-pressed", String(id === this.tool));
 		}
 		this.depthRow.toggleClass("is-hidden", this.tool !== "links");
 		this.followButton?.toggleClass("is-active", this.following);
 		this.sidePaneButton?.toggleClass("is-active", this.sidePane);
+		this.followButton?.setAttribute("aria-pressed", String(this.following));
+		this.sidePaneButton?.setAttribute("aria-pressed", String(this.sidePane));
 		this.renderStatus();
 	}
 

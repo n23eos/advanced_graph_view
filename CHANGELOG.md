@@ -5,6 +5,38 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0-beta.1] — 2026-09-07
+
+Pre-release focused on clearer filtering, graph readability and smoother
+interaction in large vaults.
+
+### Added
+
+- Active tag, folder, timeline, cluster and hidden-node constraints now appear
+  beside search results. Each can be removed independently, and an empty
+  filtered graph offers a single **Show all** recovery action.
+- Tag and folder menus have instant search, preserve selected values while
+  filtering, restore focus on Escape and expose their state to assistive
+  technology.
+- Expert appearance settings now offer independent Flat, Glow and Ring node
+  styles. Existing settings and bundled presets retain their previous look.
+- Hover details explain the active size and color metrics.
+
+### Changed
+
+- Ordinary graph labels avoid overlapping in screen space while selected,
+  hovered and route labels keep priority.
+- Rapid search input is coalesced to one visual update per frame. Focus
+  adjacency and distance calculations are cached until the graph changes.
+- Temporary-view reset now also clears timeline and Changes constraints while
+  preserving appearance, saved presets and explicit pins.
+
+### Fixed
+
+- Highlight counts exclude nodes hidden by other active constraints.
+- Graph keyboard shortcuts only run in the active Advanced Graph View.
+- Stale content-search scans can no longer update a rebuilt or closed view.
+
 ## [0.8.0-beta.3] — 2026-08-17
 
 Pre-release: a readability fix for the breadcrumb trail.

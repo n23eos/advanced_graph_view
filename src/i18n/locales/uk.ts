@@ -44,6 +44,10 @@ export const uk: Translation = {
 	"appearance.color": "Колір",
 	"appearance.glow": "Сяйво",
 	"appearance.colorScheme": "Колірна схема",
+	"appearance.nodeStyle": "Стиль вузлів",
+	"nodeStyle.flat": "Плоскі",
+	"nodeStyle.glow": "Сяйво",
+	"nodeStyle.ring": "Кільця",
 	"appearance.colorHint": "Оберіть метрику для каналу «Колір», щоб розфарбувати вузли.",
 	"appearance.nodeSize": "Розмір вузлів",
 
@@ -158,6 +162,7 @@ export const uk: Translation = {
 	"filters.vaultFolders": "Теки сховища",
 	"filters.clear": "Очистити",
 	"filters.empty": "Нічого не знайдено",
+	"filters.search": "Пошук…",
 
 	"timeline.created": "Створені",
 	"timeline.modified": "Змінені",

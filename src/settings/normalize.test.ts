@@ -112,6 +112,17 @@ describe("normalizeSettings", () => {
 	});
 
 	describe("deep merge of older payloads", () => {
+		test("legacy palettes keep their previous node style", () => {
+			expect(normalizeSettings({ panel: { colorPreset: "galaxy" } }, NOW).panel.nodeStyle).toBe("glow");
+			expect(normalizeSettings({ panel: { colorPreset: "recency" } }, NOW).panel.nodeStyle).toBe("flat");
+		});
+
+		test("valid node styles survive and unknown styles use the default", () => {
+			expect(normalizeSettings({ panel: { nodeStyle: "ring" } }, NOW).panel.nodeStyle).toBe("ring");
+			expect(normalizeSettings({ panel: { nodeStyle: "sparkles" } }, NOW).panel.nodeStyle)
+				.toBe(DEFAULT_SETTINGS.panel.nodeStyle);
+		});
+
 		test("a partial panel picks up newly added fields from the defaults", () => {
 			const raw = { panel: { nodeScale: 2 } };
 			const settings = normalizeSettings(raw, NOW);

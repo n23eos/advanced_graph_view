@@ -45,6 +45,10 @@ export const de: Translation = {
 	"appearance.color": "Farbe",
 	"appearance.glow": "Leuchten",
 	"appearance.colorScheme": "Farbschema",
+	"appearance.nodeStyle": "Knotenstil",
+	"nodeStyle.flat": "Flach",
+	"nodeStyle.glow": "Leuchten",
+	"nodeStyle.ring": "Ring",
 	"appearance.colorHint": "Wähle eine Metrik für den Farbkanal, um Knoten einzufärben.",
 	"appearance.nodeSize": "Knotengröße",
 
@@ -159,6 +163,7 @@ export const de: Translation = {
 	"filters.vaultFolders": "Ordner im Vault",
 	"filters.clear": "Leeren",
 	"filters.empty": "Nichts gefunden",
+	"filters.search": "Suchen…",
 
 	"timeline.created": "Erstellt",
 	"timeline.modified": "Geändert",

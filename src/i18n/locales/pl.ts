@@ -44,6 +44,10 @@ export const pl: Translation = {
 	"appearance.color": "Kolor",
 	"appearance.glow": "Poświata",
 	"appearance.colorScheme": "Schemat kolorów",
+	"appearance.nodeStyle": "Styl węzłów",
+	"nodeStyle.flat": "Płaski",
+	"nodeStyle.glow": "Poświata",
+	"nodeStyle.ring": "Pierścień",
 	"appearance.colorHint": "Wybierz metrykę dla kanału Kolor, aby pokolorować węzły.",
 	"appearance.nodeSize": "Rozmiar węzłów",
 
@@ -158,6 +162,7 @@ export const pl: Translation = {
 	"filters.vaultFolders": "Foldery skarbca",
 	"filters.clear": "Wyczyść",
 	"filters.empty": "Nic nie znaleziono",
+	"filters.search": "Szukaj…",
 
 	"timeline.created": "Utworzone",
 	"timeline.modified": "Zmienione",

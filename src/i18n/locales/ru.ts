@@ -44,6 +44,10 @@ export const ru: Translation = {
 	"appearance.color": "Цвет",
 	"appearance.glow": "Свечение",
 	"appearance.colorScheme": "Цветовая схема",
+	"appearance.nodeStyle": "Стиль узлов",
+	"nodeStyle.flat": "Плоские",
+	"nodeStyle.glow": "Свечение",
+	"nodeStyle.ring": "Кольца",
 	"appearance.colorHint": "Выберите метрику для канала «Цвет», чтобы раскрасить ноды.",
 	"appearance.nodeSize": "Размер нод",
 
@@ -158,6 +162,7 @@ export const ru: Translation = {
 	"filters.vaultFolders": "Папки волта",
 	"filters.clear": "Очистить",
 	"filters.empty": "Ничего не найдено",
+	"filters.search": "Поиск…",
 
 	"timeline.created": "Созданы",
 	"timeline.modified": "Изменены",

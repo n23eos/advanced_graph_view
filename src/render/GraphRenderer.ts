@@ -26,7 +26,9 @@ import {
 	degreeRadius,
 	MAX_NODE_RADIUS,
 } from "./nodeAppearance";
-import { createNodeTexture, createStarTexture, STAR_SIZE_FACTOR } from "./NodeTexture";
+import { createNodeTexture, createRingTexture, createStarTexture, STAR_SIZE_FACTOR } from "./NodeTexture";
+import type { NodeStyle } from "./nodeStyle";
+import { overlapsAny, type LabelBox } from "./labelCollision";
 import { SMOOTH_FACTOR, easePositions } from "./positionSmoothing";
 import { Camera3D } from "./projection";
 import { Viewport } from "./Viewport";
@@ -180,7 +182,8 @@ export class GraphRenderer {
 	private nodeTexture: Texture | null = null;
 	/** Wide-halo variant used by the glow ("galaxy") color schemes. */
 	private starTexture: Texture | null = null;
-	private glowMode = false;
+	private ringTexture: Texture | null = null;
+	private nodeStyle: NodeStyle = "flat";
 	/** Sprite size multiplier compensating the star texture's smaller core. */
 	private spriteScale = 1;
 	/** Largest radius the last encoding produced; drives the cull margin. */
@@ -262,6 +265,7 @@ export class GraphRenderer {
 		);
 		this.nodeTexture = createNodeTexture(app.renderer);
 		this.starTexture = createStarTexture(app.renderer);
+		this.ringTexture = createRingTexture(app.renderer);
 		this.world.addChild(
 			this.hullGraphics,
 			this.nodeLayer,
@@ -333,10 +337,10 @@ export class GraphRenderer {
 			const radius = degreeRadius(node.inCount + node.outCount);
 			this.radii[node.id] = radius;
 
-			const sprite = new Sprite(this.glowMode ? this.starTexture! : this.nodeTexture);
+			const sprite = new Sprite(this.textureForStyle(this.nodeStyle));
 			sprite.anchor.set(0.5);
 			sprite.tint = this.colors.node;
-			if (this.glowMode) sprite.blendMode = "add";
+			if (this.nodeStyle === "glow") sprite.blendMode = "add";
 			sprite.setSize(radius * 2 * this.spriteScale);
 			this.sprites.push(sprite);
 			this.nodeLayer.addChild(sprite);
@@ -1068,19 +1072,36 @@ export class GraphRenderer {
 		let creationBudget = NEW_LABELS_PER_FRAME;
 		let creationSkipped = false;
 		const labeled = new Set<number>();
+		const occupiedLabelBounds: LabelBox[] = [];
 
 		/** Show node `i`'s label, respecting the per-frame creation budget.
 		 *  Returns false when it had to be deferred to a later frame. */
-		const takeLabel = (i: number): boolean => {
+		const takeLabel = (i: number, avoidOverlap = false): boolean => {
 			if (!this.labels.has(i) && creationBudget <= 0) {
 				creationSkipped = true;
 				return false;
 			}
 			if (!this.labels.has(i)) creationBudget--;
-			labeled.add(i);
 			this.ensureLabel(i, this.positions![i * 2], this.positions![i * 2 + 1]);
+			const label = this.labels.get(i)!;
+			const bounds = label.getBounds();
+			const padded = { x: bounds.x - 3, y: bounds.y - 2, width: bounds.width + 6, height: bounds.height + 4 };
+			if (avoidOverlap && overlapsAny(padded, occupiedLabelBounds)) {
+				label.visible = false;
+				return false;
+			}
+			occupiedLabelBounds.push(padded);
+			labeled.add(i);
 			return true;
 		};
+
+		// The node the user is acting on always keeps its name. These boxes are
+		// reserved before decorative labels so nearby text yields to them.
+		for (const i of [this.selectedId, this.hoveredId]) {
+			if (i === null || labeled.has(i) || !isOnScreen(i)) continue;
+			if (this.hiddenMask !== null && this.hiddenMask[i] === 1) continue;
+			takeLabel(i);
+		}
 
 		// Explore mode names the node you are on and everything you can travel
 		// to, whatever the zoom threshold and the label budget say: those names
@@ -1134,7 +1155,7 @@ export class GraphRenderer {
 				// No node-size gate: priority order already favors important
 				// nodes, and a small «Размер узлов» must not kill every label.
 				if (hidden || !isOnScreen(i)) continue;
-				if (takeLabel(i)) labelBudget--;
+				if (takeLabel(i, true)) labelBudget--;
 			}
 		}
 		for (const [i, label] of this.labels) {
@@ -1212,23 +1233,29 @@ export class GraphRenderer {
 		this.edgesDirty = true;
 	}
 
-	setVisualStyle(glow: boolean, backdrop: number | null): void {
+	setVisualStyle(style: NodeStyle, backdrop: number | null): void {
 		if (this.app) {
 			this.app.renderer.background.alpha = backdrop === null ? 0 : 1;
 			if (backdrop !== null) this.app.renderer.background.color = backdrop;
 		}
-		if (glow === this.glowMode) return;
-		this.glowMode = glow;
-		this.spriteScale = glow ? STAR_SIZE_FACTOR : 1;
+		if (style === this.nodeStyle) return;
+		this.nodeStyle = style;
+		this.spriteScale = style === "glow" ? STAR_SIZE_FACTOR : 1;
 
-		const texture = glow ? this.starTexture : this.nodeTexture;
+		const texture = this.textureForStyle(style);
 		if (!texture) return;
 		for (const sprite of this.sprites) {
 			sprite.texture = texture;
-			sprite.blendMode = glow ? "add" : "normal";
+			sprite.blendMode = style === "glow" ? "add" : "normal";
 		}
 		this.applyHoverSize(); // re-applies every sprite size with the new scale
 		this.cullDirty = true;
+	}
+
+	private textureForStyle(style: NodeStyle): Texture {
+		if (style === "glow") return this.starTexture ?? this.nodeTexture!;
+		if (style === "ring") return this.ringTexture ?? this.nodeTexture!;
+		return this.nodeTexture!;
 	}
 
 	private ensureLabel(nodeId: number, x: number, y: number): void {

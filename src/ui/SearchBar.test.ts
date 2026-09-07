@@ -21,6 +21,8 @@ function build(overrides: Partial<SearchCallbacks> = {}) {
 		onPresetApplied: vi.fn(),
 		onManagePresets: vi.fn(),
 		onTasksMenu: vi.fn(),
+		onConstraintRemove: vi.fn(),
+		onResetConstraints: vi.fn(),
 		...overrides,
 	};
 	const host = document.body.createDiv();
@@ -115,5 +117,98 @@ describe("escape semantics (F-03)", () => {
 		press(input, "Escape");
 		expect(onClear).toHaveBeenCalledTimes(1);
 		expect(input.value).toBe("");
+	});
+});
+
+describe("completion interaction", () => {
+	test.each(["clear", "preset", "blur"])("%s discards hidden keyboard suggestions", (action) => {
+		const onCommit = vi.fn();
+		const { bar, input } = build({ onCommit });
+		bar.setVocabulary(["work"], []);
+		type(input, "tag:wo");
+		if (action === "clear") bar.clear();
+		if (action === "preset") bar.applyQuery("file:hello");
+		if (action === "blur") {
+			input.dispatchEvent(new Event("blur"));
+			vi.advanceTimersByTime(150);
+		}
+		const query = input.value;
+		press(input, "Enter");
+		expect(onCommit).toHaveBeenLastCalledWith(query);
+		expect(input.value).toBe(query);
+		expect(input.getAttribute("aria-expanded")).toBe("false");
+		expect(input.hasAttribute("aria-activedescendant")).toBe(false);
+	});
+
+	test("keyboard navigation keeps rows and exposes the selected option", () => {
+		const { host, bar, input } = build();
+		bar.setVocabulary(["work", "workshop"], []);
+		type(input, "tag:wo");
+		const rows = host.querySelectorAll('[role="option"]');
+		press(input, "ArrowDown");
+		expect(host.querySelectorAll('[role="option"]')[0]).toBe(rows[0]);
+		expect(rows[1].getAttribute("aria-selected")).toBe("true");
+		expect(input.getAttribute("aria-activedescendant")).toBe(rows[1].id);
+	});
+
+	test("completion separates the following token and preserves the caret", () => {
+		const { bar, input } = build();
+		bar.setVocabulary(["work"], []);
+		type(input, "tag:wo file:notes");
+		input.setSelectionRange(6, 6);
+		input.dispatchEvent(new Event("input"));
+		press(input, "Tab");
+		expect(input.value).toBe("tag:work file:notes");
+		expect(input.selectionStart).toBe(9);
+	});
+
+	test("refocusing cancels the delayed dismissal", () => {
+		const { bar, input } = build();
+		bar.setVocabulary(["work"], []);
+		type(input, "tag:wo");
+		input.dispatchEvent(new Event("blur"));
+		input.dispatchEvent(new Event("focus"));
+		vi.advanceTimersByTime(150);
+		expect(input.getAttribute("aria-expanded")).toBe("true");
+	});
+
+	test("Enter during IME composition does not commit or complete", () => {
+		const onCommit = vi.fn();
+		const { bar, input } = build({ onCommit });
+		bar.setVocabulary(["work"], []);
+		type(input, "tag:wo");
+		input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", isComposing: true }));
+		expect(onCommit).not.toHaveBeenCalled();
+		expect(input.value).toBe("tag:wo");
+	});
+});
+
+describe("active constraints", () => {
+	test("shows visibility without a text query and removes one constraint", () => {
+		const onConstraintRemove = vi.fn();
+		const { host, bar } = build({ onConstraintRemove });
+		bar.setUiState(state({
+			matchedCount: 3,
+			totalCount: 10,
+			constraints: [{ id: "tag:work", label: "#work" }],
+		}));
+		vi.advanceTimersByTime(300);
+		expect(statusText(host)).toBe("Shown: 3 of 10");
+		(host.querySelector(".graph-insight-search-constraints button") as HTMLButtonElement).click();
+		expect(onConstraintRemove).toHaveBeenCalledWith("tag:work");
+	});
+
+	test("zero results explains the state and offers show all", () => {
+		const onResetConstraints = vi.fn();
+		const { host, bar } = build({ onResetConstraints });
+		bar.setUiState(state({
+			matchedCount: 0,
+			totalCount: 10,
+			constraints: [{ id: "folder:empty", label: "empty" }],
+		}));
+		vi.advanceTimersByTime(300);
+		expect(statusText(host)).toBe("Nothing found");
+		(host.querySelector(".graph-insight-search-reset") as HTMLButtonElement).click();
+		expect(onResetConstraints).toHaveBeenCalledOnce();
 	});
 });

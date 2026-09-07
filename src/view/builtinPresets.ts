@@ -5,6 +5,7 @@
  */
 import type { PanelState } from "../ui/ControlPanel";
 import type { BuiltinPresetId } from "./presetNames";
+import { nodeStyleFromPreset, type NodeStyle } from "../render/nodeStyle";
 
 
 export interface ViewPreset {
@@ -24,6 +25,7 @@ export type PanelSpec = Pick<
 	PanelState,
 	"channels" | "colorPreset" | "physics" | "labels" | "edges" | "nodeScale" | "view3d"
 > & {
+	nodeStyle?: NodeStyle;
 	showBubbles?: boolean;
 	overlays?: Partial<PanelState["overlays"]>;
 	layoutRule?: PanelState["layoutRule"];
@@ -33,6 +35,7 @@ export function makePanel(spec: PanelSpec): PanelState {
 	return {
 		channels: spec.channels,
 		colorPreset: spec.colorPreset,
+		nodeStyle: spec.nodeStyle ?? nodeStyleFromPreset(spec.colorPreset),
 		collapsed: false,
 		overlays: { orphans: false, deadEnds: false, broken: false, ...spec.overlays },
 		showBubbles: spec.showBubbles ?? false,

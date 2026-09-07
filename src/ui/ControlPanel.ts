@@ -15,6 +15,7 @@ import { DEFAULT_PRESET_ID } from "../encoding/colorScales";
 import type { OverlayCounts, OverlayToggles } from "../analysis/overlays";
 import type { PhysicsParams } from "../workers/layoutEngine";
 import { LAYOUT_DENSITIES, applyLayoutDensity, matchLayoutDensity, type LayoutDensity } from "./layoutDensity";
+import { NODE_STYLES, type NodeStyle } from "../render/nodeStyle";
 
 /** "simple" shows a handful of casual controls, "expert" the full panel. */
 export type PanelMode = "simple" | "expert";
@@ -24,6 +25,7 @@ export const PANEL_MODES: readonly PanelMode[] = ["simple", "expert"];
 export interface PanelState {
 	channels: ChannelAssignment;
 	colorPreset: string;
+	nodeStyle: NodeStyle;
 	collapsed: boolean;
 	overlays: OverlayToggles;
 	showBubbles: boolean;
@@ -188,6 +190,14 @@ export class ControlPanel {
 		this.channelSelect(view, t("appearance.colorScheme"), this.state.colorPreset, scaleOptions(), (value) => {
 			this.setState({ ...this.state, colorPreset: value ?? DEFAULT_PRESET_ID });
 		}, false);
+		this.channelSelect(
+			view,
+			t("appearance.nodeStyle"),
+			this.state.nodeStyle,
+			Object.fromEntries(NODE_STYLES.map((style) => [style, t(`nodeStyle.${style}`)])),
+			(value) => this.setState({ ...this.state, nodeStyle: (value ?? "flat") as NodeStyle }),
+			false
+		);
 
 		if (!this.state.channels.color) {
 			view.createDiv({

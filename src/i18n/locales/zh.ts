@@ -44,6 +44,10 @@ export const zh: Translation = {
 	"appearance.color": "颜色",
 	"appearance.glow": "辉光",
 	"appearance.colorScheme": "配色方案",
+	"appearance.nodeStyle": "节点样式",
+	"nodeStyle.flat": "平面",
+	"nodeStyle.glow": "发光",
+	"nodeStyle.ring": "圆环",
 	"appearance.colorHint": "为「颜色」通道选择一个指标，即可给节点上色。",
 	"appearance.nodeSize": "节点大小",
 
@@ -158,6 +162,7 @@ export const zh: Translation = {
 	"filters.vaultFolders": "仓库文件夹",
 	"filters.clear": "清除",
 	"filters.empty": "没有结果",
+	"filters.search": "搜索…",
 
 	"timeline.created": "创建时间",
 	"timeline.modified": "修改时间",

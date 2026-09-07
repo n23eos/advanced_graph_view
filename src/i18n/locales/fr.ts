@@ -44,6 +44,10 @@ export const fr: Translation = {
 	"appearance.color": "Couleur",
 	"appearance.glow": "Halo",
 	"appearance.colorScheme": "Palette",
+	"appearance.nodeStyle": "Style des nœuds",
+	"nodeStyle.flat": "Plat",
+	"nodeStyle.glow": "Lueur",
+	"nodeStyle.ring": "Anneau",
 	"appearance.colorHint": "Choisissez une métrique pour le canal Couleur afin de colorer les nœuds.",
 	"appearance.nodeSize": "Taille des nœuds",
 
@@ -158,6 +162,7 @@ export const fr: Translation = {
 	"filters.vaultFolders": "Dossiers du coffre",
 	"filters.clear": "Effacer",
 	"filters.empty": "Aucun résultat",
+	"filters.search": "Rechercher…",
 
 	"timeline.created": "Créées",
 	"timeline.modified": "Modifiées",

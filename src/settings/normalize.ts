@@ -8,6 +8,7 @@ import { DEFAULT_SETTINGS, ONBOARDING_STATES } from "./schema";
 import type { PanelState } from "../ui/ControlPanel";
 import type { LayoutRule } from "../workers/layoutEngine";
 import type { ViewPreset } from "../view/builtinPresets";
+import { isNodeStyle, nodeStyleFromPreset } from "../render/nodeStyle";
 
 const LAYOUT_RULES: readonly LayoutRule[] = [
 	"links", "tags", "folders", "cluster", "age", "recency", "hubs",
@@ -37,6 +38,9 @@ export function normalizePanel(raw: unknown): PanelState {
 		labels: { ...base.labels, ...asObject(saved.labels) },
 		edges: { ...base.edges, ...asObject(saved.edges) },
 		view3d: { ...base.view3d, ...asObject(saved.view3d) },
+		nodeStyle: saved.nodeStyle === undefined
+			? nodeStyleFromPreset(typeof saved.colorPreset === "string" ? saved.colorPreset : base.colorPreset)
+			: isNodeStyle(saved.nodeStyle) ? saved.nodeStyle : base.nodeStyle,
 		layoutRule: normalizeLayoutRule(saved.layoutRule),
 	};
 }
