@@ -42,4 +42,10 @@ export default [
 		files: ["src/bench/**/*.ts"],
 		rules: { "obsidianmd/prefer-create-el": "off" },
 	},
+	{
+		// This jsdom-only regression test loads the production stylesheet itself;
+		// Obsidian normally performs that step. It never enters the plugin bundle.
+		files: ["src/ui/FilterChips.test.ts"],
+		rules: { "obsidianmd/no-forbidden-elements": "off" },
+	},
 ];

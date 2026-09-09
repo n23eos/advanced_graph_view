@@ -1131,6 +1131,10 @@
 	text-overflow: ellipsis;
 }
 
+.graph-insight-filter-row[hidden] {
+	display: none;
+}
+
 .graph-insight-filter-row > span {
 	min-width: 0;
 	overflow: hidden;

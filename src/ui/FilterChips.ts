@@ -118,6 +118,8 @@ export class FilterChips {
 	}
 
 	private renderMenu(kind: "tags" | "folders"): void {
+		if (this.filterFrame !== null) window.cancelAnimationFrame(this.filterFrame);
+		this.filterFrame = null;
 		this.menu.empty();
 		const selected = kind === "tags" ? this.selection.tags : this.selection.folders;
 
@@ -141,9 +143,6 @@ export class FilterChips {
 			this.filterFrame = window.requestAnimationFrame(() => {
 				this.filterFrame = null;
 				this.renderList(kind, search.value);
-				// Restore after the visibility changes have reached layout/AX, not in
-				// the same frame that invalidated that tree.
-				window.requestAnimationFrame(() => search.focus({ preventScroll: true }));
 			});
 		});
 		this.renderList(kind, "");
@@ -156,8 +155,7 @@ export class FilterChips {
 		let list = this.menu.querySelector<HTMLElement>(".graph-insight-filter-list");
 		if (!list) {
 			list = this.menu.createDiv({ cls: "graph-insight-filter-list" });
-			// Build the rows once per menu opening. Replacing this subtree on every
-			// keystroke makes native accessibility APIs drop the input focus.
+			// Keep rows stable while typing and navigating with the keyboard.
 			const ordered = [...values].sort((a, b) => Number(selected.has(b)) - Number(selected.has(a)));
 			for (const value of ordered) {
 				const row = list.createEl("label", { cls: "graph-insight-filter-row" });

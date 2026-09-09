@@ -5,6 +5,31 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] — 2026-09-09
+
+Stable release of the filtering, readability and performance improvements
+introduced in 0.9.0-beta.1, with two additional filter-menu fixes.
+
+### Added
+
+- Visible, individually removable graph constraints and a Show all action for empty filtered views.
+- Searchable tag/folder menus with keyboard navigation and focus restoration.
+- Independent Flat, Glow and Ring node styles, preserving legacy appearances.
+- Size and color metric explanations in hover details.
+
+### Changed
+
+- Ordinary labels avoid overlap while selected, hovered and route labels retain priority.
+- Node motion is smoothed between layout updates.
+- Search updates are coalesced per frame; Focus adjacency and distances are cached.
+- Reset clears temporary timeline and Changes state while preserving appearance and explicit pins.
+
+### Fixed
+
+- Hidden filter rows now stay visually hidden despite their flex layout.
+- Pending filter updates no longer steal focus from checkboxes; rebuilding menus cancels stale updates.
+- Highlight counts exclude hidden nodes, shortcuts respect the active graph, and stale content scans are discarded.
+
 ## [0.9.0-beta.1] — 2026-09-07
 
 Pre-release focused on clearer filtering, graph readability and smoother

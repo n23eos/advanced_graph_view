@@ -3,10 +3,13 @@ import { beforeAll, describe, expect, test, vi } from "vitest";
 import { initI18n } from "../i18n";
 import { installObsidianDom } from "../test/obsidianDom";
 import { FilterChips } from "./FilterChips";
+import styles from "../../styles.css?raw";
 
 beforeAll(() => {
 	installObsidianDom();
 	initI18n("en");
+	// Obsidian loads this file in production; jsdom needs the same CSS fixture.
+	document.head.createEl("style").textContent = styles;
 });
 
 function build() {
@@ -32,6 +35,22 @@ describe("filter menus", () => {
 		const labels = [...host.querySelectorAll(".graph-insight-filter-row")].map((row) => row.textContent);
 		expect(labels.filter((_, index) => !(host.querySelectorAll(".graph-insight-filter-row")[index] as HTMLElement).hidden))
 			.toEqual(["#already-selected", "#tag-999"]);
+		const hiddenRow = host.querySelector(".graph-insight-filter-row[hidden]") as HTMLElement;
+		expect(getComputedStyle(hiddenRow).display).toBe("none");
+	});
+
+	test("pending search updates do not steal focus from a checkbox", async () => {
+		const { host, filters } = build();
+		filters.setVocabulary(["work"], []);
+		host.querySelector("button")!.click();
+		const search = host.querySelector("input[type=search]") as HTMLInputElement;
+		search.value = "work";
+		search.dispatchEvent(new Event("input"));
+		const checkbox = host.querySelector("input[type=checkbox]") as HTMLInputElement;
+		checkbox.focus();
+		await new Promise<void>((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve())));
+		expect(document.activeElement).toBe(checkbox);
+		filters.destroy();
 	});
 
 	test("Escape closes the menu and restores focus to its trigger", () => {
