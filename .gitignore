@@ -7,3 +7,4 @@ main.js
 .plan*.md
 bench/bench.js
 bench/diag.js
+\!notes/
