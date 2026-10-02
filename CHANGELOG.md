@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-02
+
 ### Added
 
 - Choose an Explore note by searching its name or path in a native picker, or by clicking a visible graph node.
@@ -20,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Keep Explore history aligned with the camera when filters hide previous destinations.
 - Rebuild the graph when links or weights change even if node and edge counts stay the same.
 - Refresh committed content filters after vault changes and clear indexing status when obsolete scans finish.
 - Ignore obsolete metric results when a newer graph is waiting for computation.
@@ -433,7 +436,8 @@ Settings from older versions migrate automatically on the first load.
 Initial release: an interactive 3D graph view for large vaults, with clusters,
 PageRank, metric-driven node encoding and usage tracking.
 
-[Unreleased]: https://github.com/n23eos/advanced_graph_view/compare/0.4.0...HEAD
+[Unreleased]: https://github.com/n23eos/advanced_graph_view/compare/0.10.0...HEAD
+[0.10.0]: https://github.com/n23eos/advanced_graph_view/compare/0.9.0...0.10.0
 [0.4.0]: https://github.com/n23eos/advanced_graph_view/compare/0.3.0...0.4.0
 [0.3.0]: https://github.com/n23eos/advanced_graph_view/compare/0.2.1...0.3.0
 [0.2.1]: https://github.com/n23eos/advanced_graph_view/compare/0.2.0...0.2.1
