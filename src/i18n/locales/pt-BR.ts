@@ -213,6 +213,10 @@ export const ptBR: Translation = {
 	"explore.back": "Voltar",
 	"explore.detach": "Soltar",
 	"explore.detach.hint": "Espaço — continue no modo, mas escolha a próxima nota em qualquer lugar",
+	"explore.choose": "Escolher nota",
+	"explore.choose.placeholder": "Nome ou caminho da nota...",
+	"explore.choose.empty": "Nenhuma nota encontrada",
+	"explore.detached.status": "Exploração: escolha uma nota",
 	"explore.exit": "Sair",
 
 	"menu.open": "Abrir",

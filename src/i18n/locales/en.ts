@@ -237,6 +237,10 @@ export const en = {
 	"explore.back": "Back",
 	"explore.detach": "Let go",
 	"explore.detach.hint": "Space — keep exploring, but pick the next note anywhere in the vault",
+	"explore.choose": "Choose note",
+	"explore.choose.placeholder": "Note name or path...",
+	"explore.choose.empty": "No matching notes",
+	"explore.detached.status": "Explore: choose a note",
 	"explore.exit": "Exit",
 
 	// ── Context menu ──────────────────────────────────────────────────

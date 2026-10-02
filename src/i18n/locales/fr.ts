@@ -213,6 +213,10 @@ export const fr: Translation = {
 	"explore.back": "Retour",
 	"explore.detach": "Détacher",
 	"explore.detach.hint": "Espace — rester dans le mode, mais choisir la note suivante n'importe où",
+	"explore.choose": "Choisir une note",
+	"explore.choose.placeholder": "Nom ou chemin de la note...",
+	"explore.choose.empty": "Aucune note trouvée",
+	"explore.detached.status": "Exploration : choisissez une note",
 	"explore.exit": "Quitter",
 
 	"menu.open": "Ouvrir",

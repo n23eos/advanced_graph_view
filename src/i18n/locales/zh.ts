@@ -213,6 +213,10 @@ export const zh: Translation = {
 	"explore.back": "返回",
 	"explore.detach": "松开",
 	"explore.detach.hint": "空格 — 保持在该模式，但可在库中任意选择下一篇笔记",
+	"explore.choose": "选择笔记",
+	"explore.choose.placeholder": "笔记名称或路径...",
+	"explore.choose.empty": "未找到匹配的笔记",
+	"explore.detached.status": "探索：选择笔记",
 	"explore.exit": "退出",
 
 	"menu.open": "打开",

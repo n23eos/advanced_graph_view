@@ -213,6 +213,10 @@ export const uk: Translation = {
 	"explore.back": "Назад",
 	"explore.detach": "Відчепитися",
 	"explore.detach.hint": "Пробіл — лишитись у режимі, але обрати наступну нотатку будь-де",
+	"explore.choose": "Вибрати нотатку",
+	"explore.choose.placeholder": "Назва нотатки або шлях...",
+	"explore.choose.empty": "Нотатку не знайдено",
+	"explore.detached.status": "Дослідження: виберіть нотатку",
 	"explore.exit": "Вихід",
 
 	"menu.open": "Відкрити",

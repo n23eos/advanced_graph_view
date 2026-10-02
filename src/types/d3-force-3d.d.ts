@@ -47,6 +47,8 @@ declare module "d3-force-3d" {
 	};
 
 	export function forceCollide(radius?: number): {
+		(): void;
+		initialize(this: void, nodes: SimulationNodeDatum3D[], ...args: unknown[]): void;
 		radius(r: number): ReturnType<typeof forceCollide>;
 		strength(s: number): ReturnType<typeof forceCollide>;
 	};

@@ -213,6 +213,10 @@ export const ko: Translation = {
 	"explore.back": "뒤로",
 	"explore.detach": "해제",
 	"explore.detach.hint": "스페이스 — 모드를 유지한 채 다음 노트를 볼트 어디서나 선택",
+	"explore.choose": "노트 선택",
+	"explore.choose.placeholder": "노트 이름 또는 경로...",
+	"explore.choose.empty": "일치하는 노트 없음",
+	"explore.detached.status": "탐험: 노트 선택",
 	"explore.exit": "종료",
 
 	"menu.open": "열기",

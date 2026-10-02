@@ -208,6 +208,12 @@ export function createLayoutEngine(
 	const spring = createSpringForce();
 	// true = physics off (the "Отключить физику" toggle): sim never ticks.
 	let physicsDisabled = false;
+	const collision = forceCollide(0).strength(0.7);
+	// A zero-radius d3 force still builds and walks a spatial tree. Keep its
+	// place in the force order but skip that work until spacing is enabled.
+	const collide = Object.assign(() => {
+		if ((params.collideRadius ?? 0) > 0) collision();
+	}, { initialize: collision.initialize });
 
 	// `elasticity` crossfades between two ways of holding an edge together.
 	// At 0 it is pure forceLink: a positional constraint that slides endpoints
@@ -363,6 +369,7 @@ export function createLayoutEngine(
 		spring.setDegrees(degrees);
 		applySpringParams();
 
+		collision.radius(params.collideRadius ?? 0);
 		simulation = forceSimulation(nodes, dimensions)
 			.force(
 				"charge",
@@ -382,7 +389,7 @@ export function createLayoutEngine(
 			.force("x", forceX(0).strength(effectiveCentering()))
 			.force("y", forceY(0).strength(effectiveCentering()))
 			.force("z", dimensions === 3 ? forceZ(0).strength(effectiveCentering()) : null)
-			.force("collide", forceCollide(params.collideRadius ?? 0).strength(0.7))
+			.force("collide", collide)
 			.force("spring", spring)
 			.force("cluster", cluster)
 			.alphaMin(ALPHA_MIN)
@@ -453,8 +460,7 @@ export function createLayoutEngine(
 						(simulation.force("y") as ReturnType<typeof forceY>).strength(effectiveCentering());
 						const zForce = simulation.force("z") as ReturnType<typeof forceZ> | null;
 						if (zForce) zForce.strength(effectiveCentering());
-						(simulation.force("collide") as ReturnType<typeof forceCollide>)
-							.radius(params.collideRadius ?? 0);
+						collision.radius(params.collideRadius ?? 0);
 						applySpringParams();
 					}
 					break;
@@ -470,13 +476,13 @@ export function createLayoutEngine(
 					clusterGroups = message.groups;
 					cluster.setGroups(clusterGroups);
 					if (message.strength !== undefined) cluster.setStrength(message.strength);
-					if (simulation) {
+					if (simulation && !physicsDisabled) {
 						simulation.alpha(Math.max(simulation.alpha(), 0.6));
 						if (!running) startTimer(FRAME_INTERVAL_MS);
 					}
 					break;
 				case "reheat":
-					if (simulation) {
+					if (simulation && !physicsDisabled) {
 						simulation.alpha(message.alpha ?? 0.5);
 						if (!running) startTimer(FRAME_INTERVAL_MS);
 					}

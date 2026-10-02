@@ -7,6 +7,7 @@
 import { buildGraphModel, type LinkMap } from "../src/data/GraphStore";
 import { GraphRenderer } from "../src/render/GraphRenderer";
 import { LayoutClient } from "../src/workers/LayoutClient";
+import { installObsidianDom } from "../src/test/obsidianDom";
 
 const NODE_COUNT = 10_000;
 const EDGE_COUNT = 30_000;
@@ -82,6 +83,7 @@ async function measureFps(label: string, driveFrame: (t: number) => void, ms: nu
 }
 
 async function main(): Promise<void> {
+	installObsidianDom();
 	const host = document.getElementById("graph")!;
 	const buildStart = performance.now();
 	const { files, resolved } = makeSyntheticVault();

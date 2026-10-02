@@ -1,7 +1,52 @@
 import { describe, expect, test } from "vitest";
-import { buildGraphModel } from "./GraphStore";
+import { buildGraphModel, sameGraphModel } from "./GraphStore";
 
 const NO_LINKS = {};
+
+describe("sameGraphModel", () => {
+	const files = ["a.md", "b.md", "c.md"];
+
+	test("independently built identical graphs can skip a layout restart", () => {
+		const links = { "a.md": { "b.md": 2 }, "b.md": { "c.md": 1 } };
+		expect(sameGraphModel(buildGraphModel(files, links, {}), buildGraphModel(files, links, {}))).toBe(true);
+	});
+
+	test("cache key reordering does not restart an unchanged graph", () => {
+		const links = { "a.md": { "b.md": 1, "c.md": 2 }, "b.md": { "c.md": 1 } };
+		const reordered = { "b.md": { "c.md": 1 }, "a.md": { "c.md": 2, "b.md": 1 } };
+		expect(sameGraphModel(buildGraphModel(files, links, {}), buildGraphModel(files, reordered, {}))).toBe(true);
+	});
+
+	test("rewired edges with unchanged node degrees require a rebuild", () => {
+		const clockwise = { "a.md": { "b.md": 1 }, "b.md": { "c.md": 1 }, "c.md": { "a.md": 1 } };
+		const counterclockwise = { "a.md": { "c.md": 1 }, "b.md": { "a.md": 1 }, "c.md": { "b.md": 1 } };
+		expect(sameGraphModel(buildGraphModel(files, clockwise, {}), buildGraphModel(files, counterclockwise, {}))).toBe(false);
+	});
+
+	test("repeated link counts change even when edge endpoints do not", () => {
+		expect(sameGraphModel(
+			buildGraphModel(files, { "a.md": { "b.md": 1 } }, {}),
+			buildGraphModel(files, { "a.md": { "b.md": 3 } }, {}),
+		)).toBe(false);
+	});
+
+	test("broken-link counts refresh without a resolved topology change", () => {
+		expect(sameGraphModel(
+			buildGraphModel(files, {}, { "a.md": { missing: 1 } }),
+			buildGraphModel(files, {}, { "a.md": { missing: 2 } }),
+		)).toBe(false);
+	});
+
+	test("node order changes cannot reuse previous numeric ids", () => {
+		expect(sameGraphModel(buildGraphModel(files, {}, {}), buildGraphModel([...files].reverse(), {}, {}))).toBe(false);
+	});
+
+	test("adding nodes or edges requires a rebuild", () => {
+		const model = buildGraphModel(files, {}, {});
+		expect(sameGraphModel(model, buildGraphModel([...files, "d.md"], {}, {}))).toBe(false);
+		expect(sameGraphModel(model, buildGraphModel(files, { "a.md": { "b.md": 1 } }, {}))).toBe(false);
+	});
+});
 
 describe("buildGraphModel", () => {
 	test("creates a node for every vault file, including isolated ones", () => {

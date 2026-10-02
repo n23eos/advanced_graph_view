@@ -213,6 +213,10 @@ export const ru: Translation = {
 	"explore.back": "Назад",
 	"explore.detach": "Отцепиться",
 	"explore.detach.hint": "Пробел — остаться в режиме, но выбрать следующую заметку в любом месте волта",
+	"explore.choose": "Выбрать заметку",
+	"explore.choose.placeholder": "Название заметки или путь...",
+	"explore.choose.empty": "Заметка не найдена",
+	"explore.detached.status": "Исследование: выберите заметку",
 	"explore.exit": "Выход",
 
 	"menu.open": "Открыть",

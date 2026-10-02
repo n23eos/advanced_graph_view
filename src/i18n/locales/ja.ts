@@ -213,6 +213,10 @@ export const ja: Translation = {
 	"explore.back": "戻る",
 	"explore.detach": "解除",
 	"explore.detach.hint": "スペース — モードを続けたまま、次のノートをvault内のどこからでも選ぶ",
+	"explore.choose": "ノートを選択",
+	"explore.choose.placeholder": "ノート名またはパス...",
+	"explore.choose.empty": "一致するノートがありません",
+	"explore.detached.status": "探索: ノートを選択",
 	"explore.exit": "終了",
 
 	"menu.open": "開く",

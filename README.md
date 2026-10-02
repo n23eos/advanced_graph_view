@@ -73,6 +73,8 @@ The camera sits on one note. Its links fan out, the notes at their far ends are 
 
 Aiming is by **direction**, not by pixel: you point *at* a link rather than hitting the line, so a hub with fifty overlapping links stays navigable. Nothing moves on hover alone — every trip is a deliberate click.
 
+Use **Choose note** to type a note name or path and confirm a result with Enter or a click. Full paths distinguish notes with the same name. You can also click any visible node directly to make it the center. Both choices keep the route and respect active filters. The picker stays available after **Let go**.
+
 `Backspace` retraces the trail, `Space` lets go of the current note so you can pick the next one anywhere in the vault, `Esc` leaves. **Open** puts the current note in a new tab without interrupting the trip. Hops keep the scale you set with the wheel and move only what the camera looks at. Physics pauses and 3D switches on for the duration — at runtime only, your saved settings are never written to.
 
 ## Permissions and behavior

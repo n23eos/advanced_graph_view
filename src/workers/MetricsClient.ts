@@ -42,13 +42,14 @@ export class MetricsClient {
 		this.worker.onmessage = (event: MessageEvent<MetricsResponse>) => {
 			if (!this.worker) return; // stopped mid-flight
 			this.computing = false;
-			const { pagerank, community, communityCount } = event.data;
-			this.onResult({ pagerank, community, communityCount });
 			if (this.pendingModel) {
 				const next = this.pendingModel;
 				this.pendingModel = null;
 				this.compute(next);
+				return;
 			}
+			const { pagerank, community, communityCount } = event.data;
+			this.onResult({ pagerank, community, communityCount });
 		};
 		this.worker.onerror = (event: ErrorEvent) => {
 			// `stop()` clears the computing flag as well — without it a crashed

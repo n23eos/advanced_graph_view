@@ -213,6 +213,10 @@ export const pl: Translation = {
 	"explore.back": "Wstecz",
 	"explore.detach": "Odczep",
 	"explore.detach.hint": "Spacja — zostań w trybie, ale wybierz następną notatkę gdziekolwiek",
+	"explore.choose": "Wybierz notatkę",
+	"explore.choose.placeholder": "Nazwa lub ścieżka notatki...",
+	"explore.choose.empty": "Brak pasujących notatek",
+	"explore.detached.status": "Eksploracja: wybierz notatkę",
 	"explore.exit": "Wyjdź",
 
 	"menu.open": "Otwórz",

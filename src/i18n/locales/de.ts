@@ -214,6 +214,10 @@ export const de: Translation = {
 	"explore.back": "Zurück",
 	"explore.detach": "Loslassen",
 	"explore.detach.hint": "Leertaste — im Modus bleiben, die nächste Notiz aber frei im Vault wählen",
+	"explore.choose": "Notiz wählen",
+	"explore.choose.placeholder": "Notizname oder Pfad...",
+	"explore.choose.empty": "Keine passenden Notizen",
+	"explore.detached.status": "Erkundung: Notiz wählen",
 	"explore.exit": "Beenden",
 
 	"menu.open": "Öffnen",

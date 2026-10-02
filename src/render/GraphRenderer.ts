@@ -802,8 +802,8 @@ export class GraphRenderer {
 		if (wasExploring !== (overlay !== null)) {
 			this.edgeMesh?.setAlpha(overlay ? this.edgeOpacity * EXPLORE_BACKGROUND_EDGE_DIM : this.edgeOpacity);
 		}
-		// The pointer stops picking nodes in explore mode, so whatever was
-		// hovered when it started would stay swollen and tinted for good.
+		// Explore owns node emphasis even though hit testing still drives the
+		// tooltip and direct clicks. Clear the old normal-mode hover styling.
 		if (overlay && this.hoveredId !== null) {
 			this.hoveredId = null;
 			this.updateHoverNeighbors();
@@ -1397,14 +1397,21 @@ export class GraphRenderer {
 			}
 		}
 		if (this.explore) {
-			// In explore mode the pointer aims down links instead of picking
-			// nodes; running the hover pipeline too would fight the overlay for
-			// which node looks selected.
+			const nodeId = this.findNodeAt(event.clientX, event.clientY);
+			const directNeighbor =
+				nodeId !== null &&
+				nodeId !== this.explore.centerId &&
+				this.explore.neighbors.includes(nodeId);
 			this.callbacks.onExploreAim(
-				this.aimFromPointer(event.clientX, event.clientY),
+				nodeId === null
+					? this.aimFromPointer(event.clientX, event.clientY)
+					: directNeighbor ? nodeId : null,
 				event.clientX,
 				event.clientY
 			);
+			if (nodeId !== null) {
+				this.callbacks.onNodeHover(nodeId, event.clientX, event.clientY);
+			}
 			return;
 		}
 		const nodeId = this.findNodeAt(event.clientX, event.clientY);
@@ -1499,6 +1506,14 @@ export class GraphRenderer {
 		}
 		if (event.button !== 0) return;
 		if (this.explore) {
+			const nodeId = this.findNodeAt(event.clientX, event.clientY);
+			if (nodeId !== null) {
+				if (this.viewport) this.viewport.suppressPan = true;
+				if (nodeId !== this.explore.centerId) {
+					this.callbacks.onNodeClick(nodeId, event);
+				}
+				return;
+			}
 			// A click on an armed link skips the wait; a click on nothing still
 			// orbits, so the view stays steerable without leaving the mode.
 			if (this.explore.candidateId !== null) {

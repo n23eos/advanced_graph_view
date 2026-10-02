@@ -5,6 +5,26 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Choose an Explore note by searching its name or path in a native picker, or by clicking a visible graph node.
+- Keep Explore navigation and the note picker available after letting go of the current center.
+
+### Changed
+
+- Skip collision-tree work when collision spacing is off, preserving force order and positive-radius behavior.
+- Keep layout benchmark samples active at a fixed temperature and verify that each sample emits a tick.
+- Restore the standalone browser benchmark's Obsidian DOM helpers.
+
+### Fixed
+
+- Rebuild the graph when links or weights change even if node and edge counts stay the same.
+- Refresh committed content filters after vault changes and clear indexing status when obsolete scans finish.
+- Ignore obsolete metric results when a newer graph is waiting for computation.
+- Keep disabled physics frozen when grouping or reheat commands arrive.
+
 ## [0.9.0] — 2026-09-09
 
 Stable release of the filtering, readability and performance improvements

@@ -27,6 +27,40 @@ export interface GraphModel {
 /** Link map shape from metadataCache.resolvedLinks / unresolvedLinks. */
 export type LinkMap = Record<string, Record<string, number>>;
 
+/** Same node ids, link topology and counts consumed by the graph view. */
+export function sameGraphModel(a: GraphModel, b: GraphModel): boolean {
+	if (a.nodes.length !== b.nodes.length || a.edges.length !== b.edges.length) return false;
+	for (let i = 0; i < a.nodes.length; i++) {
+		const left = a.nodes[i];
+		const right = b.nodes[i];
+		if (left.path !== right.path || left.inCount !== right.inCount ||
+			left.outCount !== right.outCount || left.unresolvedCount !== right.unresolvedCount) return false;
+	}
+	for (let i = 0; i < a.edges.length; i++) {
+		const left = a.edges[i];
+		const right = b.edges[i];
+		if (left.source !== right.source || left.target !== right.target || left.weight !== right.weight) {
+			// Cache enumeration order can change without a topology change.
+			// Allocate only on a mismatch; unchanged ordered models stay cheap.
+			const counts = new Map<string, number>();
+			const key = (edge: GraphEdge) => `${edge.source}:${edge.target}:${edge.weight}`;
+			for (const edge of a.edges) {
+				const id = key(edge);
+				counts.set(id, (counts.get(id) ?? 0) + 1);
+			}
+			for (const edge of b.edges) {
+				const id = key(edge);
+				const count = counts.get(id);
+				if (count === undefined) return false;
+				if (count === 1) counts.delete(id);
+				else counts.set(id, count - 1);
+			}
+			return counts.size === 0;
+		}
+	}
+	return true;
+}
+
 function basenameWithoutExtension(path: string): string {
 	const base = path.slice(path.lastIndexOf("/") + 1);
 	const dot = base.lastIndexOf(".");

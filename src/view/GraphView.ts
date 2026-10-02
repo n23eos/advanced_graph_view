@@ -13,7 +13,7 @@ import {
 import { buildAdjacency, computeDistances, focusFalloff, shortestPath, type Adjacency } from "../analysis/focus";
 import { nameClusters, type ClusterContent } from "../analysis/clusterNames";
 import { computeOverlayMask, countOverlayMatches } from "../analysis/overlays";
-import { buildGraphModel, type GraphModel } from "../data/GraphStore";
+import { buildGraphModel, sameGraphModel, type GraphModel } from "../data/GraphStore";
 import { stripMarkdown } from "../data/stripMarkdown";
 import { countRecentOpens } from "../data/UsageTracker";
 import type { PositionMap } from "../data/persistence";
@@ -74,6 +74,7 @@ import { SearchPresetModal } from "../ui/SearchPresetModal";
 import { SearchPresetManagerModal } from "../ui/SearchPresetManagerModal";
 import { FilterChips, type FilterSelection } from "../ui/FilterChips";
 import { compileChipFilter } from "../ui/chipFilter";
+import { ExploreNoteModal } from "../ui/ExploreNoteModal";
 import { PromptModal } from "../ui/PromptModal";
 import { TimelineBar, type TimelineMode } from "../ui/TimelineBar";
 import { CameraWidget } from "../ui/CameraWidget";
@@ -189,10 +190,11 @@ export class GraphInsightView extends ItemView {
 	/** Explore mode is running but not anchored to a node: the whole graph is
 	 *  readable again and a click picks the next place to explore from. */
 	private exploreDetached = false;
+	private exploreNoteModal: ExploreNoteModal | null = null;
 	/** A vault change arrived while exploring; rebuild once the mode ends. */
 	private rebuildDeferred = false;
 
-	private rebuildDebounced = debounce(() => void this.rebuildGraph(), 2000, true);
+	private rebuildDebounced = debounce(() => void this.refreshVault(), 2000, true);
 	private rebuilding = false;
 
 	private savePositionsDebounced = debounce(
@@ -231,7 +233,10 @@ export class GraphInsightView extends ItemView {
 		this.registerDomEvent(container, "wheel", () => this.autoFit.cancel());
 
 		this.renderer = new GraphRenderer({
-			onNodeHover: (nodeId, clientX, clientY) => this.showTooltip(nodeId, clientX, clientY),
+			onNodeHover: (nodeId, clientX, clientY) => {
+				if (this.isExploring) this.showExploreTarget(nodeId, clientX, clientY);
+				else this.showTooltip(nodeId, clientX, clientY);
+			},
 			onNodeClick: (nodeId, event) => this.handleNodeClick(nodeId, event),
 			// F-02: a double-click enters Focus around the node and never opens
 			// the note — the same under every cursor tool. Explore keeps its own
@@ -452,11 +457,7 @@ export class GraphInsightView extends ItemView {
 
 		await this.rebuildGraph();
 
-		this.registerEvent(this.app.metadataCache.on("resolved", () => {
-			this.contentIndex.clear();
-			this.contentIndexGeneration++;
-			this.rebuildDebounced();
-		}));
+		this.registerEvent(this.app.metadataCache.on("resolved", () => this.handleMetadataResolved()));
 		this.registerEvent(
 			this.app.workspace.on("file-open", (file) => this.handleActiveNoteChanged(file))
 		);
@@ -471,6 +472,7 @@ export class GraphInsightView extends ItemView {
 	}
 
 	private handleKeyDown(event: KeyboardEvent): void {
+		if (this.exploreNoteModal) return;
 		if (!this.contentEl.isShown()) return;
 		if (this.app.workspace.getActiveViewOfType(GraphInsightView) !== this) return;
 		const target = event.target as HTMLElement | null;
@@ -591,8 +593,11 @@ export class GraphInsightView extends ItemView {
 			this.responsiveModeState !== "full",
 			{
 				onCrumb: (index) => {
-					const target = trail.jumpTo(index);
+					const target = trail.items[index];
 					const id = target ? this.model?.pathToId.get(target.path) : undefined;
+					// Rejected Explore destinations must not move the history cursor.
+					if (trail === this.exploreTrail && (id === undefined || this.hiddenMask?.[id] === 1)) return;
+					trail.jumpTo(index);
 					if (id !== undefined) go(id);
 				},
 				onRemove: (index) => {
@@ -873,12 +878,23 @@ export class GraphInsightView extends ItemView {
 		}
 	}
 
+	/** Previous reachable crumb; filters must not desynchronise the camera and trail. */
+	private previousExploreIndex(): number | null {
+		if (!this.exploreTrail || !this.model) return null;
+		for (let index = this.exploreTrail.activeIndex - 1; index >= 0; index--) {
+			const id = this.model.pathToId.get(this.exploreTrail.items[index].path);
+			if (id !== undefined && this.hiddenMask?.[id] !== 1) return index;
+		}
+		return null;
+	}
+
 	/** Backspace and the Back button both walk the same trail model (F-11). */
 	private exploreBack(): void {
-		const target = this.exploreTrail?.back();
-		if (!target) return;
-		const id = this.model?.pathToId.get(target.path);
-		if (id !== undefined) this.exploreSession?.travelTo(id);
+		const index = this.previousExploreIndex();
+		if (index === null) return;
+		const target = this.exploreTrail!.jumpTo(index)!;
+		const id = this.model!.pathToId.get(target.path)!;
+		this.navigateExploreTo(id);
 		this.renderExploreBar();
 	}
 
@@ -1050,8 +1066,7 @@ export class GraphInsightView extends ItemView {
 		this.exploreDetached = false;
 
 		if (this.focusRootId !== null) this.exitFocus();
-		// The pointer stops picking nodes now, so a tooltip left over from the
-		// last hover would hang there for the rest of the session.
+		// Clear any full hover card before showing Explore signposts.
 		this.clearPreviewTimer();
 		this.tooltip?.hide();
 		this.exploreSession = new ExploreSession(
@@ -1087,7 +1102,7 @@ export class GraphInsightView extends ItemView {
 		this.exploreSession = null;
 		this.exploreFocus = null;
 		this.exploreDetached = true;
-		this.focusBar?.hide();
+		this.renderExploreBar();
 		this.showExploreTarget(null, 0, 0);
 		this.recomputeVisual();
 		new Notice(t("notice.exploreDetached"), 5000);
@@ -1114,6 +1129,8 @@ export class GraphInsightView extends ItemView {
 
 	async exitExplore(): Promise<void> {
 		if (!this.exploreSession && !this.exploreDetached) return;
+		this.exploreNoteModal?.close();
+		this.exploreNoteModal = null;
 		this.exploreSession?.stop();
 		this.exploreSession = null;
 		this.exploreFocus = null;
@@ -1164,38 +1181,64 @@ export class GraphInsightView extends ItemView {
 		return this.exploreSession !== null || this.exploreDetached;
 	}
 
-	/** Reuses the focus bar to show where the camera is and how to leave. */
+	/** All explicit Explore choices use the same flight and route. */
+	private navigateExploreTo(nodeId: number): void {
+		if (!this.isExploring || !this.model?.nodes[nodeId] || this.hiddenMask?.[nodeId] === 1) return;
+		this.renderer?.setSelected(nodeId);
+		if (this.exploreDetached) void this.enterExplore(nodeId);
+		else if (this.exploreSession?.currentId !== nodeId) this.exploreSession?.travelTo(nodeId);
+	}
+
+	private openExploreNotePicker(): void {
+		if (!this.isExploring || !this.model || this.exploreNoteModal) return;
+		const trail = this.exploreTrail;
+		const modal = new ExploreNoteModal(this.app,
+			() => this.model?.nodes.filter((node) => this.hiddenMask?.[node.id] !== 1) ?? [],
+			(path) => {
+				// Resolve paths at selection time; ids and filters may have changed.
+				if (this.exploreTrail !== trail) return;
+				const id = this.model?.pathToId.get(path);
+				if (id !== undefined) this.navigateExploreTo(id);
+			},
+			() => { if (this.exploreNoteModal === modal) this.exploreNoteModal = null; },
+		);
+		this.exploreNoteModal = modal;
+		modal.open();
+	}
+
+	/** Reuses the focus bar for anchored and detached navigation. */
 	private renderExploreBar(): void {
-		if (!this.focusBar || !this.model || !this.exploreFocus) return;
-		const { centerId, neighbors } = this.exploreFocus;
+		if (!this.focusBar || !this.model || (!this.exploreFocus && !this.exploreDetached)) return;
+		const focus = this.exploreFocus;
 		this.focusBar.empty();
 		this.focusBar.show();
-		this.focusBar.createSpan({
-			text: t("explore.status", {
-				name: this.model.nodes[centerId].name,
-				count: neighbors.length,
-			}),
-		});
-		// With side-pane mode on, the note lands in the companion pane and the
-		// graph keeps focus — the trip continues. Otherwise a new tab, so the
-		// tab the trip started from is not replaced mid-exploration.
-		const open = this.focusBar.createEl("button", { text: t("explore.open") });
-		open.setAttribute("aria-label", t("explore.open.hint"));
-		open.addEventListener("click", () => this.openNode(centerId, !this.plugin.settings.openInSidePane));
+		this.focusBar.createSpan({ text: focus
+			? t("explore.status", { name: this.model.nodes[focus.centerId].name, count: focus.neighbors.length })
+			: t("explore.detached.status") });
+		const choose = this.focusBar.createEl("button", { text: t("explore.choose") });
+		choose.addEventListener("click", () => this.openExploreNotePicker());
+		if (focus) {
+			const open = this.focusBar.createEl("button", { text: t("explore.open") });
+			open.setAttribute("aria-label", t("explore.open.hint"));
+			open.addEventListener("click", () => this.openNode(focus.centerId, !this.plugin.settings.openInSidePane));
+		}
 		const back = this.focusBar.createEl("button", { text: t("explore.back") });
+		back.disabled = this.previousExploreIndex() === null;
 		back.addEventListener("click", () => this.exploreBack());
-		const detach = this.focusBar.createEl("button", { text: t("explore.detach") });
-		detach.setAttribute("aria-label", t("explore.detach.hint"));
-		detach.addEventListener("click", () => this.detachExplore());
-		const exportButton = this.focusBar.createEl("button", { text: t("topicmap.modalTitle") });
-		exportButton.setAttribute("aria-label", t("topicmap.export"));
-		exportButton.addEventListener("click", () => {
-			if (this.exploreFocus) this.openTopicMapExport("explore", this.exploreFocus.centerId);
-		});
+		if (focus) {
+			const detach = this.focusBar.createEl("button", { text: t("explore.detach") });
+			detach.setAttribute("aria-label", t("explore.detach.hint"));
+			detach.addEventListener("click", () => this.detachExplore());
+			const exportButton = this.focusBar.createEl("button", { text: t("topicmap.modalTitle") });
+			exportButton.setAttribute("aria-label", t("topicmap.export"));
+			exportButton.addEventListener("click", () => {
+				if (this.exploreFocus) this.openTopicMapExport("explore", this.exploreFocus.centerId);
+			});
+		}
 		const exit = this.focusBar.createEl("button", { text: t("explore.exit") });
 		exit.addEventListener("click", () => void this.exitExplore());
 		if (this.exploreTrail && this.exploreTrail.items.length > 1) {
-			this.renderTrail(this.focusBar, this.exploreTrail, (id) => this.exploreSession?.travelTo(id));
+			this.renderTrail(this.focusBar, this.exploreTrail, (id) => this.navigateExploreTo(id));
 		}
 	}
 
@@ -1421,6 +1464,7 @@ export class GraphInsightView extends ItemView {
 		this.pushSearchUi();
 		try {
 			for (const file of files) {
+				if (generation !== this.contentIndexGeneration) return;
 				let text: string;
 				try {
 					text = (await this.app.vault.cachedRead(file)).toLowerCase();
@@ -1434,8 +1478,9 @@ export class GraphInsightView extends ItemView {
 			}
 		} finally {
 			this.contentIndexJobs--;
+			// Even a cancelled scan must clear its contribution to "Indexing".
+			this.recomputeVisual();
 		}
-		if (generation === this.contentIndexGeneration) this.recomputeVisual();
 	}
 
 	// ── Menus ─────────────────────────────────────────────────────────
@@ -1628,6 +1673,18 @@ export class GraphInsightView extends ItemView {
 		}).open();
 	}
 
+	private handleMetadataResolved(): void {
+		this.contentIndex.clear();
+		this.contentIndexGeneration++;
+		this.rebuildDebounced();
+	}
+
+	/** Content edits also need a rescan when link topology stays unchanged. */
+	private async refreshVault(): Promise<void> {
+		await this.rebuildGraph();
+		if (this.hardQuery) await this.ensureContentIndex(contentNeedles(this.hardQuery));
+	}
+
 	private async rebuildGraph(): Promise<void> {
 		if (!this.renderer || !this.layout) return;
 		// A rebuild renumbers nodes, and explore mode holds node ids: an
@@ -1642,7 +1699,7 @@ export class GraphInsightView extends ItemView {
 		const model = buildGraphModel(files.map((f) => f.path), cache.resolvedLinks, cache.unresolvedLinks);
 
 		if (this.rebuilding) return;
-		if (this.model && sameModelShape(this.model, model)) return;
+		if (this.model && sameGraphModel(this.model, model)) return;
 		this.rebuilding = true;
 
 		const { seed, pinnedPaths } = await this.buildSeedPositions(model);
@@ -2113,11 +2170,9 @@ export class GraphInsightView extends ItemView {
 
 	private handleNodeClick(nodeId: number, event: PointerEvent): void {
 		if (!this.model) return;
-		// Explore mode let go of its node: the click picks where to carry on
-		// from, whatever the cursor tool would normally do.
-		if (this.exploreDetached) {
-			this.renderer?.setSelected(nodeId);
-			void this.enterExplore(nodeId);
+		// Explore picks a destination regardless of the normal cursor tool.
+		if (this.isExploring) {
+			this.navigateExploreTo(nodeId);
 			return;
 		}
 		const node = this.model.nodes[nodeId];
@@ -2650,6 +2705,11 @@ export class GraphInsightView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
+		this.exploreNoteModal?.close();
+		this.exploreNoteModal = null;
+		// Cancel in-flight note scans before their reads can finish on a closed view.
+		this.contentIndexGeneration++;
+		this.hardQuery = null;
 		// Forget the companion pane without closing it: the note in it is the
 		// user's, and they may well still be reading it.
 		this.companionLeafId = null;
@@ -2714,15 +2774,6 @@ function downloadBlob(fileName: string, blob: Blob): void {
 	const anchor = createEl("a", { attr: { href: url, download: fileName } });
 	anchor.click();
 	URL.revokeObjectURL(url);
-}
-
-/** Cheap structural equality: counts + every node path. */
-function sameModelShape(a: GraphModel, b: GraphModel): boolean {
-	if (a.nodes.length !== b.nodes.length || a.edges.length !== b.edges.length) return false;
-	for (let i = 0; i < a.nodes.length; i++) {
-		if (a.nodes[i].path !== b.nodes[i].path) return false;
-	}
-	return true;
 }
 
 /** Unique tags and folders for search suggestions, sorted by frequency. */

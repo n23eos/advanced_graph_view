@@ -1,12 +1,10 @@
 /**
  * Baseline for one simulation tick inside the layout worker.
  *
- * Measured through the message protocol rather than by reaching into the
- * engine, because that is also what step 3 changes: the tick cost today
- * includes allocating a fresh positions buffer to post back, and the ping-pong
- * rewrite should show up here as the allocation disappearing.
+ * Measured through the message protocol, including the positions snapshot.
+ * Keep alpha fixed so warmup and later samples cannot cool into no-op steps.
  */
-import { bench, describe } from "vitest";
+import { afterAll, bench, describe } from "vitest";
 import { createLayoutEngine, type PhysicsParams } from "../workers/layoutEngine";
 import { makeSyntheticGraph } from "./synthGraph";
 
@@ -30,7 +28,10 @@ for (const size of SIZES) {
 		for (const dimensions of [2, 3] as const) {
 			// Paused: no timer runs, so every tick comes from an explicit "step"
 			// and the benchmark measures exactly the work it asked for.
-			const engine = createLayoutEngine(() => {});
+			let ticks = 0;
+			const engine = createLayoutEngine((message) => {
+				if (message.type === "tick") ticks++;
+			});
 			engine.handle({
 				type: "init",
 				nodeCount: size,
@@ -41,9 +42,13 @@ for (const size of SIZES) {
 				paused: true,
 			});
 			engine.handle({ type: "params", params: PARAMS });
+			afterAll(() => engine.handle({ type: "stop" }));
 
 			bench(`${dimensions}D single tick`, () => {
+				const before = ticks;
+				engine.handle({ type: "reheat", alpha: 0.3 });
 				engine.handle({ type: "step" });
+				if (ticks !== before + 1) throw new Error("benchmark step did not emit a tick");
 			});
 		}
 	});

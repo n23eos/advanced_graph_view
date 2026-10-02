@@ -67,3 +67,16 @@ export class Setting {
 		return this;
 	}
 }
+
+/** Only the host-facing surface used by ExploreNoteModal, no fuzzy algorithm. */
+export abstract class FuzzySuggestModal<T> extends Modal {
+	inputEl: HTMLInputElement = this.contentEl.createEl("input");
+	emptyStateText = "";
+	setPlaceholder(text: string): this {
+		this.inputEl.placeholder = text;
+		return this;
+	}
+	abstract getItems(): T[];
+	abstract getItemText(item: T): string;
+	abstract onChooseItem(item: T, event?: MouseEvent | KeyboardEvent): void;
+}
