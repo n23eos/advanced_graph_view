@@ -164,6 +164,8 @@ export const fr: Translation = {
 	"filters.empty": "Aucun résultat",
 	"filters.search": "Rechercher…",
 
+	"timeline.play": "Lire la chronologie",
+	"timeline.pause": "Mettre la chronologie en pause",
 	"timeline.created": "Créées",
 	"timeline.modified": "Modifiées",
 
@@ -262,6 +264,9 @@ export const fr: Translation = {
 	"notice.workerRetry": "Redémarrer",
 	"notice.contextLost": "WebGL s'est arrêté : le contexte graphique a été perdu. La vue doit être reconstruite.",
 	"notice.contextReload": "Reconstruire la vue",
+	"startup.error.title": "WebGL n'est pas disponible",
+	"startup.error.body": "Advanced Graph View nécessite WebGL. Activez l'accélération matérielle, puis réessayez.",
+	"startup.error.retry": "Réessayer",
 	"notice.usageCleared": "Statistiques d'ouverture effacées",
 	"notice.dataReset": "Données d'Advanced Graph View réinitialisées",
 

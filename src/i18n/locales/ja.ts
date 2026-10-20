@@ -164,6 +164,8 @@ export const ja: Translation = {
 	"filters.empty": "見つかりません",
 	"filters.search": "検索…",
 
+	"timeline.play": "タイムラインを再生",
+	"timeline.pause": "タイムラインを一時停止",
 	"timeline.created": "作成日",
 	"timeline.modified": "更新日",
 
@@ -262,6 +264,9 @@ export const ja: Translation = {
 	"notice.workerRetry": "再起動",
 	"notice.contextLost": "WebGL が停止しました。グラフィックスコンテキストが失われたため、ビューを作り直す必要があります。",
 	"notice.contextReload": "ビューを再構築",
+	"startup.error.title": "WebGL を利用できません",
+	"startup.error.body": "Advanced Graph View には WebGL が必要です。ハードウェアアクセラレーションを有効にして、もう一度お試しください。",
+	"startup.error.retry": "再試行",
 	"notice.usageCleared": "利用統計を消去しました",
 	"notice.dataReset": "Advanced Graph View のデータをリセットしました",
 

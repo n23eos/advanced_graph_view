@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Advanced Graph View UI harness</title>
+	<link rel="stylesheet" href="bundle.css">
+</head>
+<body class="theme-dark">
+	<header class="harness-bar">
+		<div class="harness-title">
+			<strong>Advanced Graph View browser QA</strong>
+			<span>Real plugin view and workers on synthetic notes. This is not native Obsidian.</span>
+		</div>
+		<fieldset aria-label="Container width">
+			<legend>Width</legend>
+			<button type="button" data-width="1200" class="is-active">1200 px</button>
+			<button type="button" data-width="700">700 px</button>
+			<button type="button" data-width="360">360 px</button>
+		</fieldset>
+		<fieldset aria-label="Theme">
+			<legend>Theme</legend>
+			<button type="button" data-theme="dark" class="is-active">Dark</button>
+			<button type="button" data-theme="light">Light</button>
+		</fieldset>
+		<fieldset aria-label="Synthetic vault">
+			<legend>Vault</legend>
+			<button type="button" data-vault="normal" class="is-active">42 notes</button>
+			<button type="button" data-vault="empty">Empty</button>
+		</fieldset>
+		<output id="harness-status" aria-live="polite">Starting...</output>
+	</header>
+	<main id="stage" data-width="1200">
+		<section id="view-host" aria-label="Advanced Graph View test container"></section>
+	</main>
+	<div id="harness-errors" role="alert"></div>
+	<script src="bundle.js"></script>
+</body>
+</html>

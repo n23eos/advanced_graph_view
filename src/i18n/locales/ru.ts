@@ -164,6 +164,8 @@ export const ru: Translation = {
 	"filters.empty": "Ничего не найдено",
 	"filters.search": "Поиск…",
 
+	"timeline.play": "Воспроизвести хронологию",
+	"timeline.pause": "Приостановить хронологию",
 	"timeline.created": "Созданы",
 	"timeline.modified": "Изменены",
 
@@ -262,6 +264,9 @@ export const ru: Translation = {
 	"notice.workerRetry": "Перезапустить",
 	"notice.contextLost": "WebGL остановлен: графический контекст потерян. Вид нужно пересобрать.",
 	"notice.contextReload": "Пересобрать вид",
+	"startup.error.title": "WebGL недоступен",
+	"startup.error.body": "Advanced Graph View требует WebGL. Включите аппаратное ускорение и повторите попытку.",
+	"startup.error.retry": "Повторить",
 	"notice.usageCleared": "Статистика открытий очищена",
 	"notice.dataReset": "Данные Advanced Graph View сброшены",
 

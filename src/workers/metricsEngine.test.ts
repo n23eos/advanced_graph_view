@@ -13,6 +13,14 @@ function edges(pairs: [number, number][]): { edges: Uint32Array; weights: Float3
 }
 
 describe("computeGraphMetrics", () => {
+	test("an empty vault produces empty metrics without a convergence failure", () => {
+		expect(computeGraphMetrics(0, new Uint32Array(0), new Float32Array(0))).toEqual({
+			pagerank: new Float32Array(0),
+			community: new Int32Array(0),
+			communityCount: 0,
+		});
+	});
+
 	test("hub of a star graph gets the highest pagerank", () => {
 		// Arrange: nodes 1..4 all link to node 0
 		const input = edges([[1, 0], [2, 0], [3, 0], [4, 0]]);

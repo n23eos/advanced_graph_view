@@ -5,23 +5,34 @@ import { MetricsClient, type GraphMetrics } from "./MetricsClient";
 
 class FakeWorker {
 	static instances: FakeWorker[] = [];
+	static constructorError: Error | null = null;
+	static postError: Error | null = null;
 
 	onmessage: ((event: MessageEvent<MetricsResponse>) => void) | null = null;
 	onerror: ((event: ErrorEvent) => void) | null = null;
 	readonly messages: unknown[] = [];
+	terminated = false;
 
 	constructor(_url: string | URL) {
+		if (FakeWorker.constructorError) throw FakeWorker.constructorError;
 		FakeWorker.instances.push(this);
 	}
 
 	postMessage(message: unknown): void {
+		if (FakeWorker.postError) throw FakeWorker.postError;
 		this.messages.push(message);
 	}
 
-	terminate(): void {}
+	terminate(): void {
+		this.terminated = true;
+	}
 
 	emit(response: MetricsResponse): void {
 		this.onmessage?.({ data: response } as MessageEvent<MetricsResponse>);
+	}
+
+	emitError(message: string): void {
+		this.onerror?.({ message } as ErrorEvent);
 	}
 }
 
@@ -48,10 +59,14 @@ function response(rank: number): MetricsResponse {
 describe("MetricsClient", () => {
 	beforeEach(() => {
 		FakeWorker.instances = [];
+		FakeWorker.constructorError = null;
+		FakeWorker.postError = null;
 		vi.stubGlobal("Worker", FakeWorker);
+		vi.spyOn(console, "error").mockImplementation(() => {});
 	});
 
 	afterEach(() => {
+		vi.restoreAllMocks();
 		vi.unstubAllGlobals();
 	});
 
@@ -72,5 +87,36 @@ describe("MetricsClient", () => {
 
 		expect(received).toHaveLength(1);
 		expect(Array.from(received[0].pagerank)).toEqual([0.25, 0.75]);
+	});
+
+	test("reports a constructor failure once and revokes its blob URL", () => {
+		FakeWorker.constructorError = new Error("worker blocked");
+		const revoked: string[] = [];
+		vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:metrics-test");
+		vi.spyOn(URL, "revokeObjectURL").mockImplementation((url) => revoked.push(String(url)));
+		const errors: string[] = [];
+		const client = new MetricsClient(() => {}, (reason) => errors.push(reason));
+
+		expect(() => client.compute(model(1))).not.toThrow();
+
+		expect(errors).toEqual(["worker blocked"]);
+		expect(revoked).toEqual(["blob:metrics-test"]);
+	});
+
+	test("cleans up a worker whose post fails without reporting twice", () => {
+		FakeWorker.postError = new Error("post failed");
+		const revoked: string[] = [];
+		vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:metrics-test");
+		vi.spyOn(URL, "revokeObjectURL").mockImplementation((url) => revoked.push(String(url)));
+		const errors: string[] = [];
+		const client = new MetricsClient(() => {}, (reason) => errors.push(reason));
+
+		client.compute(model(1));
+		const worker = FakeWorker.instances[0];
+		worker.emitError("late error");
+
+		expect(worker.terminated).toBe(true);
+		expect(errors).toEqual(["post failed"]);
+		expect(revoked).toEqual(["blob:metrics-test"]);
 	});
 });

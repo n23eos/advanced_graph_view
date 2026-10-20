@@ -164,6 +164,8 @@ export const ptBR: Translation = {
 	"filters.empty": "Nada encontrado",
 	"filters.search": "Buscar…",
 
+	"timeline.play": "Reproduzir linha do tempo",
+	"timeline.pause": "Pausar linha do tempo",
 	"timeline.created": "Criadas",
 	"timeline.modified": "Modificadas",
 
@@ -262,6 +264,9 @@ export const ptBR: Translation = {
 	"notice.workerRetry": "Reiniciar",
 	"notice.contextLost": "O WebGL parou: o contexto gráfico foi perdido. A visualização precisa ser reconstruída.",
 	"notice.contextReload": "Reconstruir visualização",
+	"startup.error.title": "O WebGL não está disponível",
+	"startup.error.body": "O Advanced Graph View precisa de WebGL. Ative a aceleração de hardware e tente novamente.",
+	"startup.error.retry": "Tentar novamente",
 	"notice.usageCleared": "Estatísticas de uso apagadas",
 	"notice.dataReset": "Dados do Advanced Graph View redefinidos",
 

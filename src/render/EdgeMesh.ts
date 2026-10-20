@@ -9,6 +9,8 @@ export class EdgeMesh {
 	readonly mesh: Mesh;
 	private readonly vertices: Float32Array;
 	private readonly positionBuffer: Buffer;
+	private readonly geometry: MeshGeometry;
+	private destroyed = false;
 	/** Flat [source0, target0, source1, target1, ...] node id pairs. */
 	private readonly edgePairs: Uint32Array;
 	private width = 1;
@@ -34,15 +36,15 @@ export class EdgeMesh {
 			indices[i + 5] = v + 3;
 		}
 
-		const geometry = new MeshGeometry({
+		this.geometry = new MeshGeometry({
 			positions: this.vertices,
 			uvs: new Float32Array(edgeCount * 8),
 			indices,
 			topology: "triangle-list",
 		});
-		this.positionBuffer = geometry.getBuffer("aPosition");
+		this.positionBuffer = this.geometry.getBuffer("aPosition");
 
-		this.mesh = new Mesh({ geometry, texture: Texture.WHITE });
+		this.mesh = new Mesh({ geometry: this.geometry, texture: Texture.WHITE });
 		this.mesh.tint = color;
 		this.mesh.alpha = alpha;
 	}
@@ -113,6 +115,17 @@ export class EdgeMesh {
 	}
 
 	destroy(): void {
-		this.mesh.destroy(true);
+		if (this.destroyed) return;
+		this.destroyed = true;
+		const buffers = [...this.geometry.buffers];
+		const indexBuffer = this.geometry.indexBuffer;
+		// Texture.WHITE and the default shader belong to Pixi, not this mesh.
+		this.mesh.destroy({ texture: false, textureSource: false });
+		// Pixi's Geometry.destroy(true) destroys the index buffer twice. Let it
+		// release the index once, then release the two owned vertex buffers.
+		this.geometry.destroy(false);
+		for (const buffer of buffers) {
+			if (buffer !== indexBuffer) buffer.destroy();
+		}
 	}
 }

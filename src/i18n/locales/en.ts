@@ -183,6 +183,8 @@ export const en = {
 	"filters.search": "Search…",
 
 	// ── Timeline ──────────────────────────────────────────────────────
+	"timeline.play": "Play timeline",
+	"timeline.pause": "Pause timeline",
 	"timeline.created": "Created",
 	"timeline.modified": "Modified",
 
@@ -288,6 +290,9 @@ export const en = {
 	"notice.workerRetry": "Restart",
 	"notice.contextLost": "WebGL stopped: the graphics context was lost. The view has to be rebuilt.",
 	"notice.contextReload": "Rebuild view",
+	"startup.error.title": "WebGL is unavailable",
+	"startup.error.body": "Advanced Graph View needs WebGL. Enable hardware acceleration, then try again.",
+	"startup.error.retry": "Try again",
 	"notice.usageCleared": "Usage statistics cleared",
 	"notice.dataReset": "Advanced Graph View data reset",
 

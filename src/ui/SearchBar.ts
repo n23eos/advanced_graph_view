@@ -6,6 +6,7 @@
  */
 
 import { t } from "../i18n";
+import { setIcon } from "obsidian";
 
 import type { SearchPreset } from "../settings/schema";
 import type { QueryDiagnostic } from "../query/QueryParser";
@@ -85,6 +86,7 @@ export class SearchBar {
 	private chipEl: HTMLElement;
 	private hintEl: HTMLElement;
 	private constraintsEl: HTMLElement;
+	private statusRow: HTMLElement;
 	/** Once the user commits a filter the Enter hint has done its job. */
 	private hasCommitted = false;
 	/** Trailing throttle so the aria-live status stays quiet while typing. */
@@ -95,6 +97,8 @@ export class SearchBar {
 		this.filtersHost = this.root.createDiv({ cls: "graph-insight-searchbar-filters" });
 
 		const inputWrap = this.root.createDiv({ cls: "graph-insight-searchbar-input" });
+		const searchIcon = inputWrap.createSpan({ cls: "graph-insight-search-icon", attr: { "aria-hidden": "true" } });
+		setIcon(searchIcon, "search");
 		this.input = inputWrap.createEl("input", {
 			type: "text",
 			placeholder: t("search.placeholder"),
@@ -183,18 +187,18 @@ export class SearchBar {
 		});
 
 		const saveButton = this.root.createEl("button", {
-			text: "★",
-			cls: "graph-insight-searchbar-btn graph-insight-searchbar-secondary",
+			cls: "graph-insight-searchbar-btn graph-insight-searchbar-secondary graph-insight-search-icon-button",
 		});
+		setIcon(saveButton, "bookmark-plus");
 		saveButton.setAttribute("aria-label", t("search.savePreset"));
 		saveButton.addEventListener("click", () => {
 			if (this.input.value.trim()) this.callbacks.onSavePreset(this.input.value.trim());
 		});
 
 		const manageButton = this.root.createEl("button", {
-			text: "≡",
-			cls: "graph-insight-searchbar-btn graph-insight-searchbar-secondary",
+			cls: "graph-insight-searchbar-btn graph-insight-searchbar-secondary graph-insight-search-icon-button",
 		});
+		setIcon(manageButton, "sliders-horizontal");
 		manageButton.setAttribute("aria-label", t("preset.manage"));
 		manageButton.addEventListener("click", () => this.callbacks.onManagePresets());
 
@@ -205,11 +209,14 @@ export class SearchBar {
 		});
 		tasksButton.addEventListener("click", () => this.callbacks.onTasksMenu(tasksButton));
 
-		const clearButton = this.root.createEl("button", { text: "✕", cls: "graph-insight-searchbar-btn" });
+		const clearButton = inputWrap.createEl("button", {
+			cls: "graph-insight-searchbar-btn graph-insight-search-icon-button graph-insight-search-clear",
+		});
+		setIcon(clearButton, "x");
 		clearButton.setAttribute("aria-label", t("search.clear"));
 		clearButton.addEventListener("click", () => this.clear());
 
-		const statusRow = this.root.createDiv({ cls: "graph-insight-search-statusrow" });
+		const statusRow = this.statusRow = this.root.createDiv({ cls: "graph-insight-search-statusrow is-hidden" });
 		this.chipEl = statusRow.createDiv({ cls: "graph-insight-search-chip" });
 		this.chipEl.hide();
 		this.statusEl = statusRow.createDiv({
@@ -225,6 +232,10 @@ export class SearchBar {
 
 	/** Render what the host computed: mode, counters, chip, errors, hints. */
 	setUiState(state: SearchUiState): void {
+		const hasStatus = state.mode !== "idle" || !!state.query || !!state.parseError
+			|| state.isIndexingContent || (state.constraints?.length ?? 0) > 0;
+		this.statusRow.toggleClass("is-hidden", !hasStatus);
+		this.statusEl.toggleClass("has-error", !!state.parseError);
 		this.chipEl.empty();
 		if (state.query) {
 			this.chipEl.createSpan({ text: state.query, title: state.query });

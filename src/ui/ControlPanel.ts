@@ -119,6 +119,7 @@ export class ControlPanel {
 	private viewPresets: ViewPresetRow[] = [];
 	private selectedPresetIndex: number | null = null;
 	private hiddenCountEl: HTMLElement | null = null;
+	private header: HTMLButtonElement;
 
 	constructor(
 		host: HTMLElement,
@@ -135,12 +136,16 @@ export class ControlPanel {
 		}
 		this.root = host.createDiv({ cls: "graph-insight-panel" });
 
-		const header = this.root.createDiv({ cls: "graph-insight-panel-header" });
+		const header = this.header = this.root.createEl("button", {
+			cls: "graph-insight-panel-header",
+			attr: { type: "button" },
+		});
 		header.createSpan({ text: t("panel.title") });
-		const toggle = header.createSpan({ cls: "graph-insight-panel-toggle", text: state.collapsed ? "+" : "–" });
+		const toggle = header.createSpan({ cls: "graph-insight-panel-toggle", text: state.collapsed ? "+" : "-" });
+		toggle.setAttribute("aria-hidden", "true");
 		header.addEventListener("click", () => {
 			this.setState({ ...this.state, collapsed: !this.state.collapsed });
-			toggle.setText(this.state.collapsed ? "+" : "–");
+			toggle.setText(this.state.collapsed ? "+" : "-");
 		});
 
 		this.body = this.root.createDiv({ cls: "graph-insight-panel-body" });
@@ -155,7 +160,9 @@ export class ControlPanel {
 	}
 
 	private applyCollapsed(): void {
+		this.root.toggleClass("is-collapsed", this.state.collapsed);
 		this.body.toggleClass("is-hidden", this.state.collapsed);
+		this.header.setAttribute("aria-expanded", String(!this.state.collapsed));
 	}
 
 	private renderBody(): void {

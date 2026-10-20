@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-10-20
+
+### Changed
+
+- Floating panels reserve space for wrapped search filters, navigation and the timeline.
+- Search and playback use consistent theme-aware icons; idle search no longer reserves an empty status row.
+- The settings panel can be collapsed from the keyboard and exposes its expanded state.
+
+### Fixed
+
+- Keep the timeline's selected month and active filter synchronized when dates change or playback restarts.
+- Stop timeline playback when its data changes, and disable playback for empty or single-month ranges.
+- Skip malformed or overflowing saved coordinates while preserving valid positions and compatible legacy data.
+- Recover from worker creation and message failures with cleanup and the existing restart action.
+- Ignore outdated Changes results after switching periods, rebuilding or closing the graph.
+- Release the graph rebuild lock after a failure and ignore pending position loads after closure.
+- Show a recoverable startup error when WebGL is unavailable instead of falling back to an incompatible renderer.
+- Handle empty-vault metrics without running PageRank on an empty graph.
+- Make the empty search result's reset button clickable and keep its message above floating controls.
+- Avoid a false graphics-context warning when closing or rebuilding the graph.
+- Keep shared Pixi text resources alive when closing one of multiple graph views.
+- Preserve the shared edge texture and release each edge mesh's own GPU buffers exactly once.
+- Bound PNG export to the visible viewport instead of allocating an image for distant offscreen nodes.
+
 ## [0.10.0] - 2026-10-02
 
 ### Added

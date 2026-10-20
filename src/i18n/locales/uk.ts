@@ -164,6 +164,8 @@ export const uk: Translation = {
 	"filters.empty": "Нічого не знайдено",
 	"filters.search": "Пошук…",
 
+	"timeline.play": "Відтворити хронологію",
+	"timeline.pause": "Призупинити хронологію",
 	"timeline.created": "Створені",
 	"timeline.modified": "Змінені",
 
@@ -262,6 +264,9 @@ export const uk: Translation = {
 	"notice.workerRetry": "Перезапустити",
 	"notice.contextLost": "WebGL зупинено: графічний контекст втрачено. Вигляд треба зібрати заново.",
 	"notice.contextReload": "Зібрати вигляд заново",
+	"startup.error.title": "WebGL недоступний",
+	"startup.error.body": "Advanced Graph View потребує WebGL. Увімкніть апаратне прискорення та повторіть спробу.",
+	"startup.error.retry": "Повторити",
 	"notice.usageCleared": "Статистику відкриттів очищено",
 	"notice.dataReset": "Дані Advanced Graph View скинуто",
 

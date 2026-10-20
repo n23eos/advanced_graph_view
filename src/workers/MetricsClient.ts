@@ -31,16 +31,21 @@ export class MetricsClient {
 			return;
 		}
 		this.computing = true;
-		this.ensureWorker().postMessage(buildRequest(model));
+		try {
+			this.ensureWorker().postMessage(buildRequest(model));
+		} catch (error) {
+			this.fail(errorReason(error, "metrics worker failed to start"), error);
+		}
 	}
 
 	private ensureWorker(): Worker {
 		if (this.worker) return this.worker;
 		const blob = new Blob([metricsWorkerSource], { type: "text/javascript" });
 		this.blobUrl = URL.createObjectURL(blob);
-		this.worker = new Worker(this.blobUrl);
-		this.worker.onmessage = (event: MessageEvent<MetricsResponse>) => {
-			if (!this.worker) return; // stopped mid-flight
+		const worker = new Worker(this.blobUrl);
+		this.worker = worker;
+		worker.onmessage = (event: MessageEvent<MetricsResponse>) => {
+			if (this.worker !== worker) return;
 			this.computing = false;
 			if (this.pendingModel) {
 				const next = this.pendingModel;
@@ -51,22 +56,29 @@ export class MetricsClient {
 			const { pagerank, community, communityCount } = event.data;
 			this.onResult({ pagerank, community, communityCount });
 		};
-		this.worker.onerror = (event: ErrorEvent) => {
+		worker.onerror = (event: ErrorEvent) => {
+			if (this.worker !== worker) return;
 			// `stop()` clears the computing flag as well — without it a crashed
 			// worker would leave every later compute() queued behind a request
 			// that can never finish.
-			const reason = event.message || "metrics worker stopped";
-			console.error("Advanced Graph View: metrics worker failed", event);
-			this.stop();
-			this.onError?.(reason);
+			this.fail(event.message || "metrics worker stopped", event);
 		};
-		return this.worker;
+		return worker;
+	}
+
+	private fail(reason: string, error: unknown): void {
+		console.error("Advanced Graph View: metrics worker failed", error);
+		this.stop();
+		this.onError?.(reason);
 	}
 
 	stop(): void {
-		if (this.worker) {
-			this.worker.terminate();
-			this.worker = null;
+		const worker = this.worker;
+		this.worker = null;
+		if (worker) {
+			worker.onmessage = null;
+			worker.onerror = null;
+			worker.terminate();
 		}
 		if (this.blobUrl) {
 			URL.revokeObjectURL(this.blobUrl);
@@ -75,6 +87,10 @@ export class MetricsClient {
 		this.computing = false;
 		this.pendingModel = null;
 	}
+}
+
+function errorReason(error: unknown, fallback: string): string {
+	return error instanceof Error && error.message ? error.message : fallback;
 }
 
 function buildRequest(model: GraphModel) {

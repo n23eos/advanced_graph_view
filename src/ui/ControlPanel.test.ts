@@ -93,3 +93,16 @@ describe("node style", () => {
 		expect((onChange.mock.calls[0][0] as PanelState).nodeStyle).toBe("ring");
 	});
 });
+
+test("panel disclosure is a keyboard-focusable button with synchronized expanded state", () => {
+	const onChange = vi.fn();
+	const { host } = build({ ...DEFAULT_3D_PANEL, collapsed: false }, "simple", { onChange });
+	const header = host.querySelector<HTMLButtonElement>(".graph-insight-panel-header")!;
+	expect(header.tagName).toBe("BUTTON");
+	expect(header.getAttribute("aria-expanded")).toBe("true");
+	header.click();
+	expect(header.getAttribute("aria-expanded")).toBe("false");
+	expect(host.querySelector(".graph-insight-panel")?.classList.contains("is-collapsed")).toBe(true);
+	expect(host.querySelector(".graph-insight-panel-body")?.classList.contains("is-hidden")).toBe(true);
+	expect((onChange.mock.calls[0][0] as PanelState).collapsed).toBe(true);
+});

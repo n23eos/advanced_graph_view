@@ -26,6 +26,10 @@ export function computeGraphMetrics(
 	edgePairs: Uint32Array,
 	weights: Float32Array
 ): GraphMetricsResult {
+	// PageRank has no probability distribution on zero nodes.
+	if (nodeCount === 0) {
+		return { pagerank: new Float32Array(0), community: new Int32Array(0), communityCount: 0 };
+	}
 	const graph = new Graph({ type: "directed", multi: false, allowSelfLoops: false });
 	for (let i = 0; i < nodeCount; i++) graph.addNode(i);
 	for (let e = 0; e < weights.length; e++) {

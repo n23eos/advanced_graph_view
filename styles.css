@@ -27,7 +27,7 @@
 .graph-insight-panel {
 	position: absolute;
 	/* Below the full-width search row. */
-	top: 52px;
+	top: var(--graph-topbar-bottom, 72px);
 	left: 12px;
 	z-index: 10;
 	min-width: 220px;
@@ -42,9 +42,16 @@
 
 .graph-insight-panel-header {
 	display: flex;
+	width: 100%;
+	height: auto;
+	background: transparent;
+	border: 0;
+	box-shadow: none;
+	color: var(--text-normal);
+	text-align: left;
 	justify-content: space-between;
 	align-items: center;
-	padding: 6px 10px;
+	padding: 10px 12px;
 	cursor: pointer;
 	font-weight: 600;
 	user-select: none;
@@ -55,7 +62,7 @@
 }
 
 .graph-insight-panel-body {
-	padding: 4px 10px 10px;
+	padding: 4px 12px 12px;
 }
 
 .graph-insight-panel-body.is-hidden {
@@ -283,7 +290,7 @@
 	max-width: 100%;
 	display: flex;
 	flex-wrap: wrap; /* the status row drops to its own line */
-	justify-content: center;
+	justify-content: flex-start;
 	gap: 6px;
 	align-items: center;
 	padding: 6px 8px;
@@ -296,9 +303,57 @@
 
 .graph-insight-searchbar input[type="text"] {
 	/* F-04: track the pane width instead of a fixed 320 px. */
-	width: clamp(140px, 24vw, 320px);
+	width: 100%;
 	max-width: 100%;
 	font-size: var(--font-ui-small);
+	padding-left: 30px;
+	padding-right: 36px;
+}
+
+.graph-insight-searchbar-input {
+	flex: 1 1 180px;
+	min-width: 0;
+}
+
+.graph-insight-searchbar > select {
+	max-width: min(180px, 100%);
+	min-width: 0;
+}
+
+.graph-insight-search-icon {
+	position: absolute;
+	left: 9px;
+	top: 50%;
+	transform: translateY(-50%);
+	display: flex;
+	color: var(--text-faint);
+	pointer-events: none;
+}
+
+.graph-insight-search-icon .svg-icon,
+.graph-insight-search-icon-button .svg-icon,
+.graph-insight-timeline-play .svg-icon {
+	width: 16px;
+	height: 16px;
+}
+
+.graph-insight-search-icon-button {
+	background: transparent;
+	box-shadow: none;
+	color: var(--text-muted);
+}
+
+.graph-insight-search-icon-button:hover {
+	color: var(--text-normal);
+	background: var(--background-modifier-hover);
+}
+
+.graph-insight-search-clear {
+	position: absolute;
+	right: 3px;
+	top: 50%;
+	transform: translateY(-50%);
+	padding: 2px 5px;
 }
 
 .graph-insight-searchbar-btn {
@@ -318,6 +373,14 @@
 	align-items: center;
 	font-size: var(--font-ui-smaller);
 	color: var(--text-muted);
+}
+
+.graph-insight-search-statusrow.is-hidden {
+	display: none;
+}
+
+.graph-insight-search-status.has-error {
+	color: var(--text-error);
 }
 
 .graph-insight-search-chip {
@@ -431,11 +494,14 @@
 
 .graph-insight-timeline {
 	position: absolute;
-	bottom: 12px;
+	bottom: var(--graph-bottom-controls, 172px);
 	left: 50%;
 	transform: translateX(-50%);
 	z-index: 11;
 	display: flex;
+	flex-wrap: wrap;
+	box-sizing: border-box;
+	width: min(520px, calc(100% - 24px));
 	gap: 10px;
 	align-items: center;
 	padding: 6px 12px;
@@ -450,11 +516,12 @@
 	position: relative;
 	display: flex;
 	flex-direction: column;
-	width: 260px;
+	flex: 1 1 140px;
+	min-width: 0;
 }
 
-.graph-insight-timeline-spark {
-	width: 260px;
+.graph-insight-container .graph-insight-timeline-spark {
+	width: 100%;
 	height: 22px;
 	display: block;
 }
@@ -578,7 +645,7 @@
 /* Panel polish: tighter rows, full-width thin sliders, section separators */
 .graph-insight-panel {
 	/* Leave room for the search row above and the cursor toolbar below. */
-	max-height: calc(100% - 140px);
+	max-height: max(40px, calc(100% - var(--graph-topbar-bottom, 72px) - var(--graph-bottom-controls, 100px) - var(--graph-timeline-space, 0px) - 12px));
 	overflow-y: auto;
 	min-width: 240px;
 }
@@ -643,8 +710,8 @@
    The widget lost its X/Y sliders (F-06) but keeps room for the legend's
    own scroll for long category lists. */
 .graph-insight-legend {
-	bottom: 172px;
-	max-height: calc(100% - 200px);
+	bottom: calc(var(--graph-bottom-controls, 172px) + var(--graph-timeline-space, 0px));
+	max-height: max(40px, calc(100% - var(--graph-topbar-bottom, 72px) - var(--graph-bottom-controls, 172px) - var(--graph-timeline-space, 0px) - 12px));
 	overflow-y: auto;
 }
 
@@ -857,7 +924,7 @@
 }
 
 [data-graph-responsive="minimal"] .graph-insight-searchbar input[type="text"] {
-	width: clamp(110px, 40vw, 220px);
+	width: 100%;
 }
 
 /* minimal: the control panel opens as a drawer over the canvas. */
@@ -865,8 +932,12 @@
 	left: 8px;
 	right: 8px;
 	max-width: none;
-	max-height: 70%;
 	overflow-y: auto;
+}
+
+/* A drawer needs the full pane width. Restore its legend when it closes. */
+[data-graph-responsive="minimal"] .graph-insight-panel:not(.is-collapsed) ~ .graph-insight-legend {
+	display: none;
 }
 
 /* The focus/explore bars may wrap, but never past two lines (§F-04). */
@@ -878,10 +949,11 @@
 .graph-insight-changes {
 	position: absolute;
 	/* Below the top row even when it wraps onto a second line. */
-	top: 100px;
+	top: var(--graph-topbar-bottom, 100px);
 	right: 12px;
 	z-index: 12;
 	width: 300px;
+	max-width: calc(100% - 24px);
 	max-height: 70%;
 	display: flex;
 	flex-direction: column;
@@ -1021,6 +1093,7 @@
 	order: -1;
 	flex-basis: 100%;
 	display: flex;
+	flex-wrap: wrap;
 	gap: 6px;
 	align-items: center;
 	padding: 1px 4px;
@@ -1165,7 +1238,13 @@
 /* Shown instead of a blank canvas when the vault holds no notes. */
 .graph-insight-empty {
 	position: absolute;
-	inset: 0;
+	left: 50%;
+	top: 50%;
+	transform: translate(-50%, -50%);
+	z-index: 12;
+	width: max-content;
+	max-width: calc(100% - 48px);
+	box-sizing: border-box;
 	display: flex;
 	flex-direction: column;
 	align-items: center;
@@ -1174,6 +1253,22 @@
 	padding: 24px;
 	text-align: center;
 	pointer-events: none;
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	box-shadow: var(--shadow-s);
+}
+
+.graph-insight-empty button {
+	pointer-events: auto;
+}
+
+.graph-insight-startup-error {
+	pointer-events: auto;
+}
+
+.graph-insight-startup-retry {
+	margin-top: 8px;
 }
 
 .graph-insight-empty-title {

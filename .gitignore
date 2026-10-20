@@ -8,3 +8,7 @@ main.js
 bench/bench.js
 bench/diag.js
 \!notes/
+
+# Generated UI acceptance harness
+bench/ui/bundle.js
+bench/ui/bundle.css

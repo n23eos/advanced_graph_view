@@ -18,23 +18,64 @@ export interface SavedPositions {
 	pins: string[];
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizeCoordinates(raw: unknown): [number, number] | [number, number, number] | null {
+	if (!Array.isArray(raw) || (raw.length !== 2 && raw.length !== 3)) return null;
+	if (!raw.every((value) =>
+		typeof value === "number" && Number.isFinite(value) && Number.isFinite(Math.fround(value)))) {
+		return null;
+	}
+	return raw.length === 2
+		? [raw[0] as number, raw[1] as number]
+		: [raw[0] as number, raw[1] as number, raw[2] as number];
+}
+
+function normalizePositionMap(raw: unknown): PositionMap | null {
+	if (!isRecord(raw)) return null;
+	const positions: PositionMap = {};
+	for (const [path, value] of Object.entries(raw)) {
+		const coordinates = normalizeCoordinates(value);
+		if (!coordinates) continue;
+		Object.defineProperty(positions, path, {
+			value: coordinates,
+			enumerable: true,
+			configurable: true,
+			writable: true,
+		});
+	}
+	return positions;
+}
+
 /**
  * Accept both shapes positions.json has ever had: the current envelope, and the
  * bare path→coords map written before pins existed. Returns null for anything
  * that is not a usable object, so a corrupt file starts the plugin clean.
  */
 export function normalizeSavedPositions(raw: unknown): SavedPositions | null {
-	if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
+	if (!isRecord(raw)) return null;
 
 	const candidate = raw as { positions?: unknown; pins?: unknown };
-	if (typeof candidate.positions !== "object" || candidate.positions === null) {
-		// Legacy file: the whole object is the position map.
-		return { positions: raw as PositionMap, pins: [] };
+	// A legacy map may contain a note literally named "positions". Treat that
+	// key as the envelope only when its value is a map or the sibling pins key
+	// makes the current shape unambiguous.
+	const isEnvelope = isRecord(candidate.positions) || Object.hasOwn(raw, "pins");
+	const positions = normalizePositionMap(isEnvelope ? candidate.positions : raw);
+	if (!positions) return null;
+	if (!isEnvelope) return { positions, pins: [] };
+
+	const pins: string[] = [];
+	const seen = new Set<string>();
+	if (Array.isArray(candidate.pins)) {
+		for (const path of candidate.pins) {
+			if (typeof path !== "string" || seen.has(path) || !Object.hasOwn(positions, path)) continue;
+			seen.add(path);
+			pins.push(path);
+		}
 	}
-	const pins = Array.isArray(candidate.pins)
-		? candidate.pins.filter((path): path is string => typeof path === "string")
-		: [];
-	return { positions: candidate.positions as PositionMap, pins };
+	return { positions, pins };
 }
 
 export class PluginDataStore {

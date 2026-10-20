@@ -54,6 +54,18 @@ const statusText = (host: HTMLElement): string =>
 	host.querySelector(".graph-insight-search-status")?.textContent ?? "";
 
 describe("search status (F-03)", () => {
+	test("idle search reserves no empty status row, and errors reveal it", () => {
+		const { host, bar, input } = build();
+		const row = host.querySelector(".graph-insight-search-statusrow")!;
+		bar.setUiState(state({}));
+		expect(row.classList.contains("is-hidden")).toBe(true);
+		bar.setUiState(state({ parseError: { messageKey: "badValue", operator: "links", tokenStart: 0, tokenEnd: 9 } }));
+		expect(row.classList.contains("is-hidden")).toBe(false);
+		expect(host.querySelector(".graph-insight-search-status")?.classList.contains("has-error")).toBe(true);
+		expect(input.getAttribute("aria-describedby")).toBe(host.querySelector(".graph-insight-search-status")?.id);
+		bar.setUiState(state({}));
+		expect(row.classList.contains("is-hidden")).toBe(true);
+	});
 	test("highlight mode shows the matched count after the aria throttle", () => {
 		const { host, bar } = build();
 		bar.setUiState(state({ mode: "highlight", matchedCount: 5, totalCount: 40 }));

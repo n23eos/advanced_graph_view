@@ -36,6 +36,8 @@ import { adaptPhysicsToGraphSize } from "../ui/layoutDensity";
 import type { LayoutRule, PhysicsParams } from "../workers/layoutEngine";
 import { formatPhysicsDiff, physicsDiff, recommendedPhysics } from "../ui/physicsReset";
 import { responsiveMode, type ResponsiveMode } from "../ui/responsive";
+import { FloatingLayout } from "../ui/FloatingLayout";
+import { renderGraphStartupError } from "../ui/GraphStartupError";
 import { ensureBuiltinPreset } from "./builtinPresets";
 import type { BuiltinPresetId } from "./presetNames";
 import { NavigationTrail } from "../explore/navigationTrail";
@@ -196,6 +198,11 @@ export class GraphInsightView extends ItemView {
 
 	private rebuildDebounced = debounce(() => void this.refreshVault(), 2000, true);
 	private rebuilding = false;
+	private floatingLayout: FloatingLayout | null = null;
+	private changesGeneration = 0;
+	private rebuildGeneration = 0;
+	private closing = false;
+	private openGeneration = 0;
 
 	private savePositionsDebounced = debounce(
 		() => void this.savePositions(),
@@ -220,19 +227,19 @@ export class GraphInsightView extends ItemView {
 	}
 
 	async onOpen(): Promise<void> {
+		const openGeneration = ++this.openGeneration;
+		this.closing = false;
+		this.responsiveModeState = "full";
 		const container = this.contentEl;
 		container.empty();
+		container.setAttribute("data-graph-responsive", "full");
 		container.addClass("graph-insight-container");
 
-		this.tooltip = container.createDiv({ cls: "graph-insight-tooltip" });
-		this.tooltip.hide();
+		const tooltip = container.createDiv({ cls: "graph-insight-tooltip" });
+		tooltip.hide();
+		this.tooltip = tooltip;
 
-		// Any manual pan/zoom/drag means the user framed the view themselves —
-		// a later auto-fit must not yank the camera out of their hands.
-		this.registerDomEvent(container, "pointerdown", () => this.autoFit.cancel());
-		this.registerDomEvent(container, "wheel", () => this.autoFit.cancel());
-
-		this.renderer = new GraphRenderer({
+		const renderer = new GraphRenderer({
 			onNodeHover: (nodeId, clientX, clientY) => {
 				if (this.isExploring) this.showExploreTarget(nodeId, clientX, clientY);
 				else this.showTooltip(nodeId, clientX, clientY);
@@ -273,10 +280,35 @@ export class GraphInsightView extends ItemView {
 			onExploreJump: () => this.exploreSession?.jump(),
 			onContextLost: () => this.reportContextLost(),
 		});
-		await this.renderer.init(container);
+		this.renderer = renderer;
+		try {
+			await renderer.init(container);
+		} catch (error) {
+			renderer.destroy();
+			if (this.renderer === renderer) this.renderer = null;
+			if (this.tooltip === tooltip) this.tooltip = null;
+			if (!this.closing && this.openGeneration === openGeneration) {
+				console.error("Advanced Graph View: renderer startup failed", error);
+				renderGraphStartupError(container, () => this.retryStartup(openGeneration));
+			}
+			return;
+		}
+		if (this.closing || this.openGeneration !== openGeneration || this.renderer !== renderer) {
+			renderer.destroy();
+			if (this.renderer === renderer) this.renderer = null;
+			return;
+		}
+
+		// Any manual pan/zoom/drag means the user framed the view themselves.
+		this.registerDomEvent(container, "pointerdown", () => this.autoFit.cancel());
+		this.registerDomEvent(container, "wheel", () => this.autoFit.cancel());
 		// The pane may not have its final size during onOpen; resize once the
 		// layout settles so the canvas fills the whole view.
-		window.requestAnimationFrame(() => this.renderer?.resize());
+		window.requestAnimationFrame(() => {
+			if (!this.closing && this.openGeneration === openGeneration && this.renderer === renderer) {
+				renderer.resize();
+			}
+		});
 
 		this.layout = new LayoutClient(
 			(positions) => this.renderer?.updatePositions(positions),
@@ -418,17 +450,6 @@ export class GraphInsightView extends ItemView {
 			}
 		);
 
-		// F-04: the floating UI adapts to the pane's width, not the window's.
-		// Attribute + status text only — the canvas is never rebuilt for this.
-		if (typeof ResizeObserver !== "undefined") {
-			const observer = new ResizeObserver((entries) => {
-				const width = entries[0]?.contentRect.width ?? container.clientWidth;
-				this.applyResponsiveMode(responsiveMode(width));
-			});
-			observer.observe(container);
-			this.register(() => observer.disconnect());
-		}
-
 		this.focusBar = topBar.createDiv({ cls: "graph-insight-focusbar" });
 		this.focusBar.hide();
 
@@ -442,6 +463,7 @@ export class GraphInsightView extends ItemView {
 				this.refreshTimelineData();
 			},
 		});
+		this.floatingLayout = new FloatingLayout(container, (width) => this.applyResponsiveMode(responsiveMode(width)));
 
 		// Capture phase, and the explore keys are swallowed outright.
 		// `preventDefault` alone is not enough: Obsidian's own key handling is
@@ -456,6 +478,7 @@ export class GraphInsightView extends ItemView {
 		);
 
 		await this.rebuildGraph();
+		if (this.closing || this.openGeneration !== openGeneration) return;
 
 		this.registerEvent(this.app.metadataCache.on("resolved", () => this.handleMetadataResolved()));
 		this.registerEvent(
@@ -655,7 +678,10 @@ export class GraphInsightView extends ItemView {
 	}
 
 	private async refreshChanges(): Promise<void> {
-		if (!this.model) return;
+		if (this.closing || !this.model) return;
+		const generation = ++this.changesGeneration;
+		// A new period supersedes the old request, including its worker.
+		this.changesClient?.stop();
 		this.changesPanel?.setData(null); // skeleton — the view stays interactive
 		const now = Date.now();
 		const periodStart = now - this.changesSelection.periodDays * 24 * 60 * 60 * 1000;
@@ -686,10 +712,11 @@ export class GraphInsightView extends ItemView {
 			try {
 				diff = await this.changesClient.compute(snapshot, this.model, this.metrics?.pagerank ?? null);
 			} catch {
-				// A second refresh while one runs: keep the empty diff.
+				// Closing or choosing another period cancels the old request.
 			}
 		}
 
+		if (generation !== this.changesGeneration) return;
 		this.changesData = {
 			hasHistory: snapshot !== null,
 			hasMetrics,
@@ -1686,7 +1713,7 @@ export class GraphInsightView extends ItemView {
 	}
 
 	private async rebuildGraph(): Promise<void> {
-		if (!this.renderer || !this.layout) return;
+		if (this.closing || !this.renderer || !this.layout) return;
 		// A rebuild renumbers nodes, and explore mode holds node ids: an
 		// adjacency list from the old model would fly the camera to whatever
 		// note inherited the number. Hold the rebuild until the mode ends.
@@ -1702,47 +1729,57 @@ export class GraphInsightView extends ItemView {
 		if (this.model && sameGraphModel(this.model, model)) return;
 		this.rebuilding = true;
 
-		const { seed, pinnedPaths } = await this.buildSeedPositions(model);
-		// Frame the graph once the very first layout settles; later rebuilds
-		// (vault edits) keep whatever framing the user has.
-		if (!this.model) this.autoFit.request();
-		this.model = model;
-		this.facts = this.buildFacts(model, files);
-		this.metrics = null;
-		this.renderer.setModel(model);
-		const view3d = this.plugin.settings.panel.view3d;
-		const dims = view3d.enabled && view3d.depthSource === "physics" ? 3 : 2;
-		this.layout.start(model, seed, dims);
-		this.restorePins(model, seed, pinnedPaths);
-		this.apply3D(this.plugin.settings.panel, false);
-		this.lastPhysics = "";
-		this.applyPhysics(this.plugin.settings.panel);
-		// The fresh worker knows nothing about the saved grouping rule, and the
-		// node ids behind this.facts have just changed — recompute from scratch.
-		this.appliedLayoutRule = null;
-		this.applyLayoutRule(this.plugin.settings.panel.layoutRule);
-		// F-10: node ids just changed — the old highlight indices are garbage.
-		// The data itself is path-based; recompute it if the panel is open.
-		this.changesHighlight = null;
-		this.changesData = null;
-		if (this.changesPanel?.isShown) void this.refreshChanges();
-		const panelState = this.plugin.settings.panel;
-		this.renderer.setLabelOptions(
-			panelState.labels.show, panelState.labels.fontSize, panelState.labels.zoomThreshold,
-			panelState.labels.maxCount, panelState.labels.scaleWithZoom
-		);
-		this.renderer.setEdgeStyle(panelState.edges.show, panelState.edges.width, panelState.edges.opacity);
-		this.applyEncoding(this.plugin.settings.panel);
-		this.applyOverlays(this.plugin.settings.panel);
-		this.panel?.setOverlayCounts(countOverlayMatches(model));
-		this.metricsClient?.compute(model);
-		this.refreshTimelineData();
-		this.syncTimelineAndTrail(this.plugin.settings.panel);
-		const vocabulary = collectVocabulary(this.facts);
-		this.searchBar?.setVocabulary(...vocabulary);
-		this.filterChips?.setVocabulary(...vocabulary);
-		this.rebuilding = false;
-		this.updateEmptyState(model.nodes.length);
+		const generation = ++this.rebuildGeneration;
+		try {
+			const { seed, pinnedPaths } = await this.buildSeedPositions(model);
+			if (generation !== this.rebuildGeneration || this.closing) return;
+			// Frame the graph once the very first layout settles; later rebuilds
+			// (vault edits) keep whatever framing the user has.
+			if (!this.model) this.autoFit.request();
+			this.model = model;
+			this.facts = this.buildFacts(model, files);
+			this.metrics = null;
+			this.renderer.setModel(model);
+			const view3d = this.plugin.settings.panel.view3d;
+			const dims = view3d.enabled && view3d.depthSource === "physics" ? 3 : 2;
+			this.layout.start(model, seed, dims);
+			this.restorePins(model, seed, pinnedPaths);
+			this.apply3D(this.plugin.settings.panel, false);
+			this.lastPhysics = "";
+			this.applyPhysics(this.plugin.settings.panel);
+			// The fresh worker knows nothing about the saved grouping rule, and the
+			// node ids behind this.facts have just changed - recompute from scratch.
+			this.appliedLayoutRule = null;
+			this.applyLayoutRule(this.plugin.settings.panel.layoutRule);
+			// F-10: node ids just changed - the old highlight indices are garbage.
+			// The data itself is path-based; recompute it if the panel is open.
+			this.changesGeneration++;
+			this.changesClient?.stop();
+			this.changesHighlight = null;
+			this.changesData = null;
+			if (this.changesPanel?.isShown) void this.refreshChanges();
+			const panelState = this.plugin.settings.panel;
+			this.renderer.setLabelOptions(
+				panelState.labels.show, panelState.labels.fontSize, panelState.labels.zoomThreshold,
+				panelState.labels.maxCount, panelState.labels.scaleWithZoom
+			);
+			this.renderer.setEdgeStyle(panelState.edges.show, panelState.edges.width, panelState.edges.opacity);
+			this.applyEncoding(this.plugin.settings.panel);
+			this.applyOverlays(this.plugin.settings.panel);
+			this.panel?.setOverlayCounts(countOverlayMatches(model));
+			this.metricsClient?.compute(model);
+			this.refreshTimelineData();
+			this.syncTimelineAndTrail(this.plugin.settings.panel);
+			const vocabulary = collectVocabulary(this.facts);
+			this.searchBar?.setVocabulary(...vocabulary);
+			this.filterChips?.setVocabulary(...vocabulary);
+			this.updateEmptyState(model.nodes.length);
+		} catch (error) {
+			if (generation === this.rebuildGeneration) this.model = null;
+			throw error;
+		} finally {
+			if (generation === this.rebuildGeneration) this.rebuilding = false;
+		}
 	}
 
 	/**
@@ -1811,6 +1848,11 @@ export class GraphInsightView extends ItemView {
 	/** Tear the whole view down and build it again from saved settings. */
 	private async reopen(): Promise<void> {
 		await this.onClose();
+		await this.onOpen();
+	}
+
+	private async retryStartup(generation: number): Promise<void> {
+		if (this.closing || this.openGeneration !== generation) return;
 		await this.onOpen();
 	}
 
@@ -2705,6 +2747,13 @@ export class GraphInsightView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
+		this.closing = true;
+		this.openGeneration++;
+		this.rebuildGeneration++;
+		this.rebuilding = false;
+		this.changesGeneration++;
+		this.floatingLayout?.destroy();
+		this.floatingLayout = null;
 		this.exploreNoteModal?.close();
 		this.exploreNoteModal = null;
 		// Cancel in-flight note scans before their reads can finish on a closed view.

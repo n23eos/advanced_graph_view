@@ -162,6 +162,7 @@ function readThemeColors(host: HTMLElement): ThemeColors {
  */
 export class GraphRenderer {
 	private app: Application | null = null;
+	private destroyed = false;
 	private world = new Container();
 	private edgeMesh: EdgeMesh | null = null;
 	private hullGraphics = new Graphics();
@@ -232,6 +233,13 @@ export class GraphRenderer {
 	private selectedId: number | null = null;
 	/** Set once the GPU context is gone; every draw call after that is a no-op. */
 	private contextLost = false;
+	private readonly handleContextLost = (event: Event): void => {
+		if (this.destroyed || this.app === null) return;
+		event.preventDefault();
+		this.contextLost = true;
+		console.error("Advanced Graph View: WebGL context lost");
+		this.callbacks.onContextLost();
+	};
 	/** The element the canvas lives in; theme colors are resolved against it. */
 	private host: HTMLElement | null = null;
 
@@ -240,23 +248,36 @@ export class GraphRenderer {
 	async init(host: HTMLElement): Promise<void> {
 		this.host = host;
 		const app = new Application();
-		await app.init({
-			resizeTo: host,
-			antialias: false, // MSAA on 30k edge lines costs several ms/frame; glow sprites hide the aliasing
-			backgroundAlpha: 0,
-			preference: "webgl",
-		});
+		try {
+			await app.init({
+				resizeTo: host,
+				antialias: false, // MSAA on 30k edge lines costs several ms/frame; glow sprites hide the aliasing
+				backgroundAlpha: 0,
+				// An array is an allowlist in Pixi 8. A string is only a preference
+				// and silently falls back to Canvas, which cannot render EdgeMesh.
+				preference: ["webgl"],
+			});
+		} catch (error) {
+			this.host = null;
+			try {
+				if (app.renderer) app.destroy({ removeView: true }, { children: true, texture: true });
+				else app.stage.destroy({ children: true, texture: true });
+			} catch (cleanupError) {
+				console.error("Advanced Graph View: failed to clean up renderer startup", cleanupError);
+			}
+			throw error;
+		}
+		if (this.destroyed) {
+			this.host = null;
+			app.destroy({ removeView: true }, { children: true, texture: true });
+			return;
+		}
 		this.app = app;
 		host.appendChild(app.canvas);
 		// Without preventDefault the browser will not even try to hand the
 		// context back. Pixi cannot rebuild its GPU resources on its own, so the
 		// view is told to start over rather than left with a blank canvas.
-		app.canvas.addEventListener("webglcontextlost", (event) => {
-			event.preventDefault();
-			this.contextLost = true;
-			console.error("Advanced Graph View: WebGL context lost");
-			this.callbacks.onContextLost();
-		});
+		app.canvas.addEventListener("webglcontextlost", this.handleContextLost);
 
 		this.colors = readThemeColors(host);
 		this.labelHalo = cssColorToNumber(
@@ -923,11 +944,17 @@ export class GraphRenderer {
 	/** Current viewport rendered at 2x into a PNG blob. */
 	async exportPng(): Promise<Blob | null> {
 		if (!this.app) return null;
-		const canvas = this.app.renderer.extract.canvas({
-			target: this.app.stage,
-			resolution: 2,
-		}) as HTMLCanvasElement;
-		return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), "image/png"));
+		try {
+			const canvas = this.app.renderer.extract.canvas({
+				target: this.app.stage,
+				frame: this.app.screen,
+				resolution: 2,
+			}) as HTMLCanvasElement;
+			return await new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), "image/png"));
+		} catch (error) {
+			console.error("Advanced Graph View: PNG export failed", error);
+			return null;
+		}
 	}
 
 	/** Center the viewport on a set of nodes and zoom to fit them. */
@@ -1647,17 +1674,23 @@ export class GraphRenderer {
 	}
 
 	destroy(): void {
+		if (this.destroyed) return;
+		this.destroyed = true;
 		this.clickDispatcher.cancel();
 		this.viewport?.destroy();
+		this.viewport = null;
 		this.edgeMesh?.destroy();
 		this.edgeMesh = null;
-		if (this.app) {
-			this.app.canvas.removeEventListener("pointerdown", this.handlePointerDown);
-			this.app.canvas.removeEventListener("contextmenu", this.handleContextMenu);
+		const app = this.app;
+		this.app = null;
+		this.host = null;
+		if (app) {
+			app.canvas.removeEventListener("webglcontextlost", this.handleContextLost);
+			app.canvas.removeEventListener("pointerdown", this.handlePointerDown);
+			app.canvas.removeEventListener("contextmenu", this.handleContextMenu);
 			window.removeEventListener("pointermove", this.handlePointerMove);
 			window.removeEventListener("pointerup", this.handlePointerUp);
-			this.app.destroy(true, { children: true, texture: true });
-			this.app = null;
+			app.destroy({ removeView: true }, { children: true, texture: true });
 		}
 	}
 }

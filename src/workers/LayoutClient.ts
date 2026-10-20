@@ -20,77 +20,97 @@ export class LayoutClient {
 
 	start(model: GraphModel, seedPositions?: Float32Array, dimensions: 2 | 3 = 2, isStatic = false): void {
 		this.stop();
-		const blob = new Blob([layoutWorkerSource], { type: "text/javascript" });
-		this.blobUrl = URL.createObjectURL(blob);
-		this.worker = new Worker(this.blobUrl);
-		this.worker.onmessage = (event: MessageEvent<EngineOutMessage>) => {
-			const message = event.data;
-			if (message.type === "tick") {
-				this.onPositions(message.positions, message.alpha);
-			} else if (message.type === "end") {
-				this.onSettled(message.positions);
+		try {
+			const blob = new Blob([layoutWorkerSource], { type: "text/javascript" });
+			this.blobUrl = URL.createObjectURL(blob);
+			const worker = new Worker(this.blobUrl);
+			this.worker = worker;
+			worker.onmessage = (event: MessageEvent<EngineOutMessage>) => {
+				if (this.worker !== worker) return;
+				const message = event.data;
+				if (message.type === "tick") {
+					this.onPositions(message.positions, message.alpha);
+				} else if (message.type === "end") {
+					this.onSettled(message.positions);
+				}
+			};
+			worker.onerror = (event: ErrorEvent) => {
+				if (this.worker !== worker) return;
+				this.fail(event.message || "layout worker stopped", event);
+			};
+
+			const edges = new Uint32Array(model.edges.length * 2);
+			const weights = new Float32Array(model.edges.length);
+			for (let i = 0; i < model.edges.length; i++) {
+				edges[i * 2] = model.edges[i].source;
+				edges[i * 2 + 1] = model.edges[i].target;
+				weights[i] = model.edges[i].weight;
 			}
-		};
-		this.worker.onerror = (event: ErrorEvent) => {
-			// An uncaught throw leaves the worker in an undefined state; drop it
-			// rather than keep pushing messages into something that stopped
-			// ticking, and let the caller surface it.
-			const reason = event.message || "layout worker stopped";
-			console.error("Advanced Graph View: layout worker failed", event);
-			this.stop();
-			this.onError?.(reason);
-		};
 
-		const edges = new Uint32Array(model.edges.length * 2);
-		const weights = new Float32Array(model.edges.length);
-		for (let i = 0; i < model.edges.length; i++) {
-			edges[i * 2] = model.edges[i].source;
-			edges[i * 2 + 1] = model.edges[i].target;
-			weights[i] = model.edges[i].weight;
+			const message: EngineInMessage = {
+				type: "init",
+				nodeCount: model.nodes.length,
+				edges,
+				weights,
+				positions: seedPositions,
+				dimensions,
+				static: isStatic,
+			};
+			// Seed is deliberately not transferred: callers may still hold views
+			// onto it; an 80 KB copy per rebuild is negligible.
+			this.post(message, [edges.buffer, weights.buffer]);
+		} catch (error) {
+			this.fail(errorReason(error, "layout worker failed to start"), error);
 		}
+	}
 
-		const message: EngineInMessage = {
-			type: "init",
-			nodeCount: model.nodes.length,
-			edges,
-			weights,
-			positions: seedPositions,
-			dimensions,
-			static: isStatic,
-		};
-		// Seed is deliberately NOT transferred: callers may still hold views
-		// onto it; 80 KB copy per rebuild is nothing.
-		this.worker.postMessage(message, [edges.buffer, weights.buffer]);
+	private fail(reason: string, error: unknown): void {
+		console.error("Advanced Graph View: layout worker failed", error);
+		this.stop();
+		this.onError?.(reason);
+	}
+
+	private post(message: EngineInMessage, transfer?: Transferable[]): void {
+		const worker = this.worker;
+		if (!worker) return;
+		try {
+			if (transfer) worker.postMessage(message, transfer);
+			else worker.postMessage(message);
+		} catch (error) {
+			if (this.worker === worker) {
+				this.fail(errorReason(error, "layout worker post failed"), error);
+			}
+		}
 	}
 
 	pin(id: number, x: number, y: number, z?: number): void {
-		this.worker?.postMessage({ type: "pin", id, x, y, z } satisfies EngineInMessage);
+		this.post({ type: "pin", id, x, y, z } satisfies EngineInMessage);
 	}
 
 	unpin(id: number): void {
-		this.worker?.postMessage({ type: "unpin", id } satisfies EngineInMessage);
+		this.post({ type: "unpin", id } satisfies EngineInMessage);
 	}
 
 	setParams(params: PhysicsParams): void {
-		this.worker?.postMessage({ type: "params", params } satisfies EngineInMessage);
+		this.post({ type: "params", params } satisfies EngineInMessage);
 	}
 
 	dragStart(id: number): void {
-		this.worker?.postMessage({ type: "drag-start", id } satisfies EngineInMessage);
+		this.post({ type: "drag-start", id } satisfies EngineInMessage);
 	}
 
 	/** Smoothed pointer target for the node being dragged. */
 	dragMove(id: number, x: number, y: number, z?: number): void {
-		this.worker?.postMessage({ type: "drag-move", id, x, y, z } satisfies EngineInMessage);
+		this.post({ type: "drag-move", id, x, y, z } satisfies EngineInMessage);
 	}
 
 	dragEnd(): void {
-		this.worker?.postMessage({ type: "drag-end" } satisfies EngineInMessage);
+		this.post({ type: "drag-end" } satisfies EngineInMessage);
 	}
 
 	/** Cluster nodes by group id (same tag/folder pull together); null = off. */
 	setCluster(groups: Int32Array | null): void {
-		this.worker?.postMessage(
+		this.post(
 			{ type: "cluster", groups } satisfies EngineInMessage,
 			groups ? [groups.buffer] : []
 		);
@@ -98,17 +118,24 @@ export class LayoutClient {
 
 	/** alpha 1 = full re-layout, 0.5 = nudge. */
 	reheat(alpha?: number): void {
-		this.worker?.postMessage({ type: "reheat", alpha } satisfies EngineInMessage);
+		this.post({ type: "reheat", alpha } satisfies EngineInMessage);
 	}
 
 	stop(): void {
-		if (this.worker) {
-			this.worker.terminate();
-			this.worker = null;
+		const worker = this.worker;
+		this.worker = null;
+		if (worker) {
+			worker.onmessage = null;
+			worker.onerror = null;
+			worker.terminate();
 		}
 		if (this.blobUrl) {
 			URL.revokeObjectURL(this.blobUrl);
 			this.blobUrl = null;
 		}
 	}
+}
+
+function errorReason(error: unknown, fallback: string): string {
+	return error instanceof Error && error.message ? error.message : fallback;
 }

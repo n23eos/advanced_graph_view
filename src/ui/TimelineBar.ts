@@ -9,6 +9,7 @@ import {
 	type MonthHistogram,
 } from "../analysis/timeline";
 import { t } from "../i18n";
+import { setIcon } from "obsidian";
 
 export type TimelineMode = "created" | "modified";
 
@@ -33,8 +34,11 @@ export class TimelineBar {
 	constructor(host: HTMLElement, private readonly callbacks: TimelineCallbacks) {
 		this.root = host.createDiv({ cls: "graph-insight-timeline" });
 
-		this.playButton = this.root.createEl("button", { text: "⏵" });
-		this.playButton.setAttribute("aria-label", t("layers.timeline"));
+		this.playButton = this.root.createEl("button", { cls: "graph-insight-timeline-play" });
+		setIcon(this.playButton, "play");
+		this.playButton.setAttribute("aria-label", t("timeline.play"));
+		this.playButton.setAttribute("aria-pressed", "false");
+		this.playButton.disabled = true;
 		this.playButton.addEventListener("click", () => this.togglePlay());
 
 		const sliderWrap = this.root.createDiv({ cls: "graph-insight-timeline-slider" });
@@ -63,12 +67,16 @@ export class TimelineBar {
 	}
 
 	setTimestamps(timestamps: number[]): void {
+		this.stopPlay();
 		this.histogram = buildMonthHistogram(timestamps);
 		const lastIndex = Math.max(0, this.histogram.counts.length - 1);
 		this.slider.max = String(lastIndex);
 		this.slider.value = String(lastIndex);
+		this.slider.disabled = lastIndex === 0;
+		this.playButton.disabled = lastIndex === 0;
 		this.drawSparkline();
-		this.updateLabel();
+		// The new range displays all dates. Clear the old host-side filter too.
+		this.emitCutoff();
 	}
 
 	show(): void {
@@ -76,7 +84,7 @@ export class TimelineBar {
 	}
 
 	hide(): void {
-		this.stopPlay();
+		this.resetCutoff();
 		this.root.hide();
 		this.callbacks.onCutoffChange(null);
 	}
@@ -104,18 +112,25 @@ export class TimelineBar {
 	private updateLabel(): void {
 		if (this.histogram.counts.length === 0) {
 			this.labelEl.setText("");
+			this.slider.removeAttribute("aria-valuetext");
 			return;
 		}
-		this.labelEl.setText(monthIndexLabel(this.histogram, this.currentIndex()));
+		const label = monthIndexLabel(this.histogram, this.currentIndex());
+		this.labelEl.setText(label);
+		this.slider.setAttribute("aria-valuetext", label);
 	}
 
 	private togglePlay(): void {
+		if (this.histogram.counts.length < 2) return;
 		if (this.playTimer !== null) {
 			this.stopPlay();
 			return;
 		}
 		if (this.currentIndex() >= this.histogram.counts.length - 1) this.slider.value = "0";
-		this.playButton.setText("⏸");
+		this.emitCutoff();
+		setIcon(this.playButton, "pause");
+		this.playButton.setAttribute("aria-label", t("timeline.pause"));
+		this.playButton.setAttribute("aria-pressed", "true");
 		this.playTimer = window.setInterval(() => {
 			const next = this.currentIndex() + 1;
 			if (next >= this.histogram.counts.length) {
@@ -124,6 +139,7 @@ export class TimelineBar {
 			}
 			this.slider.value = String(next);
 			this.emitCutoff();
+			if (next === this.histogram.counts.length - 1) this.stopPlay();
 		}, 1000 / PLAY_MONTHS_PER_SECOND);
 	}
 
@@ -132,7 +148,9 @@ export class TimelineBar {
 			window.clearInterval(this.playTimer);
 			this.playTimer = null;
 		}
-		this.playButton.setText("⏵");
+		setIcon(this.playButton, "play");
+		this.playButton.setAttribute("aria-pressed", "false");
+		this.playButton.setAttribute("aria-label", t("timeline.play"));
 	}
 
 	private drawSparkline(): void {

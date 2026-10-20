@@ -164,6 +164,8 @@ export const ko: Translation = {
 	"filters.empty": "결과 없음",
 	"filters.search": "검색…",
 
+	"timeline.play": "타임라인 재생",
+	"timeline.pause": "타임라인 일시 정지",
 	"timeline.created": "생성일",
 	"timeline.modified": "수정일",
 
@@ -262,6 +264,9 @@ export const ko: Translation = {
 	"notice.workerRetry": "다시 시작",
 	"notice.contextLost": "WebGL이 중단됐습니다. 그래픽 컨텍스트가 손실되어 뷰를 다시 만들어야 합니다.",
 	"notice.contextReload": "뷰 다시 만들기",
+	"startup.error.title": "WebGL을 사용할 수 없습니다",
+	"startup.error.body": "Advanced Graph View에는 WebGL이 필요합니다. 하드웨어 가속을 켠 뒤 다시 시도하세요.",
+	"startup.error.retry": "다시 시도",
 	"notice.usageCleared": "사용 통계가 삭제되었습니다",
 	"notice.dataReset": "Advanced Graph View 데이터가 초기화되었습니다",
 

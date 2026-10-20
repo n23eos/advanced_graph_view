@@ -164,6 +164,8 @@ export const zh: Translation = {
 	"filters.empty": "没有结果",
 	"filters.search": "搜索…",
 
+	"timeline.play": "播放时间线",
+	"timeline.pause": "暂停时间线",
 	"timeline.created": "创建时间",
 	"timeline.modified": "修改时间",
 
@@ -262,6 +264,9 @@ export const zh: Translation = {
 	"notice.workerRetry": "重新启动",
 	"notice.contextLost": "WebGL 已停止：图形上下文丢失，需要重新构建视图。",
 	"notice.contextReload": "重新构建视图",
+	"startup.error.title": "WebGL 不可用",
+	"startup.error.body": "Advanced Graph View 需要 WebGL。请启用硬件加速后重试。",
+	"startup.error.retry": "重试",
 	"notice.usageCleared": "使用统计已清除",
 	"notice.dataReset": "Advanced Graph View 数据已重置",
 

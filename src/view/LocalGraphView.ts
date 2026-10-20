@@ -18,6 +18,7 @@ import { effectiveNodeStyle } from "../render/nodeStyle";
 import { degreeRadius } from "../render/nodeAppearance";
 import { AutoFitGate } from "./autoFitGate";
 import { t } from "../i18n";
+import { renderGraphStartupError } from "../ui/GraphStartupError";
 import type GraphInsightPlugin from "../main";
 
 export const LOCAL_GRAPH_VIEW_TYPE = "graph-insight-local";
@@ -38,6 +39,8 @@ export class LocalGraphView extends ItemView {
 	private view3d = true;
 	private emptyState: HTMLElement | null = null;
 	private tooltip: HTMLElement | null = null;
+	private closing = false;
+	private openGeneration = 0;
 	/** Full-vault model, rebuilt only when the metadata cache says it changed.
 	 *  Switching notes or depth re-cuts the neighborhood from this. */
 	private vaultModel: GraphModel | null = null;
@@ -59,6 +62,8 @@ export class LocalGraphView extends ItemView {
 	}
 
 	async onOpen(): Promise<void> {
+		const openGeneration = ++this.openGeneration;
+		this.closing = false;
 		const container = this.contentEl;
 		container.empty();
 		container.addClass("graph-insight-container");
@@ -67,14 +72,16 @@ export class LocalGraphView extends ItemView {
 		this.view3d = this.plugin.settings.localGraph.view3d;
 
 		this.buildHeader(container);
-		this.emptyState = container.createDiv({
+		const emptyState = container.createDiv({
 			cls: "graph-insight-empty",
 			text: t("localGraph.empty"),
 		});
-		this.tooltip = container.createDiv({ cls: "graph-insight-tooltip" });
-		this.tooltip.hide();
+		this.emptyState = emptyState;
+		const tooltip = container.createDiv({ cls: "graph-insight-tooltip" });
+		tooltip.hide();
+		this.tooltip = tooltip;
 
-		this.renderer = new GraphRenderer({
+		const renderer = new GraphRenderer({
 			onNodeHover: (nodeId, clientX, clientY) => this.showTooltip(nodeId, clientX, clientY),
 			onNodeClick: (nodeId) => this.openNode(nodeId),
 			onNodeDoubleClick: (nodeId) => this.openNode(nodeId),
@@ -88,8 +95,30 @@ export class LocalGraphView extends ItemView {
 			onExploreJump: () => {},
 			onContextLost: () => {},
 		});
-		await this.renderer.init(container);
-		window.requestAnimationFrame(() => this.renderer?.resize());
+		this.renderer = renderer;
+		try {
+			await renderer.init(container);
+		} catch (error) {
+			renderer.destroy();
+			if (this.renderer === renderer) this.renderer = null;
+			if (this.emptyState === emptyState) this.emptyState = null;
+			if (this.tooltip === tooltip) this.tooltip = null;
+			if (!this.closing && this.openGeneration === openGeneration) {
+				console.error("Advanced Graph View: local renderer startup failed", error);
+				renderGraphStartupError(container, () => this.retryStartup(openGeneration));
+			}
+			return;
+		}
+		if (this.closing || this.openGeneration !== openGeneration || this.renderer !== renderer) {
+			renderer.destroy();
+			if (this.renderer === renderer) this.renderer = null;
+			return;
+		}
+		window.requestAnimationFrame(() => {
+			if (!this.closing && this.openGeneration === openGeneration && this.renderer === renderer) {
+				renderer.resize();
+			}
+		});
 
 		this.registerDomEvent(container, "pointerdown", () => this.autoFit.cancel());
 		this.registerDomEvent(container, "wheel", () => this.autoFit.cancel());
@@ -137,10 +166,17 @@ export class LocalGraphView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
+		this.closing = true;
+		this.openGeneration++;
 		this.layout?.stop();
 		this.renderer?.destroy();
 		this.renderer = null;
 		this.layout = null;
+	}
+
+	private async retryStartup(generation: number): Promise<void> {
+		if (this.closing || this.openGeneration !== generation) return;
+		await this.onOpen();
 	}
 
 	private buildHeader(container: HTMLElement): void {
