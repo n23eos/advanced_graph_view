@@ -77,3 +77,6 @@ A8: версия 0.10.2 подготовлена локально отдельн
 - B6: renderScale standard/high с normalize старых/битых payload, default standard1x; high берёт DPR окна хоста с пределом2 и autoDensity. 12 локалей. После сохранения reload всех загруженных main/local views; deferred пропускаются. Local reload снимает свои подписки и сохраняет rootPath, если активной markdown-вкладки нет. RED settings6, resolution3, reloadall2 и localreload3; итог verify/build PASS: 864 теста / 107 файлов, lint 12 прежних warnings. Старые fixtures расширены, assertions не менялись. Native Retina пока ожидается.
 
 - B5 benchmark: layout 27.0 FPS, pan 17.5, zoom 16.4; worker interval 182.7/391.4 мс; idle 59 render/30 с, render JS35.8 мс, tick JS66.1 мс, ошибок0. Renderer не менялся относительно B4.
+
+- B review: после ошибки записи pending больше не остаётся без drain; flush дописывает последнее значение и сохраняет исходную ошибку. RED 2/4, targeted 10/10 PASS. Изолированный staged verify/build PASS: 866 тестов / 107 файлов, lint 12 прежних предупреждений.
+- B6 standard benchmark: layout42.6, pan18.8, zoom19.0 FPS; tick194.4/385.6 мс; idle60 render/30с, renderJS11.4мс, tickJS18.6мс, ошибок0. DPR2.5, canvas1626x577.

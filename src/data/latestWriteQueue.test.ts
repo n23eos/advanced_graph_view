@@ -29,3 +29,36 @@ test("a rejected write releases the queue for a later attempt", async () => {
 	await expect(queue.enqueue(2)).resolves.toBeUndefined();
 	expect(write.mock.calls).toEqual([[1], [2]]);
 });
+
+test("flush after a rejected write drains only the latest pending value", async () => {
+	let rejectFirst!: (error: Error) => void;
+	const write = vi.fn<(value: number) => Promise<void>>()
+		.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectFirst = reject; }))
+		.mockResolvedValue(undefined);
+	const queue = new LatestWriteQueue(write);
+	const first = queue.enqueue(1);
+	const middle = queue.enqueue(2);
+	const latest = queue.enqueue(3);
+	rejectFirst(new Error("disk unavailable"));
+	await expect(first).rejects.toThrow("disk unavailable");
+	await expect(middle).rejects.toThrow("disk unavailable");
+	await expect(latest).rejects.toThrow("disk unavailable");
+	await expect(queue.flush()).resolves.toBeUndefined();
+	expect(write.mock.calls).toEqual([[1], [3]]);
+});
+
+test("an in-flight flush drains pending data before preserving the active error", async () => {
+	let rejectFirst!: (error: Error) => void;
+	const write = vi.fn<(value: number) => Promise<void>>()
+		.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectFirst = reject; }))
+		.mockResolvedValue(undefined);
+	const queue = new LatestWriteQueue(write);
+	const first = queue.enqueue(1);
+	const queued = queue.enqueue(2);
+	const flushed = queue.flush();
+	rejectFirst(new Error("disk unavailable"));
+	await expect(first).rejects.toThrow("disk unavailable");
+	await expect(queued).rejects.toThrow("disk unavailable");
+	await expect(flushed).rejects.toThrow("disk unavailable");
+	expect(write.mock.calls).toEqual([[1], [2]]);
+});

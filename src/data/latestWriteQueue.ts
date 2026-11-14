@@ -11,8 +11,21 @@ export class LatestWriteQueue<T> {
 		return this.active;
 	}
 
-	flush(): Promise<void> {
-		return this.active ?? Promise.resolve();
+	async flush(): Promise<void> {
+		let failed = false;
+		let failure: unknown;
+		while (this.active || this.pending) {
+			this.active ??= this.drain();
+			try {
+				await this.active;
+			} catch (error) {
+				if (!failed) {
+					failed = true;
+					failure = error;
+				}
+			}
+		}
+		if (failed) throw failure;
 	}
 
 	private async drain(): Promise<void> {
