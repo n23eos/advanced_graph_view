@@ -1,18 +1,15 @@
-# Advanced Graph View 0.10.3
+# Advanced Graph View 0.10.4
 
-Draft release preparation. Not published. CI and full native acceptance remain required before release.
+Draft release preparation. Not published. Native acceptance remains incomplete; publication is not authorized.
 
-This update reduces repeated work in the graph and adds optional sharper rendering.
+- New notes start near an existing neighbor when saved positions are available.
+- Reduced motion makes camera flights and trail replay immediate and disables interface transitions.
+- Main and local graph panes use their own window for rendering, pointer and keyboard input, timers and theme colors.
+- Moving a pane recreates its renderer. Closing during a move cancels reopening, and failed persistence still releases resources.
+- The manifest includes the existing Ko-fi support link.
 
-- Panel changes update immediately and save after a short debounce. Closing the graph or quitting flushes pending settings.
-- Expensive visual calculations run only when their inputs change.
-- Hidden panes pause drawing. Static graphs draw on demand, with a safety frame at least every 500 ms.
-- Snapshot history loads on first use. Capturing a snapshot waits for existing history.
-- High-resolution rendering is optional and capped at 2x. Standard rendering stays the default.
-- Repeated settings reloads clean up listeners, and PNG exports retain nodes from hidden graph tabs.
+Verification: 912 tests in 124 files, typecheck, lint with zero warnings and production build passed. Independent review fixes have regression coverage.
 
-In the local 10k-node harness, static-scene drawing fell from 1788 to 59-60 renders over 30 seconds. These are draw counts, not CPU/GPU utilization measurements. Pan and zoom did not meet the 50 FPS target in this environment, including the baseline; no pan/zoom speedup is claimed.
-
-Native checks covered pane visibility, main/local rendering after enabling high resolution, node dragging/clicking and visible PNG export. The hidden PNG fix, lasso, the complete animation route and exact position restoration after a full restart still need final native acceptance.
+Popout interaction, reduced-motion appearance and the remaining native checks from earlier hardening stages are not yet accepted. The Mac was locked during these checks. This draft must not be treated as a published or natively accepted release.
 
 Requires Obsidian 1.13.0 or later. Desktop only.

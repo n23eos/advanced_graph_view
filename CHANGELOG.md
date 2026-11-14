@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.4] - 2026-11-14
+
+### Changed
+
+- Seed new notes near already positioned neighbors while preserving the first-start layout.
+- Respect reduced motion for camera flights, trail replay and interface transitions.
+- Add the existing Ko-fi support link to the plugin manifest.
+- Remove all lint warnings from source and test helpers.
+
+### Fixed
+
+- Bind rendering, interaction, timers and theme colors to each graph pane's owning window.
+- Recreate main and local graphs safely when panes move between windows.
+- Cancel queued reopening after a pane closes and finish cleanup even when persistence fails.
+- Ignore obsolete preview and animation callbacks after reopening.
+
 ## [0.10.3] - 2026-11-14
 
 ### Changed
