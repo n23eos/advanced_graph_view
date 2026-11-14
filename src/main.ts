@@ -58,6 +58,7 @@ export default class GraphInsightPlugin extends Plugin {
 	private usageWriter = new LatestWriteQueue<UsageLog>((log) => this.dataStore.saveUsage(log));
 	private settingsWriter = new LatestWriteQueue<unknown>((data) => super.saveData(data));
 	private settingsDirty = false;
+	private graphViewReloadQueue: Promise<void> = Promise.resolve();
 	private dwellTimer: number | null = null;
 	private saveUsageDebounced = debounce(() => this.flushUsage(), USAGE_SAVE_DEBOUNCE_MS, true);
 	private saveSettingsDebounced = debounce(() => this.flushSettings(), SETTINGS_SAVE_DEBOUNCE_MS, true);
@@ -361,7 +362,7 @@ export default class GraphInsightPlugin extends Plugin {
 	async replaceSettings(settings: GraphInsightSettings): Promise<void> {
 		this.settings = settings;
 		await this.saveData(this.settings);
-		await this.getGraphView()?.reloadFromSettings();
+		await this.reloadGraphViews();
 	}
 
 	async savePanelState(panel: PanelState): Promise<void> {
@@ -444,14 +445,27 @@ export default class GraphInsightPlugin extends Plugin {
 	}
 
 	async reloadGraphViews(): Promise<void> {
-		const leaves = [
-			...this.app.workspace.getLeavesOfType(GRAPH_INSIGHT_VIEW_TYPE),
-			...this.app.workspace.getLeavesOfType(LOCAL_GRAPH_VIEW_TYPE),
-		];
-		await Promise.all(leaves.map(({ view }) => {
-			if (view instanceof GraphInsightView || view instanceof LocalGraphView) return view.reloadFromSettings();
-			return Promise.resolve();
-		}));
+		const performReload = async () => {
+			const leaves = [
+				...this.app.workspace.getLeavesOfType(GRAPH_INSIGHT_VIEW_TYPE),
+				...this.app.workspace.getLeavesOfType(LOCAL_GRAPH_VIEW_TYPE),
+			];
+			let failed = false;
+			let firstError: unknown;
+			for (const { view } of leaves) {
+				if (!(view instanceof GraphInsightView || view instanceof LocalGraphView)) continue;
+				try {
+					await view.reloadFromSettings();
+				} catch (error) {
+					if (!failed) firstError = error;
+					failed = true;
+				}
+			}
+			if (failed) throw firstError;
+		};
+		const reload = this.graphViewReloadQueue.then(performReload, performReload);
+		this.graphViewReloadQueue = reload;
+		return reload;
 	}
 
 	private async activateInsights(): Promise<void> {
