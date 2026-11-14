@@ -84,3 +84,43 @@ describe("export command availability", () => {
 		expect(exportFile).toHaveBeenCalledOnce();
 	});
 });
+
+describe("in-flight usage writes", () => {
+	test("quit waits for an already started usage write even when dirty is cleared", async () => {
+		const { plugin, events } = build();
+		await plugin.onload();
+		let complete!: () => void;
+		vi.spyOn(plugin.dataStore, "saveUsage").mockImplementation(() => new Promise((resolve) => { complete = resolve; }));
+		const internal = plugin as unknown as { usageDirty: boolean; flushUsage(): Promise<void> };
+		internal.usageDirty = true;
+		const first = internal.flushUsage();
+		const pending: Array<() => Promise<unknown>> = [];
+		events.get("quit")!({ add: (task) => pending.push(task) });
+		let done = false;
+		const quit = Promise.all(pending.map((task) => task())).then(() => { done = true; });
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(done).toBe(false);
+		complete();
+		await Promise.all([first, quit]);
+		expect(done).toBe(true);
+	});
+	test("a new usage update cannot race an older write", async () => {
+		const { plugin } = build();
+		await plugin.onload();
+		const completions: Array<() => void> = [];
+		const write = vi.spyOn(plugin.dataStore, "saveUsage").mockImplementation(() => new Promise((resolve) => completions.push(resolve)));
+		const internal = plugin as unknown as { usageDirty: boolean; flushUsage(): Promise<void> };
+		internal.usageDirty = true;
+		const first = internal.flushUsage();
+		plugin.usageLog = { "a.md": { total: 2, days: {}, months: {}, years: {} } };
+		internal.usageDirty = true;
+		const last = internal.flushUsage();
+		expect(write).toHaveBeenCalledTimes(1);
+		completions[0]();
+		await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(2));
+		expect(write).toHaveBeenLastCalledWith(plugin.usageLog);
+		completions[1]();
+		await Promise.all([first, last]);
+	});
+});

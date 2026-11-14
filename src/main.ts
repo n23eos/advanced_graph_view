@@ -1,6 +1,7 @@
 import { Plugin, TFile, debounce, getLanguage } from "obsidian";
 import { GraphInsightView, GRAPH_INSIGHT_VIEW_TYPE } from "./view/GraphView";
 import { findGraphView } from "./view/findGraphView";
+import { LatestWriteQueue } from "./data/latestWriteQueue";
 import { PluginDataStore } from "./data/persistence";
 import {
 	compactLog,
@@ -53,6 +54,7 @@ export default class GraphInsightPlugin extends Plugin {
 	sessionTrail: SessionEntry[] = [];
 
 	private usageDirty = false;
+	private usageWriter = new LatestWriteQueue<UsageLog>((log) => this.dataStore.saveUsage(log));
 	private dwellTimer: number | null = null;
 	private saveUsageDebounced = debounce(() => this.flushUsage(), USAGE_SAVE_DEBOUNCE_MS, true);
 
@@ -334,9 +336,12 @@ export default class GraphInsightPlugin extends Plugin {
 	}
 
 	private async flushUsage(): Promise<void> {
-		if (!this.usageDirty) return;
-		this.usageDirty = false;
-		await this.dataStore.saveUsage(this.usageLog);
+		if (this.usageDirty) {
+			this.usageDirty = false;
+			await this.usageWriter.enqueue(this.usageLog);
+		} else {
+			await this.usageWriter.flush();
+		}
 	}
 
 	/**

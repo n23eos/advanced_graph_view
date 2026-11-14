@@ -214,3 +214,39 @@ describe("position writes before layout produces coordinates", () => {
 		expect(plugin.dataStore.savePositions).toHaveBeenCalledOnce();
 	});
 });
+
+describe("persistence races found in review", () => {
+	test.each(["flushPositions", "onClose"] as const)("%s saves renamed paths and pins before a rebuild", async (method) => {
+		const { view, renderer, plugin } = build();
+		Object.assign(renderer, { updatePositions: (positions: Float32Array) => { renderer.currentPositions = positions; } });
+		const internal = view as unknown as { receiveLayoutPositions(positions: Float32Array): void; flushPositions(): Promise<void>; onClose(): Promise<void> };
+		await view.rebuildGraph();
+		internal.receiveLayoutPositions(new Float32Array([10, 20, 30]));
+		view.explicitPins.add(0);
+		view.renamed.set("b.md", "a.md");
+		await internal[method]();
+		expect(plugin.dataStore.savePositions).toHaveBeenCalledWith({ positions: { "b.md": [10, 20, 30] }, pins: ["b.md"] });
+	});
+	test("serializes position writes and makes quit wait for the latest snapshot", async () => {
+		const { view, renderer, plugin } = build();
+		Object.assign(renderer, { updatePositions: (positions: Float32Array) => { renderer.currentPositions = positions; } });
+		const internal = view as unknown as { receiveLayoutPositions(positions: Float32Array): void; flushPositions(): Promise<void> };
+		await view.rebuildGraph();
+		const completions: Array<() => void> = [];
+		const write = vi.fn(() => new Promise<void>((resolve) => completions.push(resolve)));
+		Object.assign(plugin.dataStore, { savePositions: write });
+		internal.receiveLayoutPositions(new Float32Array([1, 2, 3]));
+		const first = internal.flushPositions();
+		internal.receiveLayoutPositions(new Float32Array([10, 20, 30]));
+		let quitDone = false;
+		const quit = internal.flushPositions().then(() => { quitDone = true; });
+		expect(write).toHaveBeenCalledTimes(1);
+		completions[0]();
+		await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(2));
+		expect(quitDone).toBe(false);
+		expect(write).toHaveBeenLastCalledWith({ positions: { "a.md": [10, 20, 30] }, pins: [] });
+		completions[1]();
+		await Promise.all([first, quit]);
+		expect(quitDone).toBe(true);
+	});
+});

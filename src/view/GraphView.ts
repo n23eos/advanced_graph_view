@@ -18,7 +18,8 @@ import { consumeRenames, recordRename, remapPinnedPaths, resolvePreviousPath } f
 import { carryMetrics, diffFacts } from "./factsRefresh";
 import { stripFrontmatter, stripMarkdown } from "../data/stripMarkdown";
 import { countRecentOpens } from "../data/UsageTracker";
-import type { PositionMap } from "../data/persistence";
+import { LatestWriteQueue } from "../data/latestWriteQueue";
+import type { PositionMap, SavedPositions } from "../data/persistence";
 import { buildEncoding, type NodeEncoding } from "../encoding/encode";
 import { categoryColor } from "../encoding/colorScales";
 import { metricLabel } from "../encoding/metricLabels";
@@ -112,6 +113,7 @@ export class GraphInsightView extends ItemView {
 	private metricsClient: MetricsClient | null = null;
 	private model: GraphModel | null = null;
 	private hasLayoutPositions = false;
+	private positionWriter = new LatestWriteQueue<SavedPositions>((saved) => this.plugin.dataStore.savePositions(saved));
 	private facts: NodeFacts[] = [];
 	private encoding: NodeEncoding | null = null;
 	private metrics: GraphMetrics | null = null;
@@ -2164,10 +2166,11 @@ export class GraphInsightView extends ItemView {
 
 	private async savePositions(): Promise<void> {
 		const positions = this.renderer?.currentPositions;
-		if (!positions || !this.model || !this.hasLayoutPositions) return;
+		if (!positions || !this.model || !this.hasLayoutPositions) return this.positionWriter.flush();
 		const map: PositionMap = {};
+		const currentPaths = remapPinnedPaths(this.model.nodes.map((node) => node.path), this.renamed);
 		for (const node of this.model.nodes) {
-			map[node.path] = [
+			map[currentPaths[node.id]] = [
 				Math.round(positions[node.id * 3] * 10) / 10,
 				Math.round(positions[node.id * 3 + 1] * 10) / 10,
 				Math.round(positions[node.id * 3 + 2] * 10) / 10,
@@ -2176,10 +2179,10 @@ export class GraphInsightView extends ItemView {
 		// Pins travel as paths so they survive the id reshuffle of a rebuild.
 		const pins: string[] = [];
 		for (const id of this.explicitPins) {
-			const path = this.model.nodes[id]?.path;
+			const path = currentPaths[id];
 			if (path) pins.push(path);
 		}
-		await this.plugin.dataStore.savePositions({ positions: map, pins });
+		await this.positionWriter.enqueue({ positions: map, pins });
 	}
 
 	private showTooltip(nodeId: number | null, clientX: number, clientY: number): void {
@@ -2809,7 +2812,6 @@ export class GraphInsightView extends ItemView {
 		this.rebuildGeneration++;
 		this.rebuilding = false;
 		this.rebuildPending = false;
-		this.renamed.clear();
 		this.changesGeneration++;
 		this.floatingLayout?.destroy();
 		this.floatingLayout = null;
@@ -2827,6 +2829,7 @@ export class GraphInsightView extends ItemView {
 		this.exploreDetached = false;
 		this.exploreOverride = false;
 		await this.savePositions();
+		this.renamed.clear();
 		this.hasLayoutPositions = false;
 		this.layout?.stop();
 		this.layout = null;
