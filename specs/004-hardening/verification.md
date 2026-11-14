@@ -214,3 +214,11 @@ Mac по-прежнему заблокирован. Нативные прове�
 - Browser real GraphView/renderer/workers with 42 notes, one linked attachment, one isolated attachment and two missing targets: actual search counters confirm off/off 43, attachments 44, missing only 45, both 46, return to off/off 43. Controls are host-fixture settings controls calling the public reload method, not native SettingsTab.
 - Property color and prop:status=active show 8/43 after a fresh view restores workspace state. Screenshots inspected at 1200 px/dark and 360 px/light. No application errors; captured wallet-extension errors are unrelated by source URL.
 - Mac remains locked; native restart, hover popup, popout, actual attachment opening and display-resolution acceptance remain unverified. No tag, release or merge.
+
+## E5 and Raincoat installation, 2026-11-14
+
+- The owner clarified that Advanced Graph View is already published with about 9k downloads. E5 now maintains that existing entry: README stable installation, current feature/default/data disclosures and an English maintenance pack. Public name and internal ID are unchanged. No duplicate submission or directory edit.
+- Final integrated verify: 1012 tests / 150 files PASS; lint zero errors/warnings, typecheck and production build PASS. Documentation review findings are corrected. E4 head 2587e1f CI 43608946950 success.
+- Installed unpublished candidate 0.12.0 over 0.10.1 in Raincoat. Full plugin and workspace/community-plugin backup: /Users/nickeo23/.codex/backups/obsidian/Raincoat/graph-insight/20261114-191327-before-hardening. Replaced only main.js, manifest.json and styles.css; SHA-256 matches final production build. Six non-runtime files were unchanged during installation.
+- Official Obsidian CLI reload succeeded. Plugin info confirms name Advanced Graph View, version 0.12.0, enabled true. Captured error buffer is empty. After reload, five non-runtime files remain byte-identical; data.json gained only graphScope, physicsDefaultsVersion and renderScale. All existing settings values are unchanged; both graphScope flags are false.
+- Native visual acceptance remains incomplete: macOS is locked. CLI reload is not evidence of native rendering, full restart, hover popup, popout or Retina interaction. No merge, tag or release was performed.

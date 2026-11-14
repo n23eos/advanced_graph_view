@@ -2,7 +2,7 @@
 
 **Feature Branch**: `codex/009-directory-maintenance`
 **Created**: 2026-11-14
-**Status**: Ready for implementation
+**Status**: Implemented and verified
 **Input**: Hardening E5 preparation, corrected by the owner: Advanced Graph View is already published with about 9k downloads. No new submission or release.
 
 ## User Scenarios & Testing

@@ -24,7 +24,7 @@ Independent test: owner pack describes the existing entry and explicitly defers 
 
 ## Phase 5: Validation
 
-- [ ] T007 Validate final integrated documentation and record results in specs/009-directory-maintenance/verification.md.
+- [x] T007 Validate final integrated documentation and record results in specs/009-directory-maintenance/verification.md.
 
 ## Dependencies and execution
 

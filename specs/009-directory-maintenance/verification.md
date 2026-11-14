@@ -9,4 +9,5 @@
 - Literal U+2013/U+2014 scan of README and all spec009 documents PASS. git diff --check PASS. Private notes remain excluded through the existing escaped !notes pattern; no tracked private-note paths were found.
 - No new submission, listing edit, external message, tag or release was made. Candidate documentation does not imply publication.
 - Independent documentation review found three wording omissions: explicit export file writes, stable manual installation versus BRAT beta, and the exact existing-entry refresh action. All three are corrected.
-- Final integrated runtime checks: pending.
+- Final integrated npm run verify: 1012 tests / 150 files PASS, lint zero errors/warnings, typecheck PASS; npm run build PASS. Logs: /tmp/hardening-final-verify.log and /tmp/hardening-final-build.log. Runtime matches the reviewed E4 candidate.
+- E4 exact head 2587e1f CI 43608946950 success. Final documentation branch includes E1-E4 and retains unpublished candidate version 0.12.0.
