@@ -363,6 +363,9 @@ export const ja: Translation = {
 	"insights.topPagerank": "PageRank トップ",
 	"insights.cooling": "冷えつつあるハブ（{days}+ 日未更新）",
 
+	"settings.group.rendering": "描画",
+	"settings.renderScale": "高解像度で描画",
+	"settings.renderScale.desc": "Retina解像度でグラフをより鮮明に表示します。パフォーマンスが低下する場合があります。",
 	"settings.group.tracking": "計測",
 	"settings.openThreshold": "オープン判定のしきい値",
 	"settings.openThreshold.desc": "ノートが何秒アクティブなら「開いた」と数えるか。",

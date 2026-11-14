@@ -395,6 +395,9 @@ export const en = {
 	"insights.cooling": "Cooling hubs (untouched {days}+ days)",
 
 	// ── Settings tab ──────────────────────────────────────────────────
+	"settings.group.rendering": "Rendering",
+	"settings.renderScale": "High-resolution rendering",
+	"settings.renderScale.desc": "Use Retina resolution for a sharper graph. This may reduce performance.",
 	"settings.group.tracking": "Tracking",
 	"settings.openThreshold": "Open threshold",
 	"settings.openThreshold.desc":

@@ -363,6 +363,9 @@ export const ptBR: Translation = {
 	"insights.topPagerank": "Top por PageRank",
 	"insights.cooling": "Hubs esfriando (intocados há {days}+ dias)",
 
+	"settings.group.rendering": "Renderização",
+	"settings.renderScale": "Renderização em alta resolução",
+	"settings.renderScale.desc": "Usa a resolução Retina para deixar o grafo mais nítido. Isso pode reduzir o desempenho.",
 	"settings.group.tracking": "Rastreamento",
 	"settings.openThreshold": "Limite de abertura",
 	"settings.openThreshold.desc":

@@ -363,6 +363,9 @@ export const zh: Translation = {
 	"insights.topPagerank": "PageRank 排行",
 	"insights.cooling": "正在冷却的枢纽（{days}+ 天未改动）",
 
+	"settings.group.rendering": "渲染",
+	"settings.renderScale": "高分辨率渲染",
+	"settings.renderScale.desc": "使用 Retina 分辨率使图谱更清晰。这可能会降低性能。",
 	"settings.group.tracking": "统计",
 	"settings.openThreshold": "打开阈值",
 	"settings.openThreshold.desc": "笔记需保持活动多少秒，这次打开才会被计入。",

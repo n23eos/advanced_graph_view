@@ -292,7 +292,7 @@ export class GraphInsightView extends ItemView {
 		});
 		this.renderer = renderer;
 		try {
-			await renderer.init(container);
+			await renderer.init(container, this.plugin.settings.renderScale);
 		} catch (error) {
 			renderer.destroy();
 			if (this.renderer === renderer) this.renderer = null;

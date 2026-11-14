@@ -363,6 +363,9 @@ export const es: Translation = {
 	"insights.topPagerank": "Top por PageRank",
 	"insights.cooling": "Centros enfriándose (sin tocar {days}+ días)",
 
+	"settings.group.rendering": "Renderizado",
+	"settings.renderScale": "Renderizado de alta resolución",
+	"settings.renderScale.desc": "Usa la resolución Retina para mostrar un grafo más nítido. Puede reducir el rendimiento.",
 	"settings.group.tracking": "Seguimiento",
 	"settings.openThreshold": "Umbral de apertura",
 	"settings.openThreshold.desc":

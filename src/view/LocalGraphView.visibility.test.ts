@@ -25,7 +25,15 @@ vi.mock("obsidian", async (importOriginal) => ({
 		registerDomEvent(): void {}
 		registerEvent(): void {}
 	},
-	debounce: (callback: () => void) => callback,
+	debounce: (callback: () => void) => {
+		const debounced = () => {
+			callback();
+			return debounced;
+		};
+		debounced.cancel = () => debounced;
+		debounced.run = () => callback();
+		return debounced;
+	},
 }));
 
 vi.mock("../render/GraphRenderer", () => ({
@@ -60,8 +68,8 @@ function setup() {
 		constructor(readonly callback: IntersectionObserverCallback) { observers.push(this); }
 	});
 	const app = {
-		workspace: { on: vi.fn(() => ({})), getActiveFile: () => null },
-		metadataCache: { on: vi.fn(() => ({})) },
+		workspace: { on: vi.fn(() => ({})), offref: vi.fn(), getActiveFile: () => null },
+		metadataCache: { on: vi.fn(() => ({})), offref: vi.fn() },
 	};
 	const plugin = { settings: { localGraph: { depth: 2, view3d: true }, panel: {} } };
 	const view = new LocalGraphView(

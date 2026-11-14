@@ -363,6 +363,9 @@ export const ru: Translation = {
 	"insights.topPagerank": "Топ по PageRank",
 	"insights.cooling": "Остывающие хабы (не трогали {days}+ дней)",
 
+	"settings.group.rendering": "Отрисовка",
+	"settings.renderScale": "Высокое разрешение",
+	"settings.renderScale.desc": "Использовать разрешение Retina для более чёткого графа. Это может снизить производительность.",
 	"settings.group.tracking": "Отслеживание",
 	"settings.openThreshold": "Порог открытия",
 	"settings.openThreshold.desc":

@@ -364,6 +364,9 @@ export const de: Translation = {
 	"insights.topPagerank": "Top nach PageRank",
 	"insights.cooling": "Abkühlende Hubs (seit {days}+ Tagen unberührt)",
 
+	"settings.group.rendering": "Darstellung",
+	"settings.renderScale": "Hochauflösende Darstellung",
+	"settings.renderScale.desc": "Verwendet die Retina-Auflösung für einen schärferen Graphen. Dies kann die Leistung verringern.",
 	"settings.group.tracking": "Erfassung",
 	"settings.openThreshold": "Öffnungsschwelle",
 	"settings.openThreshold.desc":

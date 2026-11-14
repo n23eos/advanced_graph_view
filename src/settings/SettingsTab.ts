@@ -15,6 +15,7 @@ import type GraphInsightPlugin from "../main";
 
 /** Keys addressed by the declarative settings API. */
 type SettingKey =
+	| "renderScaleHigh"
 	| "openDwellSeconds"
 	| "hoverPreviewEnabled"
 	| "hoverPreviewWords"
@@ -31,6 +32,21 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 
 	getSettingDefinitions(): SettingDefinitionItem<SettingKey>[] {
 		return [
+			{
+				type: "group",
+				heading: t("settings.group.rendering"),
+				items: [
+					{
+						name: t("settings.renderScale"),
+						desc: t("settings.renderScale.desc"),
+						aliases: ["retina", "resolution", "display", "quality"],
+						control: {
+							type: "toggle",
+							key: "renderScaleHigh",
+						},
+					},
+				],
+			},
 			{
 				type: "group",
 				heading: t("settings.group.tracking"),
@@ -213,6 +229,8 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 
 	getControlValue(key: string): unknown {
 		switch (key as SettingKey) {
+			case "renderScaleHigh":
+				return this.plugin.settings.renderScale === "high";
 			case "openDwellSeconds":
 				return this.plugin.settings.openDwellSeconds;
 			case "hoverPreviewEnabled":
@@ -226,6 +244,14 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 
 	async setControlValue(key: string, value: unknown): Promise<void> {
 		switch (key as SettingKey) {
+			case "renderScaleHigh":
+				this.plugin.settings = {
+					...this.plugin.settings,
+					renderScale: value === true ? "high" : "standard",
+				};
+				await this.plugin.saveData(this.plugin.settings);
+				await this.plugin.reloadGraphViews();
+				return;
 			case "openDwellSeconds":
 				this.plugin.settings = { ...this.plugin.settings, openDwellSeconds: value as number };
 				await this.plugin.saveData(this.plugin.settings);

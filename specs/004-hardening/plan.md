@@ -223,7 +223,7 @@
 **Критично.** `maybeCaptureSnapshot` без ожидания загрузки запишет историю из одного снапшота поверх существующей. Тест: захват до завершения загрузки не теряет прежние снапшоты.
 
 ### B6. Настройка чёткости (Retina)
-- [ ] Статус `[NATIVE]`
+- [x] Реализация и unit; `[NATIVE]` ожидается
 
 **Правка.** Настройка `renderScale: "standard" | "high"`, дефолт `"standard"` (текущее поведение, 1x). `high`: `resolution: Math.min(window.devicePixelRatio, 2)`, `autoDensity: true` в `app.init`. Переключатель в `SettingsTab`, применяется через существующий `reopen()`. Проверь, что hit-test, `Viewport`, lasso и PNG-экспорт считают в CSS-пикселях.
 

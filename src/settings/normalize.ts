@@ -99,6 +99,7 @@ export function normalizeSettings(raw: unknown, now: number = Date.now()): Graph
 		...DEFAULT_SETTINGS,
 		...rest,
 		onboardingState,
+		renderScale: saved.renderScale === "high" ? "high" : "standard",
 		physicsDefaultsVersion: typeof saved.physicsDefaultsVersion === "number" && Number.isFinite(saved.physicsDefaultsVersion)
 			? saved.physicsDefaultsVersion : 0,
 		panel: normalizePanel(saved.panel),

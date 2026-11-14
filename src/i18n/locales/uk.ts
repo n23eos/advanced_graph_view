@@ -363,6 +363,9 @@ export const uk: Translation = {
 	"insights.topPagerank": "Топ за PageRank",
 	"insights.cooling": "Хаби, що холонуть (не чіпали {days}+ днів)",
 
+	"settings.group.rendering": "Рендеринг",
+	"settings.renderScale": "Висока роздільна здатність",
+	"settings.renderScale.desc": "Використовувати роздільну здатність Retina для чіткішого графа. Це може знизити продуктивність.",
 	"settings.group.tracking": "Відстеження",
 	"settings.openThreshold": "Поріг відкриття",
 	"settings.openThreshold.desc":

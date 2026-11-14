@@ -81,7 +81,7 @@ function leaf(app: unknown = {}): WorkspaceLeaf {
 describe("graph startup failure", () => {
 	test("the main view shows a retry card and does not start workers", async () => {
 		startup.init = () => Promise.reject(new Error("WebGL unavailable"));
-		const view = new GraphInsightView(leaf(), {} as ConstructorParameters<typeof GraphInsightView>[1]);
+		const view = new GraphInsightView(leaf(), { settings: DEFAULT_SETTINGS } as ConstructorParameters<typeof GraphInsightView>[1]);
 
 		await expect(view.onOpen()).resolves.toBeUndefined();
 
@@ -94,7 +94,7 @@ describe("graph startup failure", () => {
 
 	test("retry starts a fresh renderer and a close discards its late init", async () => {
 		startup.init = () => Promise.reject(new Error("WebGL unavailable"));
-		const plugin = { flushSettings: vi.fn(async () => {}) };
+		const plugin = { settings: DEFAULT_SETTINGS, flushSettings: vi.fn(async () => {}) };
 		const view = new GraphInsightView(
 			leaf(),
 			plugin as unknown as ConstructorParameters<typeof GraphInsightView>[1]

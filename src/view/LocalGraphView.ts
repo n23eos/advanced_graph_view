@@ -4,7 +4,16 @@
  * its panel machinery. A depth slider (1–4) cuts the ring count, an export
  * button writes the neighborhood as a Markdown note next to the root.
  */
-import { ItemView, Notice, TFile, debounce, setIcon, type WorkspaceLeaf } from "obsidian";
+import {
+	ItemView,
+	Notice,
+	TFile,
+	debounce,
+	setIcon,
+	type Debouncer,
+	type EventRef,
+	type WorkspaceLeaf,
+} from "obsidian";
 import { buildGraphModel, type GraphModel } from "../data/GraphStore";
 import { buildNeighborhood, type Neighborhood } from "../analysis/neighborhood";
 import { focusFalloff } from "../analysis/focus";
@@ -43,6 +52,10 @@ export class LocalGraphView extends ItemView {
 	private tooltip: HTMLElement | null = null;
 	private closing = false;
 	private openGeneration = 0;
+	private fileOpenEvent: EventRef | null = null;
+	private metadataResolvedEvent: EventRef | null = null;
+	private refreshOnResolve: Debouncer<[], void> | null = null;
+	private readonly cancelAutoFit = () => this.autoFit.cancel();
 	/** Full-vault model, rebuilt only when the metadata cache says it changed.
 	 *  Switching notes or depth re-cuts the neighborhood from this. */
 	private vaultModel: GraphModel | null = null;
@@ -99,7 +112,7 @@ export class LocalGraphView extends ItemView {
 		});
 		this.renderer = renderer;
 		try {
-			await renderer.init(container);
+			await renderer.init(container, this.plugin.settings.renderScale);
 		} catch (error) {
 			renderer.destroy();
 			if (this.renderer === renderer) this.renderer = null;
@@ -124,8 +137,8 @@ export class LocalGraphView extends ItemView {
 			}
 		});
 
-		this.registerDomEvent(container, "pointerdown", () => this.autoFit.cancel());
-		this.registerDomEvent(container, "wheel", () => this.autoFit.cancel());
+		container.addEventListener("pointerdown", this.cancelAutoFit);
+		container.addEventListener("wheel", this.cancelAutoFit);
 
 		this.layout = new LayoutClient(
 			(positions) => {
@@ -144,14 +157,15 @@ export class LocalGraphView extends ItemView {
 			}
 		);
 
-		this.registerEvent(
-			this.app.workspace.on("file-open", (file) => {
+		this.fileOpenEvent = this.app.workspace.on(
+			"file-open",
+			(file) => {
 				if (file && file.extension === "md") this.refresh(file.path);
-			})
+			}
 		);
 		// "resolved" fires on every cache pass; rebuilding the whole model each
 		// time would churn on big vaults, so trailing-edge debounce it.
-		const refreshOnResolve = debounce(
+		this.refreshOnResolve = debounce(
 			() => {
 				this.invalidateModel();
 				if (this.rootPath) this.refresh(this.rootPath);
@@ -159,10 +173,11 @@ export class LocalGraphView extends ItemView {
 			1000,
 			true
 		);
-		this.registerEvent(this.app.metadataCache.on("resolved", refreshOnResolve));
+		this.metadataResolvedEvent = this.app.metadataCache.on("resolved", this.refreshOnResolve);
 
 		const active = this.app.workspace.getActiveFile();
-		if (active && active.extension === "md") this.refresh(active.path);
+		const rootPath = active?.extension === "md" ? active.path : this.rootPath;
+		if (rootPath) this.refresh(rootPath);
 	}
 
 	onResize(): void {
@@ -172,12 +187,33 @@ export class LocalGraphView extends ItemView {
 	async onClose(): Promise<void> {
 		this.closing = true;
 		this.openGeneration++;
+		this.clearOpenListeners();
 		this.stopObservingRendererVisibility?.();
 		this.stopObservingRendererVisibility = null;
 		this.layout?.stop();
 		this.renderer?.destroy();
 		this.renderer = null;
 		this.layout = null;
+	}
+
+	reloadFromSettings(): Promise<void> {
+		return this.reopen();
+	}
+
+	private async reopen(): Promise<void> {
+		await this.onClose();
+		await this.onOpen();
+	}
+
+	private clearOpenListeners(): void {
+		this.contentEl.removeEventListener("pointerdown", this.cancelAutoFit);
+		this.contentEl.removeEventListener("wheel", this.cancelAutoFit);
+		if (this.fileOpenEvent) this.app.workspace.offref(this.fileOpenEvent);
+		if (this.metadataResolvedEvent) this.app.metadataCache.offref(this.metadataResolvedEvent);
+		this.refreshOnResolve?.cancel();
+		this.fileOpenEvent = null;
+		this.metadataResolvedEvent = null;
+		this.refreshOnResolve = null;
 	}
 
 	private async retryStartup(generation: number): Promise<void> {

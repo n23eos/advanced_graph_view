@@ -8,6 +8,7 @@ import { DEFAULT_3D_PANEL, type ViewPreset } from "../view/builtinPresets";
 /** Where the user is in the first-run tour. Replaces the old boolean
  *  `onboardingShown`; `disabled` is "don't show me this again". */
 export type OnboardingState = "never-seen" | "dismissed" | "completed" | "disabled";
+export type RenderScale = "standard" | "high";
 
 export const ONBOARDING_STATES: readonly OnboardingState[] = [
 	"never-seen", "dismissed", "completed", "disabled",
@@ -27,6 +28,7 @@ export interface SearchPreset {
 
 export interface GraphInsightSettings {
 	physicsDefaultsVersion: number;
+	renderScale: RenderScale;
 	panel: PanelState;
 	/** How much of the control panel is on show. Not part of PanelState: it is
 	 *  which controls you see, not what the graph looks like, so a view preset
@@ -75,6 +77,7 @@ export interface HoverPreviewSettings {
 
 export const DEFAULT_SETTINGS: GraphInsightSettings = {
 	physicsDefaultsVersion: 0,
+	renderScale: "standard",
 	panel: DEFAULT_3D_PANEL,
 	panelMode: "simple",
 	openDwellSeconds: 5,

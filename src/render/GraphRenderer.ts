@@ -1,3 +1,5 @@
+import { renderResolution } from "../settings/renderResolution";
+import type { RenderScale } from "../settings/schema";
 import {
 	Application,
 	Container,
@@ -250,11 +252,12 @@ export class GraphRenderer {
 
 	constructor(private readonly callbacks: RendererCallbacks) {}
 
-	async init(host: HTMLElement): Promise<void> {
+	async init(host: HTMLElement, renderScale: RenderScale = "standard"): Promise<void> {
 		this.host = host;
 		const app = new Application();
 		try {
 			await app.init({
+				...renderResolution(renderScale, host.ownerDocument?.defaultView?.devicePixelRatio ?? 1),
 				resizeTo: host,
 				antialias: false, // MSAA on 30k edge lines costs several ms/frame; glow sprites hide the aliasing
 				backgroundAlpha: 0,

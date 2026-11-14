@@ -443,6 +443,17 @@ export default class GraphInsightPlugin extends Plugin {
 		return findGraphView(this.app.workspace.getLeavesOfType(GRAPH_INSIGHT_VIEW_TYPE));
 	}
 
+	async reloadGraphViews(): Promise<void> {
+		const leaves = [
+			...this.app.workspace.getLeavesOfType(GRAPH_INSIGHT_VIEW_TYPE),
+			...this.app.workspace.getLeavesOfType(LOCAL_GRAPH_VIEW_TYPE),
+		];
+		await Promise.all(leaves.map(({ view }) => {
+			if (view instanceof GraphInsightView || view instanceof LocalGraphView) return view.reloadFromSettings();
+			return Promise.resolve();
+		}));
+	}
+
 	private async activateInsights(): Promise<void> {
 		const existing = this.app.workspace.getLeavesOfType(INSIGHTS_VIEW_TYPE);
 		if (existing.length > 0) {

@@ -363,6 +363,9 @@ export const pl: Translation = {
 	"insights.topPagerank": "Top wg PageRank",
 	"insights.cooling": "Stygnące huby (nietknięte od {days}+ dni)",
 
+	"settings.group.rendering": "Renderowanie",
+	"settings.renderScale": "Renderowanie w wysokiej rozdzielczości",
+	"settings.renderScale.desc": "Używa rozdzielczości Retina, aby wykres był ostrzejszy. Może to obniżyć wydajność.",
 	"settings.group.tracking": "Śledzenie",
 	"settings.openThreshold": "Próg otwarcia",
 	"settings.openThreshold.desc":

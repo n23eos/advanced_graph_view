@@ -363,6 +363,9 @@ export const ko: Translation = {
 	"insights.topPagerank": "PageRank 상위",
 	"insights.cooling": "식어가는 허브({days}일 이상 손대지 않음)",
 
+	"settings.group.rendering": "렌더링",
+	"settings.renderScale": "고해상도 렌더링",
+	"settings.renderScale.desc": "Retina 해상도로 그래프를 더 선명하게 표시합니다. 성능이 저하될 수 있습니다.",
 	"settings.group.tracking": "기록",
 	"settings.openThreshold": "열람 인정 시간",
 	"settings.openThreshold.desc": "노트가 몇 초 이상 활성 상태여야 열람으로 셀지 정합니다.",
