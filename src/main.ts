@@ -270,6 +270,11 @@ export default class GraphInsightPlugin extends Plugin {
 			callback: () => this.getGraphView()?.exportGexfFile(),
 		});
 
+		this.registerEvent(this.app.workspace.on("quit", (tasks) => {
+			tasks.add(() => this.flushUsage());
+			const view = this.getGraphView();
+			if (view) tasks.add(() => view.flushPositions());
+		}));
 		this.registerEvent(this.app.workspace.on("file-open", (file) => this.handleFileOpen(file)));
 		this.registerEvent(
 			this.app.vault.on("rename", (file, oldPath) => {

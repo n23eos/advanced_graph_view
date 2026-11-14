@@ -189,3 +189,28 @@ describe("renamed note positions", () => {
 		expect([...view.renamed]).toEqual([["c.md", "b.md"]]);
 	});
 });
+
+describe("position writes before layout produces coordinates", () => {
+	test("does not replace saved coordinates with the initial zero buffer", async () => {
+		const { view, renderer, plugin } = build();
+		await view.rebuildGraph();
+		renderer.currentPositions = new Float32Array(3);
+		await view.savePositions();
+		expect(plugin.dataStore.savePositions).not.toHaveBeenCalled();
+		await view.onClose();
+		expect(plugin.dataStore.savePositions).not.toHaveBeenCalled();
+	});
+	test("flushes a received frame, including a valid zero coordinate, and resets on rebuild", async () => {
+		const { view, files, renderer, plugin } = build();
+		Object.assign(renderer, { updatePositions: (positions: Float32Array) => { renderer.currentPositions = new Float32Array(positions); } });
+		const internal = view as unknown as { receiveLayoutPositions(positions: Float32Array): void; flushPositions(): Promise<void> };
+		await view.rebuildGraph();
+		internal.receiveLayoutPositions(new Float32Array([0, 20.12, 30.23]));
+		await internal.flushPositions();
+		expect(plugin.dataStore.savePositions).toHaveBeenCalledWith({ positions: { "a.md": [0, 20.1, 30.2] }, pins: [] });
+		files.push({ ...files[0], path: "b.md" });
+		await view.rebuildGraph();
+		await internal.flushPositions();
+		expect(plugin.dataStore.savePositions).toHaveBeenCalledOnce();
+	});
+});

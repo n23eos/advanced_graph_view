@@ -111,6 +111,7 @@ export class GraphInsightView extends ItemView {
 	private readonly autoFit = new AutoFitGate();
 	private metricsClient: MetricsClient | null = null;
 	private model: GraphModel | null = null;
+	private hasLayoutPositions = false;
 	private facts: NodeFacts[] = [];
 	private encoding: NodeEncoding | null = null;
 	private metrics: GraphMetrics | null = null;
@@ -315,9 +316,9 @@ export class GraphInsightView extends ItemView {
 		});
 
 		this.layout = new LayoutClient(
-			(positions) => this.renderer?.updatePositions(positions),
+			(positions) => this.receiveLayoutPositions(positions),
 			(positions) => {
-				this.renderer?.updatePositions(positions);
+				this.receiveLayoutPositions(positions);
 				this.savePositionsDebounced();
 				this.redrawBubbles();
 				if (shouldFitOnSettle(this.autoFit, this.plugin.settings.panel.view3d.enabled)) {
@@ -1756,6 +1757,7 @@ export class GraphInsightView extends ItemView {
 			consumeRenames(this.renamed, renamed);
 			this.facts = this.buildFacts(model, files);
 			this.metrics = null;
+			this.hasLayoutPositions = false;
 			this.renderer.setModel(model);
 			const view3d = this.plugin.settings.panel.view3d;
 			const dims = view3d.enabled && view3d.depthSource === "physics" ? 3 : 2;
@@ -2150,9 +2152,19 @@ export class GraphInsightView extends ItemView {
 		this.redrawBubbles();
 	}
 
+	private receiveLayoutPositions(positions: Float32Array): void {
+		if (this.closing || !this.renderer || !this.model || positions.length !== this.model.nodes.length * 3) return;
+		this.renderer.updatePositions(positions);
+		this.hasLayoutPositions = true;
+	}
+
+	flushPositions(): Promise<void> {
+		return this.savePositions();
+	}
+
 	private async savePositions(): Promise<void> {
 		const positions = this.renderer?.currentPositions;
-		if (!positions || !this.model) return;
+		if (!positions || !this.model || !this.hasLayoutPositions) return;
 		const map: PositionMap = {};
 		for (const node of this.model.nodes) {
 			map[node.path] = [
@@ -2815,6 +2827,7 @@ export class GraphInsightView extends ItemView {
 		this.exploreDetached = false;
 		this.exploreOverride = false;
 		await this.savePositions();
+		this.hasLayoutPositions = false;
 		this.layout?.stop();
 		this.layout = null;
 		this.changesClient?.stop();
