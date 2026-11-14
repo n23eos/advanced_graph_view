@@ -701,6 +701,15 @@ export class GraphInsightView extends ItemView {
 		// A new period supersedes the old request, including its worker.
 		this.changesClient?.stop();
 		this.changesPanel?.setData(null); // skeleton — the view stays interactive
+		if (!this.plugin.snapshotsLoaded) {
+			try {
+				await this.plugin.ensureSnapshots();
+			} catch (error) {
+				console.error("Advanced Graph View: snapshot loading failed", error);
+				return;
+			}
+			if (this.closing || generation !== this.changesGeneration || !this.model) return;
+		}
 		const now = Date.now();
 		const periodStart = now - this.changesSelection.periodDays * 24 * 60 * 60 * 1000;
 		const snapshot = closestSnapshotBefore(this.plugin.snapshotStore, periodStart);

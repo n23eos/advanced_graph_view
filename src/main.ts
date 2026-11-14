@@ -102,7 +102,6 @@ export default class GraphInsightPlugin extends Plugin {
 
 		const loaded = await this.dataStore.loadUsage();
 		this.usageLog = loaded ? compactLog(loaded, Date.now()) : emptyLog();
-		this.snapshotStore = (await this.dataStore.loadSnapshots()) ?? emptySnapshotStore();
 
 		this.registerView(GRAPH_INSIGHT_VIEW_TYPE, (leaf) => new GraphInsightView(leaf, this));
 		this.registerView(INSIGHTS_VIEW_TYPE, (leaf) => new InsightsView(leaf, this));
@@ -468,28 +467,77 @@ export default class GraphInsightPlugin extends Plugin {
 		await this.app.workspace.revealLeaf(leaf);
 	}
 
-	/** F-10 history; loaded on start, appended after successful metrics. */
+	/** F-10 history; loaded lazily, appended after successful metrics. */
 	snapshotStore: SnapshotStore = emptySnapshotStore();
 
-	private capturingSnapshot = false;
+	private snapshotsReady: Promise<void> | null = null;
+	private snapshotsAreLoaded = false;
+	private snapshotGeneration = 0;
+	private snapshotCapture: Promise<void> | null = null;
+	private snapshotReset: Promise<void> | null = null;
+	get snapshotsLoaded(): boolean {
+		return this.snapshotsAreLoaded;
+	}
+
+	ensureSnapshots(): Promise<void> {
+		if (!this.snapshotsReady) {
+			const generation = this.snapshotGeneration;
+			const ready = this.dataStore.loadSnapshots()
+				.then((loaded) => {
+					if (generation === this.snapshotGeneration) {
+						this.snapshotStore = loaded ?? emptySnapshotStore();
+						this.snapshotsAreLoaded = true;
+					}
+				})
+				.catch((error: unknown) => {
+					if (this.snapshotsReady === ready) this.snapshotsReady = null;
+					throw error;
+				});
+			this.snapshotsReady = ready;
+		}
+		return this.snapshotsReady;
+	}
 
 	/** Called by the view after a successful metrics run — the only moment a
 	 *  snapshot may be captured, and at most once per 24 h. */
 	async maybeCaptureSnapshot(model: GraphModel, metrics: GraphMetrics): Promise<void> {
-		// Two views can report metrics back-to-back; one capture at a time.
-		if (this.capturingSnapshot) return;
+		const generation = this.snapshotGeneration;
+		await this.ensureSnapshots();
+		if (generation !== this.snapshotGeneration || this.snapshotReset || this.snapshotCapture) return;
 		const now = Date.now();
 		if (!shouldCapture(this.snapshotStore, now)) return;
-		this.capturingSnapshot = true;
-		try {
+		const capture = (async () => {
 			const next = applyRetention(
 				{ version: 1, snapshots: [...this.snapshotStore.snapshots, buildSnapshot(model, metrics, now)] },
 				now
 			);
 			this.snapshotStore = next;
 			await this.dataStore.saveSnapshots(next);
+		})();
+		this.snapshotCapture = capture;
+		try {
+			await capture;
 		} finally {
-			this.capturingSnapshot = false;
+			if (this.snapshotCapture === capture) this.snapshotCapture = null;
+		}
+	}
+
+	async resetSnapshots(): Promise<void> {
+		if (this.snapshotReset) return this.snapshotReset;
+		this.snapshotGeneration++;
+		this.snapshotStore = emptySnapshotStore();
+		this.snapshotsAreLoaded = true;
+		this.snapshotsReady = Promise.resolve();
+		const capture = this.snapshotCapture;
+		const reset = (async () => {
+			if (capture) await capture.catch(() => undefined);
+			await this.dataStore.removeSnapshots();
+		})();
+		this.snapshotReset = reset;
+		try {
+			await reset;
+		} finally {
+			if (this.snapshotReset === reset) this.snapshotReset = null;
 		}
 	}
 

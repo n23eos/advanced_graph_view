@@ -40,6 +40,7 @@ function build() {
 		metadataCache: { resolvedLinks: {}, unresolvedLinks: {} },
 	};
 	const plugin = {
+		snapshotsLoaded: true,
 		snapshotStore: { version: 1, snapshots: [{
 			version: 1, capturedAt: 0, paths: ["a.md"], edges: [], pagerank: [],
 		}] },
