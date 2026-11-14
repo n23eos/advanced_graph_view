@@ -159,6 +159,7 @@ function createHost(mode: VaultMode, host: HTMLElement, report: (message: string
 
 	const vault = {
 		on: (name: string, callback: (...args: any[]) => void) => vaultEvents.on(name, callback),
+		offref: (ref: { off(): void }) => ref.off(),
 		getMarkdownFiles: () => files,
 		getAbstractFileByPath: (path: string) => fileByPath.get(path) ?? null,
 		cachedRead: async (file: TFile) => specByPath.get(file.path)?.text ?? "",
@@ -170,6 +171,7 @@ function createHost(mode: VaultMode, host: HTMLElement, report: (message: string
 		unresolvedLinks,
 		getFileCache: (file: TFile) => ({ tags: (specByPath.get(file.path)?.tags ?? []).map((tag) => ({ tag: `#${tag}` })) }),
 		on: (name: string, callback: (...args: any[]) => void) => metadataEvents.on(name, callback),
+		offref: (ref: { off(): void }) => ref.off(),
 	};
 
 	let activeView: GraphInsightView | null = null;
@@ -177,6 +179,7 @@ function createHost(mode: VaultMode, host: HTMLElement, report: (message: string
 	leaf.openFile = async (file: TFile) => { report(`Opened ${file.path} in harness host`); workspaceEvents.emit("file-open", file); };
 	const workspace = {
 		on: (name: string, callback: (...args: any[]) => void) => workspaceEvents.on(name, callback),
+		offref: (ref: { off(): void }) => ref.off(),
 		getActiveViewOfType: () => activeView,
 		getLeaf: () => leaf,
 		getLeafById: () => leaf,
@@ -203,6 +206,9 @@ function createHost(mode: VaultMode, host: HTMLElement, report: (message: string
 		usageLog: {},
 		sessionTrail: [],
 		snapshotStore: { version: 1, snapshots: [] },
+		snapshotsLoaded: true,
+		ensureSnapshots: async () => undefined,
+		flushSettings: async () => undefined,
 		dataStore: {
 			loadPositions: async () => null,
 			savePositions: async () => undefined,

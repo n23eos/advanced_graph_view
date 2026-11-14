@@ -54,12 +54,14 @@ export class TFile {
 export class ItemView {
 	app: any;
 	contentEl: HTMLElement;
+	containerEl: HTMLElement;
 	leaf: any;
 	private disposers: Dispose[] = [];
 	constructor(leaf: any) {
 		this.leaf = leaf;
 		this.app = leaf.app;
 		this.contentEl = leaf.contentEl;
+		this.containerEl = this.contentEl;
 	}
 	register(dispose: Dispose): void { this.disposers.push(dispose); }
 	registerEvent(ref: { off?: Dispose } | Dispose): void {
