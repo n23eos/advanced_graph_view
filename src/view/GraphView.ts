@@ -1,3 +1,4 @@
+import { panelDiff } from "./panelDiff";
 import {
 	ItemView,
 	Keymap,
@@ -2345,9 +2346,10 @@ export class GraphInsightView extends ItemView {
 				// A manual tweak diverges from the preset, so it's no longer "applied".
 				this.activePresetIndex = null;
 				// Any hand-made physics change invalidates the reset's Undo (F-07).
-				if (next.physics !== this.plugin.settings.panel.physics) this.physicsUndo = null;
+				const prev = this.plugin.settings.panel;
+				if (next.physics !== prev.physics) this.physicsUndo = null;
 				void this.plugin.savePanelState(next);
-				this.applyAllPanelState(next);
+				this.applyAllPanelState(next, prev);
 			},
 			onPhysicsReset: () => void this.resetPhysics(),
 			onSectionToggle: (id, open) => {
@@ -2582,11 +2584,12 @@ export class GraphInsightView extends ItemView {
 	}
 
 	/** Apply every visual consequence of a panel state, in one place. */
-	private applyAllPanelState(state: PanelState): void {
-		this.applyEncoding(state);
-		this.applyOverlays(state);
-		this.redrawBubbles();
-		this.syncTimelineAndTrail(state);
+	private applyAllPanelState(state: PanelState, prev?: PanelState): void {
+		const diff = panelDiff(prev, state);
+		if (diff.applyEncoding) this.applyEncoding(state);
+		if (diff.applyOverlays) this.applyOverlays(state);
+		if (diff.redrawBubbles) this.redrawBubbles();
+		if (diff.syncTimelineAndTrail) this.syncTimelineAndTrail(state);
 		this.applyPhysics(state);
 		this.applyLayoutRule(state.layoutRule);
 		this.renderer?.setLabelOptions(
