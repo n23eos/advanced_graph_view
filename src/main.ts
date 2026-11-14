@@ -257,17 +257,32 @@ export default class GraphInsightPlugin extends Plugin {
 		this.addCommand({
 			id: "export-png",
 			name: t("command.exportPng"),
-			callback: () => void this.getGraphView()?.exportPngFile(),
+			checkCallback: (checking) => {
+				const view = this.getGraphView();
+				if (!view) return false;
+				if (!checking) void view.exportPngFile();
+				return true;
+			},
 		});
 		this.addCommand({
 			id: "export-json",
 			name: t("command.exportJson"),
-			callback: () => this.getGraphView()?.exportJsonFile(),
+			checkCallback: (checking) => {
+				const view = this.getGraphView();
+				if (!view) return false;
+				if (!checking) view.exportJsonFile();
+				return true;
+			},
 		});
 		this.addCommand({
 			id: "export-gexf",
 			name: t("command.exportGexf"),
-			callback: () => this.getGraphView()?.exportGexfFile(),
+			checkCallback: (checking) => {
+				const view = this.getGraphView();
+				if (!view) return false;
+				if (!checking) view.exportGexfFile();
+				return true;
+			},
 		});
 
 		this.registerEvent(this.app.workspace.on("quit", (tasks) => {

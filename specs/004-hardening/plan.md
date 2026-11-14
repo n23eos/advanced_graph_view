@@ -141,7 +141,7 @@
 **Проверка `[NATIVE]`.** Открыть граф, дождаться раскладки, перетащить узел, сразу закрыть Obsidian (Cmd+Q), открыть - узел на месте. Открыть заметку на 6 с, сразу выйти - открытие учтено в `usage.json`.
 
 ### A7. Мелочи
-- [ ] Статус
+- [x] Статус
 
 1. `main.ts`: команды `export-png`, `export-json`, `export-gexf` перевести на `checkCallback` (как `export-topic-map`): скрыты, пока графа нет.
 2. `GraphView.notePreview`: regex фронтматтера `/^---\r?\n[\s\S]*?\r?\n---\r?\n/`. Тест на CRLF рядом с `stripMarkdown.test.ts` (вынеси снятие фронтматтера в `src/data/stripMarkdown.ts` функцией `stripFrontmatter`).

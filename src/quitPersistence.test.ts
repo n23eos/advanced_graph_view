@@ -62,3 +62,25 @@ describe("quit persistence", () => {
 		await expect(pending[0]()).resolves.toBeUndefined();
 	});
 });
+
+describe("export command availability", () => {
+	test.each([
+		["export-png", "exportPngFile"],
+		["export-json", "exportJsonFile"],
+		["export-gexf", "exportGexfFile"],
+	] as const)("%s requires a loaded graph and only exports on execution", async (id, method) => {
+		const { plugin } = build();
+		const commands = vi.spyOn(plugin, "addCommand");
+		await plugin.onload();
+		const command = commands.mock.calls.find(([item]) => item.id === id)?.[0];
+		expect(command?.checkCallback).toBeTypeOf("function");
+		expect(command?.checkCallback?.(true)).toBe(false);
+		expect(command?.checkCallback?.(false)).toBe(false);
+		const exportFile = vi.fn();
+		vi.spyOn(plugin, "getGraphView").mockReturnValue({ [method]: exportFile } as never);
+		expect(command?.checkCallback?.(true)).toBe(true);
+		expect(exportFile).not.toHaveBeenCalled();
+		expect(command?.checkCallback?.(false)).toBe(true);
+		expect(exportFile).toHaveBeenCalledOnce();
+	});
+});

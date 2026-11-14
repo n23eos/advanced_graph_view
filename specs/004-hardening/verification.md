@@ -24,6 +24,8 @@
 
 - A6: код и unit завершены. Сигнатура quit/Tasks.add совпала с планом в obsidian.d.ts. RED: 4 FAIL / 8 PASS. verify PASS, 759 тестов / 90 файлов, lint 12 предупреждений. До первого layout frame savePositions не пишет; guard общий для quit, debounce и onClose, сбрасывается при setModel. Нативно пока не проверено.
 
+- A7: завершён. Три export команды скрыты без загруженного view, CRLF frontmatter исключается из preview. RED: 6 FAIL / 2 PASS. verify/build PASS, 765 тестов / 91 файл, lint 12 предупреждений.
+
 ## Следующий шаг
 
-A7: доступность экспорта и CRLF frontmatter; затем нативная проверка и ревью этапа.
+A8: нативная проверка в отдельном тестовом vault и независимое ревью.

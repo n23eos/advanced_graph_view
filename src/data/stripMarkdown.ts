@@ -25,3 +25,8 @@ export function stripMarkdown(input: string): string {
 			.trim()
 	);
 }
+
+/** Remove only the leading YAML block, including Windows line endings. */
+export function stripFrontmatter(input: string): string {
+	return input.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, "");
+}

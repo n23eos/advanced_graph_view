@@ -16,7 +16,7 @@ import { computeOverlayMask, countOverlayMatches } from "../analysis/overlays";
 import { buildGraphModel, sameGraphModel, type GraphModel } from "../data/GraphStore";
 import { consumeRenames, recordRename, remapPinnedPaths, resolvePreviousPath } from "./renamedPaths";
 import { carryMetrics, diffFacts } from "./factsRefresh";
-import { stripMarkdown } from "../data/stripMarkdown";
+import { stripFrontmatter, stripMarkdown } from "../data/stripMarkdown";
 import { countRecentOpens } from "../data/UsageTracker";
 import type { PositionMap } from "../data/persistence";
 import { buildEncoding, type NodeEncoding } from "../encoding/encode";
@@ -2260,7 +2260,7 @@ export class GraphInsightView extends ItemView {
 		} catch {
 			return null;
 		}
-		const body = stripMarkdown(raw.replace(/^---\n[\s\S]*?\n---\n/, ""))
+		const body = stripMarkdown(stripFrontmatter(raw))
 			.replace(/\s+/g, " ")
 			.trim();
 		if (!body) return null;
