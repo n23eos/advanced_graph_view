@@ -62,3 +62,14 @@ test("an in-flight flush drains pending data before preserving the active error"
 	await expect(flushed).rejects.toThrow("disk unavailable");
 	expect(write.mock.calls).toEqual([[1], [2]]);
 });
+
+test("a synchronous write failure releases the queue before a later flush", async () => {
+	const write = vi.fn<(value: number) => Promise<void>>()
+		.mockImplementationOnce(() => { throw new Error("sync failure"); })
+		.mockResolvedValueOnce(undefined);
+	const queue = new LatestWriteQueue(write);
+	await expect(queue.enqueue(1)).rejects.toThrow("sync failure");
+	await expect(queue.enqueue(2)).resolves.toBeUndefined();
+	await expect(queue.flush()).resolves.toBeUndefined();
+	expect(write.mock.calls).toEqual([[1], [2]]);
+});

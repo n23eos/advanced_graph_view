@@ -33,7 +33,13 @@ export class LatestWriteQueue<T> {
 			while (this.pending) {
 				const { value } = this.pending;
 				this.pending = null;
-				await this.write(value);
+				let pendingWrite: Promise<void>;
+				try {
+					pendingWrite = this.write(value);
+				} catch (error) {
+					pendingWrite = (async () => { throw error; })();
+				}
+				await pendingWrite;
 			}
 		} finally {
 			this.active = null;
