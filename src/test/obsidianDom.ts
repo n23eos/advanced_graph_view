@@ -7,20 +7,22 @@
  * Import and call from files annotated with `@vitest-environment jsdom`.
  */
 
-interface DomElementInfo {
+interface TestDomElementInfo {
 	cls?: string | string[];
-	text?: string;
+	text?: string | DocumentFragment;
 	attr?: Record<string, string | number | boolean | null>;
 	title?: string;
+	parent?: Node;
 	value?: string;
 	type?: string;
+	prepend?: boolean;
 	placeholder?: string;
 	href?: string;
 }
 
-function applyInfo(el: HTMLElement, info?: DomElementInfo | string): void {
+function applyInfo(el: HTMLElement, info?: TestDomElementInfo | string): void {
 	if (info === undefined) return;
-	const options: DomElementInfo = typeof info === "string" ? { cls: info } : info;
+	const options: TestDomElementInfo = typeof info === "string" ? { cls: info } : info;
 	if (options.cls !== undefined) {
 		// Obsidian accepts space-separated class strings; classList does not.
 		const classes = (Array.isArray(options.cls) ? options.cls : [options.cls])
@@ -28,7 +30,8 @@ function applyInfo(el: HTMLElement, info?: DomElementInfo | string): void {
 			.filter(Boolean);
 		el.classList.add(...classes);
 	}
-	if (options.text !== undefined) el.textContent = options.text;
+	if (typeof options.text === "string") el.textContent = options.text;
+	else if (options.text) el.appendChild(options.text);
 	if (options.title !== undefined) el.title = options.title;
 	if (options.href !== undefined) (el as HTMLAnchorElement).href = options.href;
 	if (options.type !== undefined) (el as HTMLInputElement).type = options.type;
@@ -40,25 +43,55 @@ function applyInfo(el: HTMLElement, info?: DomElementInfo | string): void {
 	}
 }
 
+function attach(el: HTMLElement, info: TestDomElementInfo | string | undefined, fallback?: Node): void {
+	const options = typeof info === "object" ? info : undefined;
+	const parent = options?.parent ?? fallback;
+	if (!parent) return;
+	if (options?.prepend) parent.insertBefore(el, parent.firstChild);
+	else parent.appendChild(el);
+}
+
 /** Idempotent: safe to call from every test file's setup. */
 export function installObsidianDom(): void {
+	const createGlobalEl = function <K extends keyof HTMLElementTagNameMap>(
+		tag: K,
+		info?: TestDomElementInfo | string,
+		callback?: (el: HTMLElementTagNameMap[K]) => void
+	): HTMLElementTagNameMap[K] {
+		const el = document.createElement(tag);
+		applyInfo(el, info);
+		attach(el, info);
+		callback?.(el);
+		return el;
+	};
+	const createGlobalFragment = function (callback?: (el: DocumentFragment) => void) {
+		const fragment = document.createDocumentFragment();
+		callback?.(fragment);
+		return fragment;
+	};
+	const testGlobal = globalThis;
+	testGlobal.createEl ??= createGlobalEl;
+	testGlobal.createFragment ??= createGlobalFragment;
+	window.createEl ??= testGlobal.createEl;
+	window.createFragment ??= testGlobal.createFragment;
+
 	const proto = HTMLElement.prototype;
 	if (typeof proto.createEl === "function") return;
 
 	proto.createEl = function <K extends keyof HTMLElementTagNameMap>(
 		this: HTMLElement,
 		tag: K,
-		info?: DomElementInfo | string
+		info?: TestDomElementInfo | string
 	): HTMLElementTagNameMap[K] {
 		const el = document.createElement(tag);
 		applyInfo(el, info);
-		this.appendChild(el);
+		attach(el, info, this);
 		return el;
 	};
-	proto.createDiv = function (this: HTMLElement, info?: DomElementInfo | string) {
+	proto.createDiv = function (this: HTMLElement, info?: TestDomElementInfo | string) {
 		return this.createEl("div", info);
 	};
-	proto.createSpan = function (this: HTMLElement, info?: DomElementInfo | string) {
+	proto.createSpan = function (this: HTMLElement, info?: TestDomElementInfo | string) {
 		return this.createEl("span", info);
 	};
 	proto.empty = function (this: HTMLElement) {

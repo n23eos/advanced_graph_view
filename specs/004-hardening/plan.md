@@ -237,8 +237,8 @@
 ## Этап C - доводка (0.10.4)
 
 ### C1. Lint до нуля предупреждений
-- [ ] `GraphView.ts` (4 предупреждения `prefer-create-el`): заменить на `createFragment()` / `createEl("button")`. Не использовать `--fix` на весь проект - только эти 4 места, вручную.
-- [ ] `eslint.config.mjs`: блок для `src/test/**/*.ts` с `"obsidianmd/prefer-create-el": "off"` (тестовые заглушки сами реализуют `createEl`).
+- [x] `GraphView.ts` (4 предупреждения `prefer-create-el`): заменить на `createFragment()` / `createEl("button")`. Не использовать `--fix` на весь проект - только эти 4 места, вручную.
+- [x] `eslint.config.mjs`: блок для `src/test/**/*.ts` с `"obsidianmd/prefer-create-el": "off"` (тестовые заглушки сами реализуют `createEl`).
 
 ### C2. Новые заметки появляются рядом с соседом
 - [ ] Статус

@@ -95,3 +95,7 @@ A8: версия 0.10.2 подготовлена локально отдельн
 - B4 review follow-up: PNG выполняет culling и при уже очищенном cullDirty. Регрессия усилена сценарием hidden normal frame -> pause -> export, RED до fix, targeted32PASS. Изолированный verify/build PASS:876 тестов/110 файлов, lint12.
 
 - B7: кандидат0.10.3 подготовлен локально, финальный verify/build PASS:876 тестов/110 файлов, typecheckPASS, lint0 ошибок/12warnings. Повторное независимое review подтвердило закрытие queue sync throw и forced PNG culling (6testsPASS). Native не завершён, Mac заблокирован; CI не запускался, push/merge/release запрещены. Следующий этап C локально поверхB.
+
+## Этап C
+
+- C1: ручные4DOMзамены, test-only prefer-create-el override, host API stubs createEl/createFragment расширены без изменения assertions. RED lintmaxwarnings0:12warnings. Изолированный final verify/build PASS:876 тестов/110 файлов, lint0errors/0warnings. Stubtype несовместимость исправлена по типамObsidian, globalThis разрешён толькоhoststub. Native UI не менялся.

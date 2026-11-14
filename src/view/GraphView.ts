@@ -2494,9 +2494,9 @@ export class GraphInsightView extends ItemView {
 		this.searchParseError = undefined;
 		this.recomputeVisual();
 
-		const fragment = document.createDocumentFragment();
+		const fragment = createFragment();
 		fragment.append(t("notice.queryCleared", { query: cleared }));
-		const undo = document.createElement("button");
+		const undo = createEl("button");
 		undo.textContent = t("notice.undo");
 		fragment.append(" ", undo);
 		const notice = new Notice(fragment, 10000);
@@ -2594,9 +2594,9 @@ export class GraphInsightView extends ItemView {
 		await this.updatePanelState((state) => ({ ...state, physics: { ...baseline } }));
 		this.physicsUndo = previous;
 
-		const fragment = document.createDocumentFragment();
+		const fragment = createFragment();
 		fragment.append(t("notice.physicsReset", { diff: formatPhysicsDiff(diff) }));
-		const undo = document.createElement("button");
+		const undo = createEl("button");
 		undo.textContent = t("notice.undo");
 		fragment.append(" ", undo);
 		const notice = new Notice(fragment, 10000);

@@ -43,6 +43,16 @@ export default [
 		rules: { "obsidianmd/prefer-create-el": "off" },
 	},
 	{
+		files: ["src/test/**/*.ts"],
+		rules: { "obsidianmd/prefer-create-el": "off" },
+	},
+	{
+		// This jsdom host installs Obsidian's bare global DOM helpers. It is not
+		// part of the plugin bundle, where globals must stay window-specific.
+		files: ["src/test/obsidianDom.ts"],
+		rules: { "obsidianmd/no-global-this": "off" },
+	},
+	{
 		// This jsdom-only regression test loads the production stylesheet itself;
 		// Obsidian normally performs that step. It never enters the plugin bundle.
 		files: ["src/ui/FilterChips.test.ts"],
