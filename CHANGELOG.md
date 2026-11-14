@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-14
+
+### Added
+
+- Restore each graph tab's camera and committed query through Obsidian workspace state.
+- Preserve restored framing across layout startup, internal reopening and hidden-pane resize.
+
 ## [0.11.0-beta.1] - 2026-11-14
 
 ### Changed
