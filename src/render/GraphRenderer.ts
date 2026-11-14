@@ -1129,7 +1129,10 @@ export class GraphRenderer {
 			if (force || now - this.lastCullAt >= CULL_MIN_INTERVAL_MS) {
 				this.lastCullAt = now;
 				this.cullDirty = false;
-				this.cullAndLabel(force); // may re-set cullDirty to finish deferred labels
+				// A hidden tab has a zero-sized DOM canvas even though Pixi retains the
+				// last logical screen used by PNG extraction. Forced export must cull
+				// against that retained viewport or every node and label disappears.
+				this.cullAndLabel(force);
 			}
 		}
 	}
@@ -1150,7 +1153,10 @@ export class GraphRenderer {
 		}
 		const view = this.app.canvas;
 		const topLeft = this.viewport.toWorld(0, 0);
-		const bottomRight = this.viewport.toWorld(view.clientWidth, view.clientHeight);
+		const bottomRight = this.viewport.toWorld(
+			complete ? this.app.screen.width : view.clientWidth,
+			complete ? this.app.screen.height : view.clientHeight
+		);
 		const margin = Math.max(MAX_NODE_RADIUS, this.maxEncodedRadius) * this.spriteScale;
 
 		const isOnScreen = (i: number) => {

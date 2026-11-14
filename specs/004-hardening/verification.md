@@ -87,3 +87,5 @@ A8: версия 0.10.2 подготовлена локально отдельн
 - B6 review: replaceSettings перезагружает все main/local views, reload последователен внутри вызова и между вызовами. Ошибка не пропускает оставшиеся views и не блокирует следующий запрос. RED3, target21/21, isolated verify/build PASS:871 тест /108 файлов, lint12. Позиции по-прежнему общие для main views, последняя view сохраняет последней; единая модель владения layout не вводилась.
 
 - B6 review: GraphView снимает подписки текущего открытия до ожидания save; reload больше не дублирует file-open, клавиатуру, pointer, metadata, rename и theme handlers. RED3/3, targeted37PASS, isolated verify/build PASS:874 теста/109 файлов, lint12. Старые assertions/fixtures не менялись.
+
+- B4 native finding fixed: принудительный PNG culling использует сохранённый app.screen, потому что DOM canvas скрытой вкладки имеет0x0. RED1, targeted32PASS, verify/build PASS:875 тестов/110 файлов, lint12. Повторный native экспорт пока не выполнен: Mac заблокирован, запрос на ручную разблокировку отправлен.
