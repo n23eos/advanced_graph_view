@@ -8,6 +8,8 @@ import {
 	TFile,
 	debounce,
 	getAllTags,
+	type EventRef,
+	type Events,
 	type TAbstractFile,
 	type View,
 	type WorkspaceLeaf,
@@ -213,6 +215,7 @@ export class GraphInsightView extends ItemView {
 	private rebuildGeneration = 0;
 	private closing = false;
 	private openGeneration = 0;
+	private openEventCleanups: Array<() => void> = [];
 
 	private savePositionsDebounced = debounce(
 		() => void this.savePositions(),
@@ -237,6 +240,7 @@ export class GraphInsightView extends ItemView {
 	}
 
 	async onOpen(): Promise<void> {
+		this.clearOpenListeners();
 		const openGeneration = ++this.openGeneration;
 		this.closing = false;
 		this.responsiveModeState = "full";
@@ -313,8 +317,13 @@ export class GraphInsightView extends ItemView {
 		this.stopObservingRendererVisibility = observeRendererVisibility(container, renderer);
 
 		// Any manual pan/zoom/drag means the user framed the view themselves.
-		this.registerDomEvent(container, "pointerdown", () => this.autoFit.cancel());
-		this.registerDomEvent(container, "wheel", () => this.autoFit.cancel());
+		const cancelAutoFit = () => this.autoFit.cancel();
+		container.addEventListener("pointerdown", cancelAutoFit);
+		container.addEventListener("wheel", cancelAutoFit);
+		this.openEventCleanups.push(() => {
+			container.removeEventListener("pointerdown", cancelAutoFit);
+			container.removeEventListener("wheel", cancelAutoFit);
+		});
 		// The pane may not have its final size during onOpen; resize once the
 		// layout settles so the canvas fills the whole view.
 		window.requestAnimationFrame(() => {
@@ -483,33 +492,40 @@ export class GraphInsightView extends ItemView {
 		// registered on the document before any plugin's, so a bubbling
 		// listener runs *after* the app has already acted on Esc — which is
 		// why Esc used to look like it closed the whole view.
-		this.registerDomEvent(
-			document,
-			"keydown",
-			(event) => this.handleKeyDown(event),
-			{ capture: true }
-		);
+		const onKeyDown = (event: KeyboardEvent) => this.handleKeyDown(event);
+		document.addEventListener("keydown", onKeyDown, { capture: true });
+		this.openEventCleanups.push(() => document.removeEventListener("keydown", onKeyDown, { capture: true }));
 
 		await this.rebuildGraph();
 		if (this.closing || this.openGeneration !== openGeneration) return;
 
 		if (this.model) {
-			this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
+			this.registerOpenEvent(this.app.vault, this.app.vault.on("rename", (file, oldPath) => {
 				if (file instanceof TFile) recordRename(this.renamed, oldPath, file.path);
 			}));
 		}
-		this.registerEvent(this.app.metadataCache.on("resolved", () => this.handleMetadataResolved()));
-		this.registerEvent(
+		this.registerOpenEvent(this.app.metadataCache, this.app.metadataCache.on("resolved", () => this.handleMetadataResolved()));
+		this.registerOpenEvent(
+			this.app.workspace,
 			this.app.workspace.on("file-open", (file) => this.handleActiveNoteChanged(file))
 		);
 		// Theme switch or a newly installed theme: node, edge and label colors
 		// all come from CSS variables, and the scheme itself is dimmed on light
 		// themes — both have to be re-read, not just repainted.
-		this.registerEvent(this.app.workspace.on("css-change", () => this.handleThemeChange()));
+		this.registerOpenEvent(this.app.workspace, this.app.workspace.on("css-change", () => this.handleThemeChange()));
 
 		if (this.plugin.settings.onboardingState === "never-seen") {
 			this.plugin.showOnboarding();
 		}
+	}
+
+	/** A settings reload calls onClose without unloading the ItemView itself. */
+	private registerOpenEvent(source: Pick<Events, "offref">, eventRef: EventRef): void {
+		this.openEventCleanups.push(() => source.offref(eventRef));
+	}
+
+	private clearOpenListeners(): void {
+		for (const cleanup of this.openEventCleanups.splice(0)) cleanup();
 	}
 
 	private handleKeyDown(event: KeyboardEvent): void {
@@ -2826,6 +2842,7 @@ export class GraphInsightView extends ItemView {
 	async onClose(): Promise<void> {
 		this.closing = true;
 		this.openGeneration++;
+		this.clearOpenListeners();
 		this.stopObservingRendererVisibility?.();
 		this.stopObservingRendererVisibility = null;
 		this.rebuildGeneration++;
