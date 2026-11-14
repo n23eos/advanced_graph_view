@@ -60,7 +60,7 @@
 ## Этап A - баги (0.10.2)
 
 ### A1. Миграция физики срабатывает при каждом запуске
-- [ ] Статус
+- [x] Статус
 
 **Проблема.** `src/main.ts`, `onload`: блок "Softer-links migration" и "Compactness migration" безусловно заменяет `linkStrength 0.4 -> 0.15`, `velocityDecay 0.4 -> 0.55`, `repel 50|40 -> 30`, `linkDistance 40 -> 25`, `centering 0.04|0.05 -> 0.09`. Все значения достижимы слайдерами (`ControlPanel.ts`, `physicsSlider`), поэтому выбор пользователя сбрасывается после перезапуска.
 

@@ -99,6 +99,8 @@ export function normalizeSettings(raw: unknown, now: number = Date.now()): Graph
 		...DEFAULT_SETTINGS,
 		...rest,
 		onboardingState,
+		physicsDefaultsVersion: typeof saved.physicsDefaultsVersion === "number" && Number.isFinite(saved.physicsDefaultsVersion)
+			? saved.physicsDefaultsVersion : 0,
 		panel: normalizePanel(saved.panel),
 		presets: normalizeSearchPresets(saved.presets, now),
 		viewPresets: normalizeViewPresets(saved.viewPresets),
@@ -115,4 +117,27 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 function asObject(value: unknown): Record<string, unknown> {
 	return isObject(value) ? value : {};
+}
+
+export const PHYSICS_DEFAULTS_VERSION = 1;
+
+/** Upgrade old defaults once; subsequent slider choices belong to the user. */
+export function migratePhysicsDefaults(settings: GraphInsightSettings): GraphInsightSettings {
+	if (settings.physicsDefaultsVersion >= PHYSICS_DEFAULTS_VERSION) return settings;
+	const physics = settings.panel.physics;
+	return {
+		...settings,
+		physicsDefaultsVersion: PHYSICS_DEFAULTS_VERSION,
+		panel: {
+			...settings.panel,
+			physics: {
+				...physics,
+				linkStrength: physics.linkStrength === 0.4 ? 0.15 : physics.linkStrength,
+				velocityDecay: physics.velocityDecay === 0.4 ? 0.55 : physics.velocityDecay,
+				repel: physics.repel === 50 || physics.repel === 40 ? 30 : physics.repel,
+				linkDistance: physics.linkDistance === 40 ? 25 : physics.linkDistance,
+				centering: physics.centering === 0.04 || physics.centering === 0.05 ? 0.09 : physics.centering,
+			},
+		},
+	};
 }

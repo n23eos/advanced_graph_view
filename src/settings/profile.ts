@@ -4,13 +4,14 @@
  * behind — they describe one vault, not a way of working.
  */
 import type { GraphInsightSettings } from "./schema";
-import { normalizePanel, normalizeSearchPresets, normalizeViewPresets } from "./normalize";
+import { migratePhysicsDefaults, normalizeSettings, normalizePanel, normalizeSearchPresets, normalizeViewPresets } from "./normalize";
 import { PANEL_MODES, type PanelMode, type PanelState } from "../ui/ControlPanel";
 
 /** Bump only on a breaking change: an older plugin refuses a newer profile. */
 export const PROFILE_VERSION = 1;
 
 export interface SettingsProfile {
+	physicsDefaultsVersion?: number;
 	version: number;
 	panel: PanelState;
 	panelMode: PanelMode;
@@ -26,6 +27,7 @@ export interface SettingsProfile {
 export function buildProfile(settings: GraphInsightSettings): SettingsProfile {
 	return {
 		version: PROFILE_VERSION,
+		physicsDefaultsVersion: settings.physicsDefaultsVersion,
 		panel: settings.panel,
 		panelMode: settings.panelMode,
 		viewPresets: settings.viewPresets,
@@ -51,8 +53,10 @@ export function mergeProfile(
 	const profile = raw as Partial<SettingsProfile>;
 	if (typeof profile.version !== "number" || profile.version > PROFILE_VERSION) return null;
 
-	return {
+	return migratePhysicsDefaults({
 		...current,
+		physicsDefaultsVersion: isObject(profile.panel)
+			? normalizeSettings(profile).physicsDefaultsVersion : current.physicsDefaultsVersion,
 		// normalizePanel/normalizeSearchPresets accept profiles written by
 		// older versions: missing layoutRule, presets without id/timestamps.
 		panel: isObject(profile.panel)
@@ -83,7 +87,7 @@ export function mergeProfile(
 			typeof profile.openInSidePane === "boolean"
 				? profile.openInSidePane
 				: current.openInSidePane,
-	};
+	});
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

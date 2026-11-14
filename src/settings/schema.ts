@@ -26,6 +26,7 @@ export interface SearchPreset {
 }
 
 export interface GraphInsightSettings {
+	physicsDefaultsVersion: number;
 	panel: PanelState;
 	/** How much of the control panel is on show. Not part of PanelState: it is
 	 *  which controls you see, not what the graph looks like, so a view preset
@@ -73,6 +74,7 @@ export interface HoverPreviewSettings {
 }
 
 export const DEFAULT_SETTINGS: GraphInsightSettings = {
+	physicsDefaultsVersion: 0,
 	panel: DEFAULT_3D_PANEL,
 	panelMode: "simple",
 	openDwellSeconds: 5,

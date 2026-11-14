@@ -28,7 +28,7 @@ import {
 	type OnboardingState,
 } from "./settings/schema";
 import { OnboardingModal } from "./ui/OnboardingModal";
-import { normalizeSettings } from "./settings/normalize";
+import { migratePhysicsDefaults, normalizeSettings } from "./settings/normalize";
 import {
 	applyRetention,
 	buildSnapshot,
@@ -63,24 +63,9 @@ export default class GraphInsightPlugin extends Plugin {
 		// All migration and deep-merge logic lives in normalizeSettings so it
 		// can be unit-tested against real old data.json payloads.
 		this.settings = normalizeSettings(await this.loadData());
-		// Softer-links migration: users still on the old stiff defaults get
-		// the new feel; anyone who moved the sliders keeps their values.
-		const physics = this.settings.panel.physics;
-		this.settings = {
-			...this.settings,
-			panel: {
-				...this.settings.panel,
-				physics: {
-					...physics,
-					linkStrength: physics.linkStrength === 0.4 ? 0.15 : physics.linkStrength,
-					velocityDecay: physics.velocityDecay === 0.4 ? 0.55 : physics.velocityDecay,
-					// Compactness migration: only untouched old defaults move.
-					repel: physics.repel === 50 || physics.repel === 40 ? 30 : physics.repel,
-					linkDistance: physics.linkDistance === 40 ? 25 : physics.linkDistance,
-					centering: physics.centering === 0.04 || physics.centering === 0.05 ? 0.09 : physics.centering,
-				},
-			},
-		};
+		const previousPhysicsVersion = this.settings.physicsDefaultsVersion;
+		this.settings = migratePhysicsDefaults(this.settings);
+		let settingsMigrated = this.settings.physicsDefaultsVersion !== previousPhysicsVersion;
 		// Seed/refresh the built-in view presets when the bundled set changes.
 		// Retired defaults are dropped; new ones are added by name; the user's
 		// own presets and any they still keep are preserved. The version guard
@@ -95,8 +80,9 @@ export default class GraphInsightPlugin extends Plugin {
 				),
 				viewPresetsVersion: VIEW_PRESET_VERSION,
 			};
-			await this.saveData(this.settings);
+			settingsMigrated = true;
 		}
+		if (settingsMigrated) await this.saveData(this.settings);
 		this.dataStore = new PluginDataStore(
 			this.app,
 			// The config folder is user-configurable — never hardcode ".obsidian".
