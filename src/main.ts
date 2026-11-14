@@ -1,5 +1,6 @@
 import { Plugin, TFile, debounce, getLanguage } from "obsidian";
 import { GraphInsightView, GRAPH_INSIGHT_VIEW_TYPE } from "./view/GraphView";
+import { findGraphView } from "./view/findGraphView";
 import { PluginDataStore } from "./data/persistence";
 import {
 	compactLog,
@@ -389,8 +390,7 @@ export default class GraphInsightPlugin extends Plugin {
 	}
 
 	getGraphView(): GraphInsightView | null {
-		const leaf = this.app.workspace.getLeavesOfType(GRAPH_INSIGHT_VIEW_TYPE)[0];
-		return leaf ? (leaf.view as GraphInsightView) : null;
+		return findGraphView(this.app.workspace.getLeavesOfType(GRAPH_INSIGHT_VIEW_TYPE));
 	}
 
 	private async activateInsights(): Promise<void> {
