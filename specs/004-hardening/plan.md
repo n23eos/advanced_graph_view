@@ -251,7 +251,7 @@
 Помощник `prefersReducedMotion()` (`matchMedia`). При `true`: полёт камеры (`src/explore/cameraFlight.ts`) мгновенный, trail replay рисует сразу итог, автопроигрывание таймлайна не меняется. В `styles.css` блок `@media (prefers-reduced-motion: reduce)` отключает transition/animation внутри `.graph-insight-container`. Тест на чистые функции с подменой флага.
 
 ### C4. fundingUrl
-- [ ] `manifest.json`: `fundingUrl` со ссылкой Ko-fi из README (скопируй точный URL из README, не придумывай).
+- [x] `manifest.json`: `fundingUrl` со ссылкой Ko-fi из README (скопируй точный URL из README, не придумывай).
 
 ### C5. Popout-окна
 - [ ] Статус `[NATIVE]`
