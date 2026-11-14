@@ -23,3 +23,7 @@ Native Obsidian UI acceptance was not run because the desktop is locked. No comm
 
 ## Manual acceptance pending
 Use notes with linked and isolated attachments, same missing name in different folders, and a newly created missing target. Check all four settings combinations, source-note navigation, native hover, local graph and Markdown/JSON/GEXF export. Switch scope and check that history only compares matching scopes. Confirm settings persist and an old profile without scope does not reset the current choice.
+
+## Integrated browser acceptance
+
+Rebased onto the E3 candidate. Integrated verify/build: 1012 tests / 150 files, lint zero, typecheck/build PASS. Fixture settings toggles and actual search counters show 43/44/45/46 nodes for all four flag combinations and 43 again after disabling both. Fresh-view restoration preserves property query/color; narrow light and wide dark screenshots inspected. No app errors. Native SettingsTab and file opening remain unverified. Browser controls do not substitute for native acceptance.

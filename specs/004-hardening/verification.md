@@ -205,3 +205,12 @@ Mac по-прежнему заблокирован. Нативные прове�
 
 - specs/007-frontmatter-properties, property filter/color/live refresh with defaults preserved. Integrated E1-E3 verify: 983 tests / 139 files, lint zero, typecheck/build PASS. Independent review closed; browser property color/query and workspace restoration pass. Native editing unverified.
 - E1 exact head 0a4445f CI 43606035489 success.
+
+## E4: optional graph nodes, 2026-11-14
+
+- specs/008-extended-nodes implemented with exact legacy off/off model compatibility, including existing linked attachments. All-attachment and missing-target additions default off. Source-qualified missing identities are guarded from vault APIs; exports use safe paths/source links. Snapshots compare matching scopes with backward-compatible normalization.
+- Independent review closed export labels/paths, attachment facts and inventory lifecycle issues with regression coverage. Main/local/Insights update after attachment create/delete/rename, with listener cleanup and initial-build ordering covered.
+- Final integrated verify: 1012 tests / 150 files PASS, typecheck PASS, lint zero errors/warnings. Production build PASS. Logs: /tmp/hardening-e4-integrated-verify.log and /tmp/hardening-e4-integrated-build.log.
+- Browser real GraphView/renderer/workers with 42 notes, one linked attachment, one isolated attachment and two missing targets: actual search counters confirm off/off 43, attachments 44, missing only 45, both 46, return to off/off 43. Controls are host-fixture settings controls calling the public reload method, not native SettingsTab.
+- Property color and prop:status=active show 8/43 after a fresh view restores workspace state. Screenshots inspected at 1200 px/dark and 360 px/light. No application errors; captured wallet-extension errors are unrelated by source URL.
+- Mac remains locked; native restart, hover popup, popout, actual attachment opening and display-resolution acceptance remain unverified. No tag, release or merge.

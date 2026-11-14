@@ -1,11 +1,13 @@
-# Advanced Graph View 0.11.2
+# Advanced Graph View 0.12.0
 
 Unpublished candidate. No tag or release is authorized.
 
-Use prop:key=value to filter notes by frontmatter and select Property: key in the Color control. Scalar values and lists are supported, matching is case-insensitive, and missing values retain the default tint. Property changes update the graph without restarting layout. Existing default colors and presets remain unchanged.
+Optional settings add all attachments and missing link targets to the graph. Both switches start off, preserving the existing default graph, including already-linked attachments. Missing targets open their source note and never create files automatically. Main graph, local graph, Insights, exports and Changes history handle the selected scope. Attachment exports retain full paths and file facts use actual timestamps.
 
-This candidate includes workspace camera/query restoration and Cmd/Ctrl native hover integration. Final integrated verification: 983 tests / 139 files, lint zero warnings, typecheck and production build pass. Independent review closed the hidden-node count reset after property options change.
+This candidate includes the hardening fixes, reduced idle rendering, owner-window handling, workspace camera/query restoration, Cmd/Ctrl native hover integration and frontmatter property filtering/color.
 
-Browser QA confirmed property color in both panel modes, prop:status=active showing 8/42 notes, and restoration into a fresh view; narrow/light layout inspected. Native Obsidian restart, hover popup and popout acceptance remain unverified while macOS is locked.
+Verification: 1012 tests / 150 files, lint zero warnings, typecheck and production build pass. Independent review closed. Browser QA confirmed all four node-scope combinations, return to baseline, property filtering and fresh-view restoration; narrow/light and wide/dark screenshots inspected.
+
+Native restart, hover popup, popout and attachment navigation acceptance remain unverified while macOS is locked. Performance limits are recorded in specs/004-hardening/verification.md. This candidate is not a published release.
 
 Requires Obsidian 1.13.0 or later; desktop only.

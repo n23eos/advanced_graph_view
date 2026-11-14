@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-14
+
+### Added
+
+- Optional all-attachment and missing-link-target nodes, disabled by default.
+- Shared graph scope across main graph, local graph and Insights, with scope-aware Changes history.
+- Safe missing-target navigation and full-path attachment exports, without creating files automatically.
+
+### Fixed
+
+- Preserve the legacy default graph while using actual attachment timestamps and folder facts.
+- Keep synthetic node identities out of vault operations and exported paths.
+
 ## [0.11.2] - 2026-11-14
 
 ### Added
