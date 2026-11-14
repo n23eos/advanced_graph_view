@@ -27,6 +27,10 @@ interface FrameStats {
 }
 
 interface BenchmarkResult {
+	renderScale: "standard" | "high";
+	devicePixelRatio: number;
+	canvasWidth: number;
+	canvasHeight: number;
 	nodes: number;
 	edges: number;
 	modelMs: number;
@@ -177,7 +181,8 @@ async function main(): Promise<void> {
 		onSemanticEdgeClick: () => {},
 	});
 	const rendererInitStart = performance.now();
-	await renderer.init(host);
+	const renderScale = new URLSearchParams(window.location.search).get("scale") === "high" ? "high" : "standard";
+	await renderer.init(host, renderScale);
 	const rendererInitMs = performance.now() - rendererInitStart;
 	// Instrument the real rendering path in this harness only. CPU timings are
 	// JS wall time, not operating-system CPU utilization or GPU execution time.
@@ -305,6 +310,10 @@ async function main(): Promise<void> {
 			? "PASS"
 			: "FAIL";
 	const result: BenchmarkResult = {
+		renderScale,
+		devicePixelRatio: window.devicePixelRatio,
+		canvasWidth: canvas.width,
+		canvasHeight: canvas.height,
 		nodes: model.nodes.length,
 		edges: model.edges.length,
 		modelMs,
