@@ -196,3 +196,7 @@ Mac по-прежнему заблокирован. Нативные прове�
 ## E1: workspace state, 2026-11-14
 
 - Spec Kit specs/005-workspace-state, per-leaf camera/query restoration and guarded reopen. 943 tests / 128 files, lint zero, typecheck/build PASS; independent risk review closed. Browser fresh-view 2D/3D camera and tag query round trips pass. Native app restart unverified.
+
+## E2: native hover integration, 2026-11-14
+
+- specs/006-native-hover, per-view native preview lifecycle, stationary hit-test and hidden-leaf cleanup. Integrated E1/E2 verify: 959 tests / 131 files, lint zero, typecheck/build PASS. Independent review closed. Native popup comparison unverified because Mac is locked.

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-11-14
+
+### Added
+
+- Request Obsidian note previews with Cmd/Ctrl over graph nodes, preserving the existing tooltip.
+- Resolve stationary hover targets after graph movement and clean previews on hide, gestures and close.
+
 ## [0.11.0] - 2026-11-14
 
 ### Added

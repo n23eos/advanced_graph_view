@@ -1,9 +1,9 @@
-# Advanced Graph View 0.11.0
+# Advanced Graph View 0.11.1
 
 Unpublished candidate. No tag or release is authorized.
 
-Graph tabs now restore their camera and committed query through workspace state. Each tab remains independent, and the first layout fit no longer overwrites a restored camera. Internal recreation preserves the latest state, including content search and hidden-pane resize.
+Cmd/Ctrl hover requests Obsidian's native note preview in the main graph and Explore. Existing graph tooltips remain. Preview targets use full paths, are resolved again after layout motion, and are cleaned up when a pane hides or closes. Page Preview must be enabled. Modifier activation remains required.
 
-Verification: 943 tests / 128 files, lint zero warnings, typecheck and production build pass. Independent review closed lifecycle issues. Browser checks confirm exact 2D/3D camera and query round trips through a fresh real GraphView.
+This candidate also includes per-tab workspace camera/query restoration. Integrated verification: 959 tests / 131 files, lint zero warnings, typecheck and production build pass. Independent reviews closed lifecycle findings.
 
-Native app restart/popout acceptance remains open while macOS is locked. Browser checks do not replace native acceptance. Requires Obsidian 1.13.0 or later; desktop only.
+Real native popup/core-graph comparison, app restart and popout acceptance remain unverified while macOS is locked. Requires Obsidian 1.13.0 or later; desktop only.

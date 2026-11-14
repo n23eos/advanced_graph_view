@@ -311,7 +311,7 @@
 - [x] `GraphView.getState()/setState()`: камера (центр, масштаб, 3D-поворот), активный hard-запрос. Данные в workspace.json, не в `data.json`. `setState` с неизвестными/битыми полями игнорирует их. Автофит (`autoFit.request()`) не должен перебивать восстановленную камеру.
 
 ### E2. Штатное hover-превью Obsidian
-- [ ] `registerHoverLinkSource(GRAPH_INSIGHT_VIEW_TYPE, ...)` плюс `workspace.trigger("hover-link", ...)` при наведении с Cmd/Ctrl. Свой тултип остаётся. Сверь форму payload по `obsidian.d.ts` и по поведению core-графа.
+- [x] `registerHoverLinkSource(GRAPH_INSIGHT_VIEW_TYPE, ...)` плюс `workspace.trigger("hover-link", ...)` при наведении с Cmd/Ctrl. Свой тултип остаётся. Сверь форму payload по `obsidian.d.ts` и по поведению core-графа.
 
 ### E3. Свойства frontmatter как метрика и фильтр
 - [ ] Поле в `NodeFacts` (карта выбранных свойств), оператор `prop:key=value` в `src/query/QueryParser.ts`, категориальный канал цвета. Затрагивает `encoding/metrics.ts`, `metricLabels.ts`, 12 локалей. Опирается на A4 (обновление фактов).
