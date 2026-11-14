@@ -7,12 +7,14 @@
 import { buildGraphModel, type LinkMap } from "../src/data/GraphStore";
 import { GraphRenderer } from "../src/render/GraphRenderer";
 import { LayoutClient } from "../src/workers/LayoutClient";
+import type { Application } from "pixi.js";
 import { installObsidianDom } from "../src/test/obsidianDom";
 
 const NODE_COUNT = 10_000;
 const EDGE_COUNT = 30_000;
 const LAYOUT_TIMEOUT_MS = 30_000;
 const SAMPLE_MS = 4_000;
+const IDLE_SAMPLE_MS = 30_000;
 
 interface FrameStats {
 	frames: number;
@@ -40,6 +42,7 @@ interface BenchmarkResult {
 	layoutFrames: FrameStats;
 	panFrames: FrameStats;
 	zoomFrames: FrameStats;
+	idle: { durationMs: number; frames: FrameStats; renders: number; renderCpuMs: number; tickCpuMs: number };
 	errors: string[];
 	verdict: "PASS" | "FAIL";
 }
@@ -176,6 +179,25 @@ async function main(): Promise<void> {
 	const rendererInitStart = performance.now();
 	await renderer.init(host);
 	const rendererInitMs = performance.now() - rendererInitStart;
+	// Instrument the real rendering path in this harness only. CPU timings are
+	// JS wall time, not operating-system CPU utilization or GPU execution time.
+	const runtime = renderer as unknown as { app: Application; renderFrame(): void };
+	const pixiRenderer = runtime.app.renderer;
+	const originalRender = pixiRenderer.render;
+	const originalTick = runtime.renderFrame;
+	let renderCount = 0;
+	let renderCpuMs = 0;
+	let tickCpuMs = 0;
+	pixiRenderer.render = function (...args: Parameters<typeof originalRender>) {
+		const start = performance.now();
+		try { return Reflect.apply(originalRender, this, args); }
+		finally { renderCount++; renderCpuMs += performance.now() - start; }
+	};
+	runtime.renderFrame = function () {
+		const start = performance.now();
+		try { return originalTick.call(this); }
+		finally { tickCpuMs += performance.now() - start; }
+	};
 	const setModelStart = performance.now();
 	renderer.setModel(model);
 	const setModelMs = performance.now() - setModelStart;
@@ -261,6 +283,23 @@ async function main(): Promise<void> {
 		}));
 	}, SAMPLE_MS);
 
+	// Let zoom/position smoothing finish before sampling a static graph.
+	await new Promise<void>((resolve) => setTimeout(resolve, 2_000));
+	renderCount = 0;
+	renderCpuMs = 0;
+	tickCpuMs = 0;
+	log("idle: sampling for 30 seconds");
+	const idleStart = performance.now();
+	const idleFrames = await measureFrames("idle", () => {}, IDLE_SAMPLE_MS);
+	const idle = {
+		durationMs: performance.now() - idleStart,
+		frames: idleFrames,
+		renders: renderCount,
+		renderCpuMs,
+		tickCpuMs,
+	};
+	log(`idle: renders=${idle.renders}, render JS=${idle.renderCpuMs.toFixed(2)}ms, tick JS=${idle.tickCpuMs.toFixed(2)}ms`);
+
 	const verdict =
 		layoutFrames.fps >= 50 && panFrames.fps >= 50 && zoomFrames.fps >= 50 && observedErrors.length === 0
 			? "PASS"
@@ -281,6 +320,7 @@ async function main(): Promise<void> {
 		layoutFrames,
 		panFrames,
 		zoomFrames,
+		idle,
 		errors: [...observedErrors],
 		verdict,
 	};
