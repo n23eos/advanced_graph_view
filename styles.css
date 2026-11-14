@@ -1312,3 +1312,15 @@
 	pointer-events: auto;
 	font-size: var(--font-ui-small);
 }
+
+@media (prefers-reduced-motion: reduce) {
+	.graph-insight-container,
+	.graph-insight-container::before,
+	.graph-insight-container::after,
+	.graph-insight-container *,
+	.graph-insight-container *::before,
+	.graph-insight-container *::after {
+		animation: none !important;
+		transition: none !important;
+	}
+}

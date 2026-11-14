@@ -246,7 +246,7 @@
 `buildSeedPositions`: узел без прежней позиции сейчас получает `(id % 20) - 10`. Прочитай `src/workers/layoutSeed.ts` и `src/util/seededRandom.ts`. Чистая функция: для узла без позиции - среднее позиций уже размещённых соседей плюс детерминированный сдвиг (seed от id); нет размещённых соседей - прежняя формула. Применять только когда есть `previous` или `saved` (первый запуск не трогать). Тесты: с соседом, без соседа, детерминизм.
 
 ### C3. Reduced motion
-- [ ] Статус
+- [x] Реализация и unit; нативная проверка системной настройки ожидается
 
 Помощник `prefersReducedMotion()` (`matchMedia`). При `true`: полёт камеры (`src/explore/cameraFlight.ts`) мгновенный, trail replay рисует сразу итог, автопроигрывание таймлайна не меняется. В `styles.css` блок `@media (prefers-reduced-motion: reduce)` отключает transition/animation внутри `.graph-insight-container`. Тест на чистые функции с подменой флага.
 

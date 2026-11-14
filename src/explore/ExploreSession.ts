@@ -8,6 +8,7 @@
  */
 import type { Adjacency } from "../analysis/focus";
 import type { GraphRenderer } from "../render/GraphRenderer";
+import { INSTANT_SECONDS } from "../render/motion";
 import {
 	DEFAULT_EXPLORE_DISTANCE,
 	flightPosition,
@@ -132,9 +133,15 @@ export class ExploreSession {
 		const distance = keepScale
 			? keptDistance(from, this.renderer.nodePosition(this.controller.currentId))
 			: this.framedDistance(nodeId);
+		const to = viewpointFor(target, this.renderer.camera.forward(), distance);
+		if (this.tuning.flightSeconds <= INSTANT_SECONDS) {
+			this.tween = null;
+			this.renderer.placeCamera(to, target);
+			return;
+		}
 		this.tween = {
 			from,
-			to: viewpointFor(target, this.renderer.camera.forward(), distance),
+			to,
 			elapsed: 0,
 		};
 	}

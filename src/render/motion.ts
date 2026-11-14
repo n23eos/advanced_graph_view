@@ -6,7 +6,7 @@
  */
 
 /** Duration below which an animation reads as an instant cut. */
-const INSTANT_SECONDS = 0.001;
+export const INSTANT_SECONDS = 0.001;
 
 export function prefersReducedMotion(): boolean {
 	return window.matchMedia("(prefers-reduced-motion: reduce)").matches;

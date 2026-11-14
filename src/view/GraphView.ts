@@ -34,7 +34,7 @@ import type { NodeFacts } from "../encoding/metrics";
 import { ExploreSession } from "../explore/ExploreSession";
 import { DEFAULT_EXPLORE_TUNING } from "../explore/ExploreController";
 import { chooseCompanionAction } from "./companionPane";
-import { motionMs, motionSeconds } from "../render/motion";
+import { motionMs, motionSeconds, prefersReducedMotion } from "../render/motion";
 import { GraphRenderer } from "../render/GraphRenderer";
 import { ControlPanel, type PanelState } from "../ui/ControlPanel";
 import { Legend } from "../ui/Legend";
@@ -2821,6 +2821,11 @@ export class GraphInsightView extends ItemView {
 
 	private replayTrail(): void {
 		if (this.trailReplayFrame !== null) window.cancelAnimationFrame(this.trailReplayFrame);
+		this.trailReplayFrame = null;
+		if (prefersReducedMotion()) {
+			this.drawTrail(1);
+			return;
+		}
 		const durationMs = motionMs(TRAIL_REPLAY_MS);
 		const start = performance.now();
 		const step = () => {
