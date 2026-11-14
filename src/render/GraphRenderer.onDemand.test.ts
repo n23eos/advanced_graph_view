@@ -40,11 +40,18 @@ interface RenderHarness {
 
 beforeAll(() => installObsidianDom());
 let now = 1_000;
+const harnessRenderers = new Set<GraphRenderer>();
 beforeEach(() => { now = 1_000; vi.spyOn(performance, "now").mockImplementation(() => now); });
-afterEach(() => { vi.restoreAllMocks(); document.body.empty(); });
+afterEach(() => {
+	for (const renderer of harnessRenderers) renderer.pause();
+	harnessRenderers.clear();
+	vi.restoreAllMocks();
+	document.body.empty();
+});
 
 function setup() {
 	const renderer = new GraphRenderer({ onNodeHover: vi.fn() } as unknown as RendererCallbacks);
+	harnessRenderers.add(renderer);
 	const state = renderer as unknown as RenderHarness;
 	state._ownerWindow = window;
 	const canvas = document.body.createEl("canvas");
@@ -57,7 +64,7 @@ function setup() {
 		stage: {},
 		screen: { x: 0, y: 0, width: 800, height: 600 },
 		render,
-		ticker: { stop: vi.fn(), start: vi.fn() },
+		ticker: { stop: vi.fn(), start: vi.fn(), update: vi.fn() },
 		renderer: { background: { alpha: 0, color: 0 }, extract: { canvas: extract } },
 	};
 	state.app = app;
