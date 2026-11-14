@@ -17,7 +17,7 @@ vi.mock("../render/GraphRenderer", () => ({ GraphRenderer: class {} }));
 
 interface Internals {
 	model: GraphModel | null;
-	renderer: { setModel: ReturnType<typeof vi.fn> };
+	renderer: { setModel: ReturnType<typeof vi.fn>; getCameraState: () => null };
 	layout: object;
 	facts: { ctime: number; mtime: number }[];
 	changesPanel: { setData: ReturnType<typeof vi.fn> };
@@ -54,7 +54,7 @@ function build() {
 describe("release reliability", () => {
 	test("a failed position load releases the rebuild gate so a later attempt can run", async () => {
 		const view = build();
-		view.renderer = { setModel: vi.fn() };
+		view.renderer = { setModel: vi.fn(), getCameraState: () => null };
 		view.layout = {};
 		view.buildSeedPositions = vi.fn().mockRejectedValue(new Error("read failed"));
 		await expect(view.rebuildGraph()).rejects.toThrow("read failed");
@@ -68,7 +68,7 @@ describe("release reliability", () => {
 		let resolve!: (value: { seed: Float32Array; pinnedPaths: string[] }) => void;
 		view.buildSeedPositions = vi.fn(() => new Promise((done) => { resolve = done; }));
 		const setModel = vi.fn();
-		view.renderer = { setModel, destroy: vi.fn() } as typeof view.renderer;
+		view.renderer = { setModel, destroy: vi.fn(), getCameraState: () => null } as typeof view.renderer;
 		view.layout = { stop: vi.fn() };
 		view.savePositions = vi.fn().mockResolvedValue(undefined);
 		const pending = view.rebuildGraph();

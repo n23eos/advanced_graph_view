@@ -63,6 +63,8 @@ export class ItemView {
 		this.contentEl = leaf.contentEl;
 		this.containerEl = this.contentEl;
 	}
+	getState(): Record<string, unknown> { return {}; }
+	async setState(_state: unknown, _result: unknown): Promise<void> {}
 	register(dispose: Dispose): void { this.disposers.push(dispose); }
 	registerEvent(ref: { off?: Dispose } | Dispose): void {
 		this.register(typeof ref === "function" ? ref : () => ref.off?.());

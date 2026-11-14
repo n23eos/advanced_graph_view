@@ -1,4 +1,5 @@
 import type { Container } from "pixi.js";
+import type { ViewportState } from "../view/workspaceState";
 
 const MIN_SCALE = 0.02;
 const MAX_SCALE = 8;
@@ -42,6 +43,25 @@ export class Viewport {
 	/** Baseline zoom from the last fitBounds; 1 = graph framed to fit. */
 	get referenceScale(): number {
 		return this._referenceScale;
+	}
+
+	getState(viewWidth: number, viewHeight: number): ViewportState {
+		const center = this.toWorld(viewWidth / 2, viewHeight / 2);
+		return {
+			centerX: center.x,
+			centerY: center.y,
+			scale: this.world.scale.x,
+			referenceScale: this._referenceScale,
+		};
+	}
+
+	restoreState(state: ViewportState, viewWidth: number, viewHeight: number): void {
+		this.world.scale.set(state.scale);
+		this._referenceScale = state.referenceScale;
+		this.world.position.set(
+			viewWidth / 2 - state.centerX * state.scale,
+			viewHeight / 2 - state.centerY * state.scale
+		);
 	}
 
 	/** Convert canvas-local pixel coordinates to world coordinates. */

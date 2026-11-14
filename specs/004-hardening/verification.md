@@ -190,3 +190,9 @@ Mac по-прежнему заблокирован. Нативные прове�
 - Seven controllers extracted in seven commits, with separate browser adapter support. GraphView retains orchestration and shared state; no runtime behavior, settings formats or original test assertions changed by the extraction.
 - Final verify: 912 tests / 124 files PASS, typecheck PASS, lint 0 errors/0 warnings. Production build PASS. Logs: /tmp/hardening-d-final-verify.log and /tmp/hardening-d-final-build.log.
 - Manifest/package/lock root, versions.json, CHANGELOG and English draft notes prepared. Native full-route acceptance remains open. No tag, release or BRAT beta publication.
+
+- D exact head f5a47ff pushed on refactor/graphview-split; CI 43603063341 success: https://github.com/n23eos/advanced_graph_view/actions/runs/43603063341. No merge/tag/release.
+
+## E1: workspace state, 2026-11-14
+
+- Spec Kit specs/005-workspace-state, per-leaf camera/query restoration and guarded reopen. 943 tests / 128 files, lint zero, typecheck/build PASS; independent risk review closed. Browser fresh-view 2D/3D camera and tag query round trips pass. Native app restart unverified.

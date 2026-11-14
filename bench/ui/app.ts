@@ -180,6 +180,10 @@ function createHost(mode: VaultMode, host: HTMLElement, report: (message: string
 	const workspace = {
 		on: (name: string, callback: (...args: any[]) => void) => workspaceEvents.on(name, callback),
 		offref: (ref: { off(): void }) => ref.off(),
+		requestSaveLayout: () => {
+			const output = document.getElementById("workspace-state");
+			if (output && activeView) output.textContent = JSON.stringify(activeView.getState());
+		},
 		getActiveViewOfType: () => activeView,
 		getLeaf: () => leaf,
 		getLeafById: () => leaf,
@@ -245,7 +249,7 @@ function showError(error: unknown): void {
 	report("Harness error");
 }
 
-async function mount(mode: VaultMode): Promise<void> {
+async function mount(mode: VaultMode, restoredState?: Record<string, unknown>, restoredSettings?: GraphInsightSettings): Promise<void> {
 	report("Building view...");
 	errors.empty();
 	if (current) {
@@ -255,6 +259,8 @@ async function mount(mode: VaultMode): Promise<void> {
 	host.empty();
 	current = createHost(mode, host, report);
 	window.uiHarness = current;
+	if (restoredSettings) current.plugin.settings = restoredSettings;
+	if (restoredState) await current.view.setState(restoredState, { history: false });
 	await current.view.onOpen();
 	current.view.onResize();
 	report(mode === "normal" ? "42 synthetic notes" : "Empty synthetic vault");
@@ -294,6 +300,19 @@ document.querySelectorAll<HTMLButtonElement>("button[data-vault]").forEach((butt
 		selectButtons("data-vault", vaultMode);
 		void mount(vaultMode).catch(showError);
 	});
+});
+
+document.getElementById("workspace-reopen")?.addEventListener("click", () => {
+	if (!current) return;
+	const state = current.view.getState();
+	const settings = structuredClone(current.plugin.settings) as GraphInsightSettings;
+	const before = JSON.stringify(state);
+	void mount(vaultMode, state, settings).then(() => {
+		const after = JSON.stringify(current?.view.getState());
+		const output = document.getElementById("workspace-state");
+		if (output) output.textContent = `Before: ${before}\nAfter: ${after}`;
+		report("Workspace state restored in fresh view");
+	}).catch(showError);
 });
 
 window.addEventListener("error", (event) => showError(event.error ?? event.message));

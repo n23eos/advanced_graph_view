@@ -21,7 +21,7 @@ vi.mock("../render/GraphRenderer", () => ({ GraphRenderer: class {} }));
 
 interface Internals {
 	model: GraphModel;
-	renderer: { setSelected: (id: number) => void; destroy: () => void };
+	renderer: { setSelected: (id: number) => void; destroy: () => void; getCameraState: () => null };
 	hiddenMask: Uint8Array | null;
 	exploreFocus: { centerId: number; neighbors: number[] } | null;
 	exploreSession: { currentId: number; travelTo: (id: number) => void; stop: () => void } | null;
@@ -55,7 +55,7 @@ function makeView() {
 		plugin as unknown as ConstructorParameters<typeof GraphInsightView>[1]
 	) as unknown as Internals;
 	view.model = buildGraphModel(["a.md", "folder/b.md", "c.md"], {}, {});
-	view.renderer = { setSelected: vi.fn(), destroy: vi.fn() };
+	view.renderer = { setSelected: vi.fn(), destroy: vi.fn(), getCameraState: () => null };
 	const session = { currentId: 0, travelTo: vi.fn(), stop: vi.fn() };
 	view.exploreSession = session;
 	view.exploreFocus = { centerId: 0, neighbors: [] };

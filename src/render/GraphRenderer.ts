@@ -1,5 +1,6 @@
 import { renderResolution } from "../settings/renderResolution";
 import type { RenderScale } from "../settings/schema";
+import type { CameraState } from "../view/workspaceState";
 import {
 	Application,
 	Container,
@@ -79,6 +80,7 @@ export interface ExploreOverlay {
 }
 
 export interface RendererCallbacks {
+	onCameraChanged?(): void;
 	onNodeHover(nodeId: number | null, clientX: number, clientY: number): void;
 	onNodeClick(nodeId: number, event: PointerEvent): void;
 	onNodeDoubleClick(nodeId: number): void;
@@ -263,6 +265,39 @@ export class GraphRenderer {
 		return this._ownerWindow;
 	}
 
+	getCameraState(): CameraState | null {
+		if (!this.app || !this.viewport) return null;
+		const { width, height } = this.app.screen;
+		if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
+		return {
+			viewport: this.viewport.getState(width, height),
+			camera3d: {
+				position: { x: this.camera.px, y: this.camera.py, z: this.camera.pz },
+				pivot: { x: this.camera.tx, y: this.camera.ty, z: this.camera.tz },
+				yaw: this.camera.yaw,
+				pitch: this.camera.pitch,
+			},
+		};
+	}
+
+	restoreCameraState(state: CameraState): void {
+		if (!this.app || !this.viewport) return;
+		if (!this.camera.enabled) {
+			this.viewport.restoreState(state.viewport, this.app.screen.width, this.app.screen.height);
+		}
+		this.camera.px = state.camera3d.position.x;
+		this.camera.py = state.camera3d.position.y;
+		this.camera.pz = state.camera3d.position.z;
+		this.camera.tx = state.camera3d.pivot.x;
+		this.camera.ty = state.camera3d.pivot.y;
+		this.camera.tz = state.camera3d.pivot.z;
+		this.camera.yaw = state.camera3d.yaw;
+		this.camera.pitch = state.camera3d.pitch;
+		this.invalidate();
+		this.cullDirty = true;
+		this.reproject();
+	}
+
 	async init(host: HTMLElement, renderScale: RenderScale = "standard"): Promise<void> {
 		const ownerWindow = host.ownerDocument.defaultView;
 		if (!ownerWindow) throw new Error("Graph renderer requires a document window");
@@ -327,10 +362,7 @@ export class GraphRenderer {
 		app.stage.addChild(this.world);
 		this.world.position.set(host.clientWidth / 2, host.clientHeight / 2);
 
-		this.viewport = new Viewport(this.world, app.canvas, () => {
-			this.cullDirty = true;
-			this.invalidate();
-		});
+		this.viewport = new Viewport(this.world, app.canvas, () => this.handleViewportChanged());
 
 		this.world.addChild(this.lassoGraphics);
 		// In 3D, the wheel dollies the camera through the cloud (fly-through)
@@ -375,12 +407,19 @@ export class GraphRenderer {
 	}
 
 	private readonly handleWindowResize = (): void => this.resize();
+	private handleViewportChanged(): void {
+		this.cullDirty = true;
+		this.invalidate();
+		this.callbacks.onCameraChanged?.();
+	}
+
 	private readonly handleWheel = (event: WheelEvent): void => {
 		if (!this.camera.enabled) return;
 		event.preventDefault();
 		event.stopImmediatePropagation();
 		this.camera.fly(-event.deltaY * 1.5);
 		this.reproject();
+		this.callbacks.onCameraChanged?.();
 	};
 
 	pause(): void {
@@ -601,6 +640,7 @@ export class GraphRenderer {
 			// 2D projection would chase coordinates that move with the camera.
 			this.frameCloud();
 			this.reproject();
+			this.callbacks.onCameraChanged?.();
 			return;
 		}
 		const ids: number[] = [];
@@ -624,11 +664,16 @@ export class GraphRenderer {
 		) {
 			return;
 		}
+		const viewportState = !this.camera.enabled && this.viewport
+			? this.viewport.getState(this.app.screen.width, this.app.screen.height)
+			: null;
 		this.invalidate();
 		this.app.renderer.resize(host.clientWidth, host.clientHeight);
 		if (this.camera.enabled && this.viewport) {
 			this.world.scale.set(1);
 			this.viewport.centerOn(0, 0, this.app.canvas.clientWidth, this.app.canvas.clientHeight);
+		} else if (viewportState && this.viewport) {
+			this.viewport.restoreState(viewportState, host.clientWidth, host.clientHeight);
 		}
 		this.cullDirty = true;
 	}
@@ -1017,6 +1062,7 @@ export class GraphRenderer {
 		this.camera.ty = pivot.y;
 		this.camera.tz = pivot.z;
 		this.reproject();
+		this.callbacks.onCameraChanged?.();
 	}
 
 	private redrawExplore(): void {
@@ -1530,6 +1576,7 @@ export class GraphRenderer {
 				this.cullDirty = true;
 				this.invalidate();
 			}
+			this.callbacks.onCameraChanged?.();
 			return;
 		}
 		if (this.orbiting) {
@@ -1541,6 +1588,7 @@ export class GraphRenderer {
 			this.orbitLastX = event.clientX;
 			this.orbitLastY = event.clientY;
 			this.reproject();
+			this.callbacks.onCameraChanged?.();
 			return;
 		}
 		if (this.lassoPoints) {

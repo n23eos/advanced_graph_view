@@ -16,6 +16,7 @@ import {
 	getAllTags,
 	type EventRef,
 	type Events,
+	type ViewStateResult,
 	type WorkspaceLeaf,
 } from "obsidian";
 import { buildAdjacency, computeDistances, focusFalloff, shortestPath, type Adjacency } from "../analysis/focus";
@@ -69,6 +70,10 @@ import { ToolBar, type CursorTool } from "../ui/ToolBar";
 import { computeGroups, depthByAge, depthByCluster } from "./layoutGrouping";
 import { presetDisplayName } from "./presetNames";
 import { resolveFollowAction } from "./followActiveNote";
+import {
+	normalizeGraphViewState,
+	type CameraState,
+} from "./workspaceState";
 import { t } from "../i18n";
 import type GraphInsightPlugin from "../main";
 import type { ViewPreset } from "./builtinPresets";
@@ -76,6 +81,7 @@ import type { ViewPreset } from "./builtinPresets";
 export const GRAPH_INSIGHT_VIEW_TYPE = "graph-insight-view";
 
 const POSITION_SAVE_DEBOUNCE_MS = 5000;
+const WORKSPACE_SAVE_DEBOUNCE_MS = 300;
 /** How long the session trail takes to redraw itself end to end. */
 const TRAIL_REPLAY_MS = 4000;
 /** World-unit collision radius at nodeScale 1. 0 = no size-based repulsion
@@ -393,6 +399,14 @@ export class GraphInsightView extends ItemView {
 	private reopenRequested = false;
 	private reopenPromise: Promise<void> | null = null;
 	private closeEpoch = 0;
+	private workspaceStateRevision = 0;
+	private pendingWorkspaceCamera: { camera: CameraState; revision: number } | null = null;
+	private lastWorkspaceCamera: CameraState | null = null;
+	private lastWorkspaceQuery = "";
+	private pendingWorkspaceQueryUi = false;
+	private restoringWorkspaceState = false;
+	private workspaceSaveTimer: number | null = null;
+	private workspaceSaveWindow: Window | null = null;
 
 	private savePositionsDebounced = debounce(
 		() => void this.savePositions(),
@@ -416,10 +430,149 @@ export class GraphInsightView extends ItemView {
 		return "git-fork";
 	}
 
+	getState(): Record<string, unknown> {
+		const camera = this.pendingWorkspaceCamera?.camera
+			?? this.renderer?.getCameraState()
+			?? this.lastWorkspaceCamera;
+		const state: Record<string, unknown> = { version: 1, hardQuery: this.lastWorkspaceQuery };
+		if (camera) state.camera = camera;
+		return state;
+	}
+
+	async setState(state: unknown, _result: ViewStateResult): Promise<void> {
+		const normalized = normalizeGraphViewState(state);
+		if (!normalized) return;
+		const revision = ++this.workspaceStateRevision;
+		if (normalized.camera) {
+			this.lastWorkspaceCamera = normalized.camera;
+			this.pendingWorkspaceCamera = { camera: normalized.camera, revision };
+			this.applyPendingWorkspaceCamera();
+		}
+		if (normalized.hardQuery !== undefined) {
+			await this.restoreWorkspaceQuery(normalized.hardQuery);
+		}
+	}
+
+	private applyPendingWorkspaceCamera(): boolean {
+		const pending = this.pendingWorkspaceCamera;
+		if (!pending || this.closing || this.reopenRequested || !this.renderer || !this.model) return false;
+		this.renderer.restoreCameraState(pending.camera);
+		this.autoFit.cancel();
+		this.lastWorkspaceCamera = pending.camera;
+		if (this.pendingWorkspaceCamera?.revision === pending.revision) {
+			this.pendingWorkspaceCamera = null;
+		}
+		return true;
+	}
+
+	private async restoreWorkspaceQuery(query: string): Promise<void> {
+		const trimmed = query.trim();
+		this.lastWorkspaceQuery = trimmed;
+		this.softQuery = null;
+		this.hardQuery = trimmed ? parseQuery(trimmed) : null;
+		this.hardQueryText = trimmed;
+		this.searchParseError = undefined;
+		this.pendingWorkspaceQueryUi = true;
+		this.syncWorkspaceQueryUi();
+		this.recomputeVisual();
+		if (this.model && this.hardQuery) {
+			await this.ensureContentIndex(contentNeedles(this.hardQuery));
+		}
+	}
+
+	private syncWorkspaceQueryUi(): void {
+		if (!this.pendingWorkspaceQueryUi || this.reopenRequested || !this.searchBar || !this.model) return;
+		this.restoringWorkspaceState = true;
+		try {
+			this.searchBar.applyQuery(this.hardQueryText);
+			this.pendingWorkspaceQueryUi = false;
+		} finally {
+			this.restoringWorkspaceState = false;
+		}
+	}
+
+	private commitSearchQuery(query: string): void {
+		const trimmed = query.trim();
+		this.searchParseError = undefined;
+		// Any new commit is a view-state change: the task's undo expires.
+		this.taskQueryUndo = null;
+		if (trimmed) {
+			const diagnostic = validateQuery(trimmed);
+			if (diagnostic) {
+				// A broken query never becomes the hard filter: the last valid one stays applied.
+				this.searchParseError = diagnostic;
+				this.pushSearchUi();
+				return;
+			}
+		}
+		this.hardQuery = trimmed ? parseQuery(trimmed) : null;
+		this.hardQueryText = trimmed;
+		this.lastWorkspaceQuery = trimmed;
+		this.softQuery = null;
+		this.recomputeVisual();
+		if (!this.restoringWorkspaceState) this.scheduleWorkspaceSave();
+		if (this.hardQuery && !this.restoringWorkspaceState) {
+			void this.ensureContentIndex(contentNeedles(this.hardQuery));
+		}
+	}
+
+	private clearSearchQuery(): void {
+		this.softQuery = null;
+		this.hardQuery = null;
+		this.hardQueryText = "";
+		this.lastWorkspaceQuery = "";
+		this.searchParseError = undefined;
+		this.taskQueryUndo = null;
+		this.recomputeVisual();
+		if (!this.restoringWorkspaceState) this.scheduleWorkspaceSave();
+	}
+
+	private handleCameraChanged(): void {
+		this.autoFit.cancel();
+		this.scheduleWorkspaceSave();
+	}
+
+	private scheduleWorkspaceSave(): void {
+		if (this.restoringWorkspaceState) return;
+		const ownerWindow = this.viewWindow;
+		if (!ownerWindow) return;
+		this.cancelWorkspaceSave();
+		this.workspaceSaveWindow = ownerWindow;
+		this.workspaceSaveTimer = ownerWindow.setTimeout(() => {
+			this.workspaceSaveTimer = null;
+			this.workspaceSaveWindow = null;
+			void this.app.workspace.requestSaveLayout();
+		}, WORKSPACE_SAVE_DEBOUNCE_MS);
+	}
+
+	private cancelWorkspaceSave(): void {
+		if (this.workspaceSaveTimer !== null) {
+			this.workspaceSaveWindow?.clearTimeout(this.workspaceSaveTimer);
+		}
+		this.workspaceSaveTimer = null;
+		this.workspaceSaveWindow = null;
+	}
+
+	private captureWorkspaceStateForReopen(): void {
+		const camera = this.renderer?.getCameraState();
+		if (camera && this.pendingWorkspaceCamera === null) {
+			this.lastWorkspaceCamera = camera;
+			this.pendingWorkspaceCamera = { camera, revision: this.workspaceStateRevision };
+		}
+		this.lastWorkspaceQuery = this.hardQueryText;
+		this.pendingWorkspaceQueryUi = true;
+	}
+
 	async onOpen(): Promise<void> {
 		this.clearOpenListeners();
 		const openGeneration = ++this.openGeneration;
 		this.closing = false;
+		if (this.pendingWorkspaceQueryUi) {
+			this.hardQueryText = this.lastWorkspaceQuery;
+			this.hardQuery = this.lastWorkspaceQuery ? parseQuery(this.lastWorkspaceQuery) : null;
+			this.softQuery = null;
+			this.searchParseError = undefined;
+		}
 		this.responsiveModeState = "full";
 		const container = this.contentEl;
 		const viewDocument = container.ownerDocument;
@@ -437,6 +590,7 @@ export class GraphInsightView extends ItemView {
 		this.tooltip = tooltip;
 
 		const renderer = new GraphRenderer({
+			onCameraChanged: () => this.handleCameraChanged(),
 			onNodeHover: (nodeId, clientX, clientY) => {
 				if (this.isExploring) this.showExploreTarget(nodeId, clientX, clientY);
 				else this.showTooltip(nodeId, clientX, clientY);
@@ -568,37 +722,8 @@ export class GraphInsightView extends ItemView {
 				this.searchParseError = undefined;
 				this.scheduleVisualRecompute();
 			},
-			onCommit: (query) => {
-				const trimmed = query.trim();
-				this.searchParseError = undefined;
-				// Any new commit is a view-state change: the task's undo expires.
-				this.taskQueryUndo = null;
-				if (trimmed) {
-					const diagnostic = validateQuery(trimmed);
-					if (diagnostic) {
-						// A broken query never becomes the hard filter — the last
-						// valid one stays applied and the bar shows what's wrong.
-						this.searchParseError = diagnostic;
-						this.pushSearchUi();
-						return;
-					}
-				}
-				this.hardQuery = trimmed ? parseQuery(trimmed) : null;
-				this.hardQueryText = trimmed;
-				this.softQuery = null;
-				this.recomputeVisual();
-				// content:/слово: terms need note text — build the index
-				// asynchronously, then re-filter.
-				if (this.hardQuery) void this.ensureContentIndex(contentNeedles(this.hardQuery));
-			},
-			onClear: () => {
-				this.softQuery = null;
-				this.hardQuery = null;
-				this.hardQueryText = "";
-				this.searchParseError = undefined;
-				this.taskQueryUndo = null;
-				this.recomputeVisual();
-			},
+			onCommit: (query) => this.commitSearchQuery(query),
+			onClear: () => this.clearSearchQuery(),
 			onSavePreset: (query) => this.savePreset(query),
 			onPresetApplied: (id) => void this.markPresetUsed(id),
 				onManagePresets: () => this.openPresetManager(),
@@ -1474,7 +1599,7 @@ export class GraphInsightView extends ItemView {
 			if (generation !== this.rebuildGeneration || this.closing) return;
 			// Frame the graph once the very first layout settles; later rebuilds
 			// (vault edits) keep whatever framing the user has.
-			if (!this.model) this.autoFit.request();
+			if (!this.model && this.pendingWorkspaceCamera === null) this.autoFit.request();
 			this.model = model;
 			consumeRenames(this.renamed, renamed);
 			this.facts = this.buildFacts(model, files);
@@ -1486,6 +1611,7 @@ export class GraphInsightView extends ItemView {
 			this.layout.start(model, seed, dims);
 			this.restorePins(model, seed, pinnedPaths);
 			this.apply3D(this.plugin.settings.panel, false);
+			this.applyPendingWorkspaceCamera();
 			this.lastPhysics = "";
 			this.applyPhysics(this.plugin.settings.panel);
 			// The fresh worker knows nothing about the saved grouping rule, and the
@@ -1515,6 +1641,8 @@ export class GraphInsightView extends ItemView {
 			this.searchBar?.setVocabulary(...vocabulary);
 			this.filterChips?.setVocabulary(...vocabulary);
 			this.updateEmptyState(model.nodes.length);
+			this.syncWorkspaceQueryUi();
+			if (this.hardQuery) await this.ensureContentIndex(contentNeedles(this.hardQuery));
 		} catch (error) {
 			if (generation === this.rebuildGeneration) this.model = null;
 			throw error;
@@ -1594,6 +1722,7 @@ export class GraphInsightView extends ItemView {
 
 	/** Tear the whole view down and build it again from saved settings. */
 	private reopen(): Promise<void> {
+		this.captureWorkspaceStateForReopen();
 		this.reopenRequested = true;
 		if (!this.reopenPromise) {
 			const closeEpoch = this.closeEpoch;
@@ -2083,8 +2212,10 @@ export class GraphInsightView extends ItemView {
 		this.taskQueryUndo = cleared;
 		this.hardQuery = null;
 		this.hardQueryText = "";
+		this.lastWorkspaceQuery = "";
 		this.searchParseError = undefined;
 		this.recomputeVisual();
+		this.scheduleWorkspaceSave();
 
 		const fragment = createFragment();
 		fragment.append(t("notice.queryCleared", { query: cleared }));
@@ -2305,6 +2436,7 @@ export class GraphInsightView extends ItemView {
 		this.softQuery = null;
 		this.hardQuery = null;
 		this.hardQueryText = "";
+		this.lastWorkspaceQuery = "";
 		this.searchParseError = undefined;
 		this.pathAnchor = null;
 		this.toolBar?.setPathStage("start");
@@ -2326,6 +2458,7 @@ export class GraphInsightView extends ItemView {
 		this.pathDrawn = false;
 		this.panel?.setHiddenNodeCount(0);
 		this.recomputeVisual();
+		this.scheduleWorkspaceSave();
 		new Notice(t("notice.viewStateReset"));
 	}
 
@@ -2392,6 +2525,7 @@ export class GraphInsightView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
+		this.captureWorkspaceStateForReopen();
 		this.closeEpoch++;
 		this.reopenRequested = false;
 		await this.teardown();
@@ -2399,6 +2533,7 @@ export class GraphInsightView extends ItemView {
 
 	private async teardown(): Promise<void> {
 		this.closing = true;
+		this.cancelWorkspaceSave();
 		this.openGeneration++;
 		this.clearOpenListeners();
 		this.stopObservingRendererVisibility?.();
@@ -2420,6 +2555,7 @@ export class GraphInsightView extends ItemView {
 		this.exploreNoteModal = null;
 		// Cancel in-flight note scans before their reads can finish on a closed view.
 		this.contentIndexGeneration++;
+		this.contentIndex.clear();
 		this.hardQuery = null;
 		// Forget the companion pane without closing it: the note in it is the
 		// user's, and they may well still be reading it.

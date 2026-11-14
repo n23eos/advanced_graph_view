@@ -34,6 +34,7 @@ vi.mock("../render/GraphRenderer", () => ({
 	GraphRenderer: class {
 		destroy = vi.fn();
 		currentPositions = null;
+		getCameraState(): null { return null; }
 		constructor() {
 			startup.renderers.push(this);
 		}

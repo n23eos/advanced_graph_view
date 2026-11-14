@@ -28,11 +28,13 @@
 			<button type="button" data-vault="normal" class="is-active">42 notes</button>
 			<button type="button" data-vault="empty">Empty</button>
 		</fieldset>
+		<button type="button" id="workspace-reopen">Save and reopen tab</button>
 		<output id="harness-status" aria-live="polite">Starting...</output>
 	</header>
 	<main id="stage" data-width="1200">
 		<section id="view-host" aria-label="Advanced Graph View test container"></section>
 	</main>
+	<details><summary>Workspace state</summary><pre id="workspace-state"></pre></details>
 	<div id="harness-errors" role="alert"></div>
 	<script src="bundle.js"></script>
 </body>

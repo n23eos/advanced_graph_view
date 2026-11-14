@@ -53,7 +53,15 @@ function build() {
 		flushSettings: vi.fn(async () => {}),
 	};
 	const view = new GraphInsightView({ app } as unknown as WorkspaceLeaf, plugin as never) as unknown as Internals;
-	const renderer = { currentPositions: null as Float32Array | null, setModel: vi.fn(), setPinned: vi.fn(), setLabelOptions: vi.fn(), setEdgeStyle: vi.fn(), destroy: vi.fn() };
+	const renderer = {
+		currentPositions: null as Float32Array | null,
+		getCameraState: () => null,
+		setModel: vi.fn(),
+		setPinned: vi.fn(),
+		setLabelOptions: vi.fn(),
+		setEdgeStyle: vi.fn(),
+		destroy: vi.fn(),
+	};
 	const layout = { start: vi.fn(), stop: vi.fn(), pin: vi.fn() };
 	const effects = {
 		apply3D: vi.fn(), applyPhysics: vi.fn(), applyLayoutRule: vi.fn(), applyEncoding: vi.fn(),

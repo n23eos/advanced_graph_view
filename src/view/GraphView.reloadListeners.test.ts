@@ -30,6 +30,7 @@ vi.mock("../render/GraphRenderer", () => ({
 		currentPositions = null;
 		setSelected = vi.fn();
 		centerOnNode = vi.fn();
+		getCameraState(): null { return null; }
 		init(): Promise<void> { return Promise.resolve(); }
 		resize(): void {}
 		destroy(): void {}

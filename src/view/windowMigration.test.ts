@@ -45,6 +45,7 @@ vi.mock("../render/GraphRenderer", () => ({
 		destroy = vi.fn();
 		host: HTMLElement | null = null;
 		ownerWindow: Window | null = null;
+		getCameraState(): null { return null; }
 		constructor() { state.renderers.push(this); }
 		init(host: HTMLElement): Promise<void> {
 			this.host = host;
