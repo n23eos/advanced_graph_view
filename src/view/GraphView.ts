@@ -1,6 +1,7 @@
 import { ExportActions } from "./exportActions";
 import { GraphMenus } from "./menus";
 import { NoteNavigation, type FileExplorerView } from "./noteNavigation";
+import { PresetActions } from "./presetActions";
 import { observeRendererVisibility } from "./rendererVisibility";
 import { panelDiff } from "./panelDiff";
 import {
@@ -45,8 +46,6 @@ import { formatPhysicsDiff, physicsDiff, recommendedPhysics } from "../ui/physic
 import { responsiveMode, type ResponsiveMode } from "../ui/responsive";
 import { FloatingLayout } from "../ui/FloatingLayout";
 import { renderGraphStartupError } from "../ui/GraphStartupError";
-import { ensureBuiltinPreset } from "./builtinPresets";
-import type { BuiltinPresetId } from "./presetNames";
 import { NavigationTrail } from "../explore/navigationTrail";
 import { renderBreadcrumb } from "../ui/breadcrumb";
 import type { TopicMapSource } from "../export/topicMapMarkdown";
@@ -65,11 +64,8 @@ import {
 	contentNeedles, parseQuery, matchesQuery, validateQuery,
 	type ParsedQuery, type QueryDiagnostic,
 } from "../query/QueryParser";
-import { SearchBar, type SearchConstraint, type SearchMode } from "../ui/SearchBar";
-import type { SearchPreset } from "../settings/schema";
 import { sortSearchPresets } from "../settings/searchPresets";
-import { SearchPresetModal } from "../ui/SearchPresetModal";
-import { SearchPresetManagerModal } from "../ui/SearchPresetManagerModal";
+import { SearchBar, type SearchConstraint, type SearchMode } from "../ui/SearchBar";
 import { FilterChips, type FilterSelection } from "../ui/FilterChips";
 import { compileChipFilter } from "../ui/chipFilter";
 import { ExploreNoteModal } from "../ui/ExploreNoteModal";
@@ -157,6 +153,27 @@ export class GraphInsightView extends ItemView {
 			setSelfOpenedPath: (path) => { this.selfOpenedPath = path; },
 			getCompanionLeafId: () => this.companionLeafId,
 			setCompanionLeafId: (id) => { this.companionLeafId = id; },
+		});
+	}
+	private presetController?: PresetActions;
+	private get presetActions(): PresetActions {
+		return this.presetController ??= new PresetActions({
+			getApp: () => this.app,
+			getSearchPresets: () => this.plugin.settings.presets,
+			saveSearchPresets: (presets) => this.plugin.savePresets(presets),
+			setSearchPresets: (presets) => this.searchBar?.setPresets(presets),
+			applySearchQuery: (query) => this.searchBar?.applyQuery(query),
+			getViewPresets: () => this.plugin.settings.viewPresets,
+			getPanelState: () => this.plugin.settings.panel,
+			saveViewPresets: (presets) => this.plugin.saveViewPresets(presets),
+			setViewPresets: (presets) => this.panel?.setViewPresets(this.presetRows(presets)),
+			setSelectedViewPreset: (index) => this.panel?.setSelectedPreset(index),
+			setActivePresetIndex: (index) => { this.activePresetIndex = index; },
+			clearPhysicsUndo: () => { this.physicsUndo = null; },
+			requestAutoFit: () => this.autoFit.request(),
+			updatePanelState: (mutate) => this.updatePanelState(mutate),
+			selectLinksTool: () => this.toolBar?.selectTool("links"),
+			clearHardQueryForTask: () => this.clearHardQueryForTask(),
 		});
 	}
 
@@ -1560,58 +1577,16 @@ export class GraphInsightView extends ItemView {
 
 	/** F-09: explicit naming instead of the old first-24-characters auto-name. */
 	private savePreset(query: string): void {
-		new SearchPresetModal(this.app, t("preset.modal.saveTitle"), { name: "", query }, (draft) => {
-			const now = Date.now();
-			void this.persistPresets([
-				...this.plugin.settings.presets,
-				{ id: crypto.randomUUID(), name: draft.name, query: draft.query, createdAt: now, updatedAt: now },
-			]).then(() => new Notice(t("notice.filterPresetSaved")));
-		}).open();
-	}
-
-	/** Save, then hand the freshly sorted list to the bar (and the caller). */
-	private async persistPresets(next: SearchPreset[]): Promise<SearchPreset[]> {
-		await this.plugin.savePresets(next);
-		const sorted = sortSearchPresets(this.plugin.settings.presets);
-		this.searchBar?.setPresets(sorted);
-		return sorted;
+		this.presetActions.savePreset(query);
 	}
 
 	/** Applying a preset moves it to the top of the recently-used order. */
 	private async markPresetUsed(id: string): Promise<void> {
-		await this.persistPresets(
-			this.plugin.settings.presets.map((preset) =>
-				preset.id === id ? { ...preset, lastUsedAt: Date.now() } : preset
-			)
-		);
+		await this.presetActions.markPresetUsed(id);
 	}
 
 	private openPresetManager(): void {
-		new SearchPresetManagerModal(this.app, sortSearchPresets(this.plugin.settings.presets), {
-			onApply: (preset) => {
-				this.searchBar?.applyQuery(preset.query);
-				void this.markPresetUsed(preset.id);
-			},
-			onUpdate: (next) =>
-				this.persistPresets(
-					this.plugin.settings.presets.map((preset) => (preset.id === next.id ? next : preset))
-				),
-			onDuplicate: (source) => {
-				const now = Date.now();
-				return this.persistPresets([
-					...this.plugin.settings.presets,
-					{
-						id: crypto.randomUUID(),
-						name: `${source.name}${t("preset.copySuffix")}`,
-						query: source.query,
-						createdAt: now,
-						updatedAt: now,
-					},
-				]);
-			},
-			onDelete: (preset) =>
-				this.persistPresets(this.plugin.settings.presets.filter((p) => p.id !== preset.id)),
-		}).open();
+		this.presetActions.openPresetManager();
 	}
 
 	private handleMetadataResolved(): void {
@@ -2298,41 +2273,15 @@ export class GraphInsightView extends ItemView {
 	// ── View presets ──────────────────────────────────────────────────
 
 	private async applyViewPreset(index: number): Promise<void> {
-		const preset = this.plugin.settings.viewPresets[index];
-		if (!preset) return;
-		this.activePresetIndex = index;
-		// The preset brings its own physics — the reset's Undo no longer applies.
-		this.physicsUndo = null;
-		this.autoFit.request();
-		await this.updatePanelState(() => preset.panel);
-		new Notice(t("notice.presetApplied", { name: presetDisplayName(preset) }));
+		await this.presetActions.applyViewPreset(index);
 	}
 
 	private async saveViewPreset(name: string): Promise<void> {
-		const existing = this.plugin.settings.viewPresets;
-		const snapshot = { name, panel: this.plugin.settings.panel };
-		// Same name overwrites: saving twice must not pile up duplicates.
-		const at = existing.findIndex((p) => p.name === name);
-		const next = at >= 0
-			? existing.map((p, i) => (i === at ? snapshot : p))
-			: [...existing, snapshot];
-		await this.plugin.saveViewPresets(next);
-		this.panel?.setViewPresets(this.presetRows(next));
-		new Notice(
-			at >= 0 ? t("notice.presetOverwritten", { name }) : t("notice.presetSaved", { name })
-		);
+		await this.presetActions.saveViewPreset(name);
 	}
 
 	private async deleteViewPreset(index: number): Promise<void> {
-		const existing = this.plugin.settings.viewPresets;
-		const preset = existing[index];
-		if (!preset) return;
-		const next = existing.filter((_, i) => i !== index);
-		this.activePresetIndex = null;
-		await this.plugin.saveViewPresets(next);
-		this.panel?.setViewPresets(this.presetRows(next));
-		this.panel?.setSelectedPreset(null);
-		new Notice(t("notice.presetDeleted", { name: presetDisplayName(preset) }));
+		await this.presetActions.deleteViewPreset(index);
 	}
 
 	// ── F-01: canned task actions ─────────────────────────────────────
@@ -2353,26 +2302,7 @@ export class GraphInsightView extends ItemView {
 
 	/** Entry point shared by the menu and the per-action commands. */
 	runTask(taskId: (typeof GraphInsightView.TASK_ACTIONS)[number]["id"]): void {
-		const action = GraphInsightView.TASK_ACTIONS.find((task) => task.id === taskId);
-		if (!action) return;
-		if (!("presetId" in action)) {
-			// «Исследовать тему»: turn on the Links tool, keep every filter.
-			this.toolBar?.selectTool("links");
-			return;
-		}
-		void this.runTaskPreset(action.presetId, action.diagnostic);
-	}
-
-	private async runTaskPreset(builtinId: BuiltinPresetId, diagnostic: boolean): Promise<void> {
-		const ensured = ensureBuiltinPreset(this.plugin.settings.viewPresets, builtinId);
-		if (!ensured) return;
-		if (ensured.presets !== this.plugin.settings.viewPresets) {
-			// The user hand-deleted the bundled preset — restore it first.
-			await this.plugin.saveViewPresets([...ensured.presets]);
-			this.panel?.setViewPresets(this.presetRows(this.plugin.settings.viewPresets));
-		}
-		if (diagnostic) this.clearHardQueryForTask();
-		await this.applyViewPreset(ensured.index);
+		this.presetActions.runTask(taskId, GraphInsightView.TASK_ACTIONS);
 	}
 
 	/** Diagnostic tasks need the whole vault visible: drop the hard query but

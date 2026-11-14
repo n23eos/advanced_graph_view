@@ -294,7 +294,7 @@
 - [x] D1. Экспорт: `exportPngFile`, `exportJsonFile`, `exportGexfFile`, `exportCurrentTopicMap`, `createTopicMapFile`, `downloadBlob` -> `src/view/exportActions.ts`.
 - [x] D2. Меню: `showNodeMenu`, `showLassoMenu`, `showTasksMenu`, `showOverflowMenu` -> `src/view/menus.ts`.
 - [x] D3. Открытие заметок: `openNode`, `openNodeInSplit`, `revealNode`, `nodeFile`, `fileExplorer`, `asFileExplorer`, `leafId` -> `src/view/noteNavigation.ts`.
-- [ ] D4. Пресеты и задачи: `savePreset`, `persistPresets`, `markPresetUsed`, `openPresetManager`, `applyViewPreset`, `saveViewPreset`, `deleteViewPreset`, `runTask`, `runTaskPreset` -> `src/view/presetActions.ts`.
+- [x] D4. Пресеты и задачи: `savePreset`, `persistPresets`, `markPresetUsed`, `openPresetManager`, `applyViewPreset`, `saveViewPreset`, `deleteViewPreset`, `runTask`, `runTaskPreset` -> `src/view/presetActions.ts`.
 - [ ] D5. Панель изменений: `toggleChangesPanel` ... `focusChangesLink` -> `src/view/changesController.ts`.
 - [ ] D6. Тултип и превью: `showTooltip`, `appendNotePreview`, `notePreview` -> `src/view/tooltip.ts`.
 - [ ] D7. Explore-обвязка в view (`enterExplore` ... `renderExploreBar`) - последним и только если D1-D6 прошли без сюрпризов.
