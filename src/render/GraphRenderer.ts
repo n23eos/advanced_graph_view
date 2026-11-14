@@ -1122,7 +1122,7 @@ export class GraphRenderer {
 			this.redrawPath();
 			this.redrawPins();
 		}
-		if (this.cullDirty) {
+		if (this.cullDirty || force) {
 			const now = performance.now();
 			// Culling correctness can lag a frame or two; don't let it eat
 			// the budget on every single frame of a running simulation.

@@ -30,6 +30,7 @@ interface HiddenExportHarness {
 	labelsVisible: boolean;
 	labelPriority: number[];
 	cullDirty: boolean;
+	renderFrame(force?: boolean): void;
 }
 
 beforeAll(() => installObsidianDom());
@@ -40,7 +41,7 @@ afterEach(() => {
 });
 
 describe("GraphRenderer hidden PNG export", () => {
-	test("culls against the retained Pixi screen when the paused canvas has no CSS size", async () => {
+	test("reculls against the retained Pixi screen after a hidden frame cleared the dirty flag", async () => {
 		const renderer = new GraphRenderer({} as RendererCallbacks);
 		const state = renderer as unknown as HiddenExportHarness;
 		const canvas = document.body.createEl("canvas");
@@ -77,6 +78,10 @@ describe("GraphRenderer hidden PNG export", () => {
 		state.labelPriority = [0];
 		state.cullDirty = true;
 		renderer.camera.enabled = false;
+		state.renderFrame();
+		expect(sprite.visible).toBe(false);
+		expect(state.cullDirty).toBe(false);
+		render.mockClear();
 		renderer.pause();
 
 		await expect(renderer.exportPng()).resolves.toBe(blob);
