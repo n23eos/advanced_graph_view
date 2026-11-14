@@ -292,7 +292,7 @@
 
 Порядок (от самого изолированного):
 - [x] D1. Экспорт: `exportPngFile`, `exportJsonFile`, `exportGexfFile`, `exportCurrentTopicMap`, `createTopicMapFile`, `downloadBlob` -> `src/view/exportActions.ts`.
-- [ ] D2. Меню: `showNodeMenu`, `showLassoMenu`, `showTasksMenu`, `showOverflowMenu` -> `src/view/menus.ts`.
+- [x] D2. Меню: `showNodeMenu`, `showLassoMenu`, `showTasksMenu`, `showOverflowMenu` -> `src/view/menus.ts`.
 - [ ] D3. Открытие заметок: `openNode`, `openNodeInSplit`, `revealNode`, `nodeFile`, `fileExplorer`, `asFileExplorer`, `leafId` -> `src/view/noteNavigation.ts`.
 - [ ] D4. Пресеты и задачи: `savePreset`, `persistPresets`, `markPresetUsed`, `openPresetManager`, `applyViewPreset`, `saveViewPreset`, `deleteViewPreset`, `runTask`, `runTaskPreset` -> `src/view/presetActions.ts`.
 - [ ] D5. Панель изменений: `toggleChangesPanel` ... `focusChangesLink` -> `src/view/changesController.ts`.

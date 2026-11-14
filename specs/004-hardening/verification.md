@@ -141,3 +141,9 @@ Mac по-прежнему заблокирован. Нативные прове�
 - Moved PNG/JSON/GEXF and topic-map actions into ExportActions with narrow dynamic dependencies. GraphView retains public commands and its topic-map entry wrapper. The facade initializes lazily, including for existing prototype-based fixtures.
 - AST comparison confirmed all 10 moved method bodies match the prior implementation. The existing title separator uses a Unicode escape to preserve its runtime string without adding a forbidden literal character. No behavior or existing tests changed.
 - verify: 912 tests / 124 files PASS, typecheck and lint zero warnings PASS; build PASS. Logs: /tmp/hardening-d1-verify.log and /tmp/hardening-d1-build.log.
+
+## D2: menu extraction, 2026-11-14
+
+- Moved node, lasso, task and responsive overflow menu bodies into GraphMenus with narrow live getters and callbacks. GraphView keeps all four private wrappers and lazy facade initialization for prototype-based fixtures.
+- Existing menu behavior, task action ids, clipboard writes, pin and hidden-node mutations, navigation callbacks and popup positions are unchanged. No existing tests changed.
+- verify: 912 tests / 124 files PASS, typecheck and lint zero warnings PASS; build PASS. Logs: /tmp/hardening-d2-verify.log and /tmp/hardening-d2-build.log.

@@ -1,10 +1,10 @@
 import { ExportActions } from "./exportActions";
+import { GraphMenus } from "./menus";
 import { observeRendererVisibility } from "./rendererVisibility";
 import { panelDiff } from "./panelDiff";
 import {
 	ItemView,
 	Keymap,
-	Menu,
 	Notice,
 	TFile,
 	debounce,
@@ -114,6 +114,39 @@ export class GraphInsightView extends ItemView {
 			getViewDocument: () => this.viewDocument,
 			getViewWindow: () => this.viewWindow,
 			getContentEl: () => this.contentEl,
+		});
+	}
+	private menuController?: GraphMenus<(typeof GraphInsightView.TASK_ACTIONS)[number]["id"]>;
+	private get menus(): GraphMenus<(typeof GraphInsightView.TASK_ACTIONS)[number]["id"]> {
+		return this.menuController ??= new GraphMenus({
+			getModel: () => this.model,
+			getHiddenNodes: () => this.hiddenNodes,
+			setHiddenNodeCount: (count) => this.panel?.setHiddenNodeCount(count),
+			recomputeVisual: () => this.recomputeVisual(),
+			openNode: (nodeId, newTab) => this.openNode(nodeId, newTab),
+			openNodeInSplit: (nodeId) => this.openNodeInSplit(nodeId),
+			canRevealNode: () => this.fileExplorer() !== null,
+			revealNode: (nodeId) => this.revealNode(nodeId),
+			enterFocus: (nodeId) => this.enterFocus(nodeId),
+			enterExplore: (nodeId) => void this.enterExplore(nodeId),
+			isPinned: (nodeId) => this.isPinned(nodeId),
+			togglePin: (nodeId) => { this.togglePin(nodeId); },
+			setSelectionPinned: (nodeIds, pinned) => this.setSelectionPinned(nodeIds, pinned),
+			exportLasso: (nodeIds) => this.openTopicMapExport("lasso", null, nodeIds),
+			writeClipboard: (text) => navigator.clipboard.writeText(text),
+			getTaskActions: () => GraphInsightView.TASK_ACTIONS,
+			runTask: (taskId) => this.runTask(taskId),
+			getFollowActiveNote: () => this.plugin.settings.followActiveNote,
+			setFollowActiveNote: (enabled) => void this.plugin.setFollowActiveNote(enabled),
+			getOpenInSidePane: () => this.plugin.settings.openInSidePane,
+			setOpenInSidePane: (enabled) => void this.plugin.setOpenInSidePane(enabled),
+			activateLocalGraph: () => void this.plugin.activateLocalGraph(),
+			fitAll: () => this.renderer?.fitAll(),
+			resetCamera: () => this.renderer?.resetCamera(),
+			getIsExploring: () => this.isExploring,
+			toggleExplore: () => void (this.exploreSession ? this.exitExplore() : this.enterExplore()),
+			openPresetManager: () => this.openPresetManager(),
+			toggleChangesPanel: () => this.toggleChangesPanel(),
 		});
 	}
 
@@ -1484,70 +1517,11 @@ export class GraphInsightView extends ItemView {
 	// ── Menus ─────────────────────────────────────────────────────────
 
 	private showNodeMenu(nodeId: number, event: MouseEvent): void {
-		if (!this.model) return;
-		const node = this.model.nodes[nodeId];
-		const menu = new Menu();
-		menu.addItem((item) => item.setTitle(t("menu.open")).setIcon("file-text").onClick(() => this.openNode(nodeId, false)));
-		menu.addItem((item) => item.setTitle(t("menu.openNewTab")).setIcon("file-plus").onClick(() => this.openNode(nodeId, true)));
-		menu.addItem((item) => item.setTitle(t("menu.openRight")).setIcon("separator-vertical").onClick(() => this.openNodeInSplit(nodeId)));
-		// Only offered when the core file explorer is actually loaded.
-		if (this.fileExplorer()) {
-			menu.addItem((item) => item.setTitle(t("menu.reveal")).setIcon("folder-open").onClick(() => this.revealNode(nodeId)));
-		}
-		menu.addItem((item) => item.setTitle(t("menu.focus")).setIcon("target").onClick(() => this.enterFocus(nodeId)));
-		menu.addItem((item) => item.setTitle(t("menu.explore")).setIcon("compass").onClick(() => void this.enterExplore(nodeId)));
-		menu.addSeparator();
-		menu.addItem((item) => item.setTitle(t("menu.hide")).setIcon("eye-off").onClick(() => {
-			this.hiddenNodes.add(nodeId);
-			this.panel?.setHiddenNodeCount(this.hiddenNodes.size);
-			this.recomputeVisual();
-		}));
-		const pinned = this.isPinned(nodeId);
-		menu.addItem((item) => item.setTitle(pinned ? t("menu.unpin") : t("menu.pin")).setIcon("pin").onClick(() => {
-			this.togglePin(nodeId);
-		}));
-		menu.addSeparator();
-		menu.addItem((item) => item.setTitle(t("menu.copyLink")).setIcon("link").onClick(async () => {
-			// Write-only: paste-ready Obsidian wikilink for the note.
-			await navigator.clipboard.writeText(`[[${node.name}]]`);
-			new Notice(t("notice.copiedLink", { name: node.name }));
-		}));
-		menu.addItem((item) => item.setTitle(t("menu.path", { path: node.path })).setDisabled(true));
-		menu.showAtMouseEvent(event);
+		this.menus.showNodeMenu(nodeId, event);
 	}
 
 	private showLassoMenu(nodeIds: number[], event: PointerEvent): void {
-		if (!this.model) return;
-		const menu = new Menu();
-		menu.addItem((item) => item.setTitle(t("menu.selected", { count: nodeIds.length })).setDisabled(true));
-		menu.addSeparator();
-		menu.addItem((item) =>
-			item
-				.setTitle(t("topicmap.export"))
-				.setIcon("map")
-				.onClick(() => this.openTopicMapExport("lasso", null, nodeIds))
-		);
-		menu.addItem((item) => item.setTitle(t("menu.hideSelected")).setIcon("eye-off").onClick(() => {
-			for (const id of nodeIds) this.hiddenNodes.add(id);
-			this.panel?.setHiddenNodeCount(this.hiddenNodes.size);
-			this.recomputeVisual();
-		}));
-		// One decision for the whole selection: a mixed lasso pins everything,
-		// an already-pinned one releases it. Toggling each node separately just
-		// swaps which half is pinned.
-		const allPinned = nodeIds.every((id) => this.isPinned(id));
-		menu.addItem((item) => item
-			.setTitle(allPinned ? t("menu.unpinSelected") : t("menu.pinSelected"))
-			.setIcon("pin")
-			.onClick(() => this.setSelectionPinned(nodeIds, !allPinned)));
-		menu.addItem((item) => item.setTitle(t("menu.copyPaths")).setIcon("copy").onClick(async () => {
-			// Write-only, and only from this explicit menu action — the plugin
-			// never reads the clipboard.
-			const paths = nodeIds.map((id) => this.model!.nodes[id].path).join("\n");
-			await navigator.clipboard.writeText(paths);
-			new Notice(t("notice.copiedPaths", { count: nodeIds.length }));
-		}));
-		menu.showAtMouseEvent(event);
+		this.menus.showLassoMenu(nodeIds, event);
 	}
 
 	private openNode(nodeId: number, newTab: boolean): void {
@@ -2458,12 +2432,7 @@ export class GraphInsightView extends ItemView {
 	}
 
 	private showTasksMenu(anchor: HTMLElement): void {
-		const menu = new Menu();
-		for (const action of GraphInsightView.TASK_ACTIONS) {
-			menu.addItem((item) => item.setTitle(t(action.labelKey)).onClick(() => this.runTask(action.id)));
-		}
-		const rect = anchor.getBoundingClientRect();
-		menu.showAtPosition({ x: rect.left, y: rect.bottom + 4 });
+		this.menus.showTasksMenu(anchor);
 	}
 
 	private responsiveModeState: ResponsiveMode = "full";
@@ -2478,50 +2447,7 @@ export class GraphInsightView extends ItemView {
 	/** F-04: everything the narrow widths hide, reachable from one menu —
 	 *  and, through Obsidian's Menu, from the keyboard. */
 	private showOverflowMenu(anchor: HTMLElement): void {
-		const menu = new Menu();
-		menu.addItem((item) =>
-			item
-				.setTitle(t("tool.follow"))
-				.setIcon("locate-fixed")
-				.setChecked(this.plugin.settings.followActiveNote)
-				.onClick(() => void this.plugin.setFollowActiveNote(!this.plugin.settings.followActiveNote))
-		);
-		menu.addItem((item) =>
-			item
-				.setTitle(t("tool.sidePane"))
-				.setIcon("panel-right")
-				.setChecked(this.plugin.settings.openInSidePane)
-				.onClick(() => void this.plugin.setOpenInSidePane(!this.plugin.settings.openInSidePane))
-		);
-		menu.addItem((item) =>
-			item
-				.setTitle(t("tool.localGraph"))
-				.setIcon("orbit")
-				.onClick(() => void this.plugin.activateLocalGraph())
-		);
-		menu.addSeparator();
-		menu.addItem((item) =>
-			item.setTitle(t("camera.fit")).setIcon("maximize").onClick(() => this.renderer?.fitAll())
-		);
-		menu.addItem((item) =>
-			item.setTitle(t("camera.reset")).setIcon("rotate-ccw").onClick(() => this.renderer?.resetCamera())
-		);
-		menu.addItem((item) =>
-			item
-				.setTitle(t("camera.explore"))
-				.setIcon("compass")
-				.setChecked(this.isExploring)
-				.onClick(() => void (this.exploreSession ? this.exitExplore() : this.enterExplore()))
-		);
-		menu.addSeparator();
-		menu.addItem((item) =>
-			item.setTitle(t("preset.manage")).setIcon("list").onClick(() => this.openPresetManager())
-		);
-		menu.addItem((item) =>
-			item.setTitle(t("changes.open")).setIcon("history").onClick(() => this.toggleChangesPanel())
-		);
-		const rect = anchor.getBoundingClientRect();
-		menu.showAtPosition({ x: rect.left, y: rect.bottom + 4 });
+		this.menus.showOverflowMenu(anchor);
 	}
 
 	/** Undo target for "restore recommended physics", valid until the next
