@@ -159,3 +159,9 @@ Mac по-прежнему заблокирован. Нативные прове�
 - Moved saved-search presets, view presets and canned task execution into PresetActions with narrow live getters and callbacks. GraphView keeps its UI entry wrappers, mutable fields and lazy facade initialization for prototype-based fixtures.
 - GraphInsightView.TASK_ACTIONS remains the public static action list with the same literal ids. Preset ordering, notices, bundled preset restoration and diagnostic query clearing are unchanged. No existing tests changed.
 - verify: 912 tests / 124 files PASS, typecheck and lint zero warnings PASS; build PASS. Logs: /tmp/hardening-d4-verify.log and /tmp/hardening-d4-build.log.
+
+## D5: changes controller extraction, 2026-11-14
+
+- Moved six Changes actions into ChangesController. Live state accessors and GraphView callbacks preserve generation checks, await boundaries and existing method overrides. Lifecycle/reset ownership remains in GraphView.
+- AST comparison of method bodies passes after accounting for dependency forwarding and comment-only separator normalization. Existing tests unchanged.
+- verify: 912 tests / 124 files PASS, typecheck/lint PASS with no warnings; build PASS. Logs: /tmp/hardening-d5-verify.log and /tmp/hardening-d5-build.log.

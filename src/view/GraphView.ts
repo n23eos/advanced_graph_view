@@ -1,3 +1,4 @@
+import { ChangesController } from "./changesController";
 import { ExportActions } from "./exportActions";
 import { GraphMenus } from "./menus";
 import { NoteNavigation, type FileExplorerView } from "./noteNavigation";
@@ -49,16 +50,9 @@ import { renderGraphStartupError } from "../ui/GraphStartupError";
 import { NavigationTrail } from "../explore/navigationTrail";
 import { renderBreadcrumb } from "../ui/breadcrumb";
 import type { TopicMapSource } from "../export/topicMapMarkdown";
-import { ChangesPanel, type ChangesData } from "../ui/ChangesPanel";
-import { ChangesClient } from "../workers/ChangesClient";
-import {
-	coolingClusters,
-	notesChangedSince,
-	type ChangeCategory,
-	type LinkChange,
-	type TopologyDiff,
-} from "../analysis/graphChanges";
-import { closestSnapshotBefore } from "../data/graphSnapshots";
+import type { ChangesPanel, ChangesData } from "../ui/ChangesPanel";
+import type { ChangesClient } from "../workers/ChangesClient";
+import type { ChangeCategory, LinkChange } from "../analysis/graphChanges";
 import { MetricsClient, type GraphMetrics } from "../workers/MetricsClient";
 import {
 	contentNeedles, parseQuery, matchesQuery, validateQuery,
@@ -94,6 +88,42 @@ const COLLIDE_BASE_RADIUS = 0;
 const EXPLORE_BACKGROUND_ALPHA = 0.05;
 
 export class GraphInsightView extends ItemView {
+	private changesController?: ChangesController;
+	private get changesActions(): ChangesController {
+		return this.changesController ??= new ChangesController({
+			getChangesPanel: () => this.changesPanel,
+			setChangesPanel: (value) => { this.changesPanel = value; },
+			getChangesClient: () => this.changesClient,
+			setChangesClient: (value) => { this.changesClient = value; },
+			getChangesData: () => this.changesData,
+			setChangesData: (value) => { this.changesData = value; },
+			getChangesGeneration: () => this.changesGeneration,
+			setChangesGeneration: (value) => { this.changesGeneration = value; },
+			getChangesHighlight: () => this.changesHighlight,
+			setChangesHighlight: (value) => { this.changesHighlight = value; },
+			getChangesSelection: () => this.changesSelection,
+			setChangesSelection: (value) => { this.changesSelection = value; },
+			getClosing: () => this.closing,
+			getClusterNames: () => this.clusterNames,
+			getContentEl: () => this.contentEl,
+			getFacts: () => this.facts,
+			getMetrics: () => this.metrics,
+			getModel: () => this.model,
+			getPathDrawn: () => this.pathDrawn,
+			setPathDrawn: (value) => { this.pathDrawn = value; },
+			getPlugin: () => this.plugin,
+			getRenderer: () => this.renderer,
+			ensureChangesPanel: () => this.ensureChangesPanel(),
+			refreshChanges: () => this.refreshChanges(),
+			selectChangesCategory: (category) => this.selectChangesCategory(category),
+			openNode: (nodeId, newTab) => this.openNode(nodeId, newTab),
+			focusChangesLink: (link) => this.focusChangesLink(link),
+			clusterNodeIds: (communityId) => this.clusterNodeIds(communityId),
+			applyChangesMask: () => this.applyChangesMask(),
+			recomputeVisual: () => this.recomputeVisual(),
+		});
+	}
+
 	private exportController?: ExportActions;
 	private get exportActions(): ExportActions {
 		return this.exportController ??= new ExportActions({
@@ -778,150 +808,30 @@ export class GraphInsightView extends ItemView {
 	/** Command + overflow menu entry. Closing keeps the selected category —
 	 *  only "Reset changes" clears it (§F-10). */
 	toggleChangesPanel(): void {
-		if (this.changesPanel?.isShown) {
-			this.changesPanel.hide();
-			return;
-		}
-		this.ensureChangesPanel();
-		this.changesPanel?.show();
-		void this.refreshChanges();
+		return this.changesActions.toggleChangesPanel();
 	}
 
 	private ensureChangesPanel(): void {
-		if (this.changesPanel) return;
-		this.changesPanel = new ChangesPanel(this.contentEl, {
-			onPeriodChange: (days) => {
-				this.changesSelection = { ...this.changesSelection, periodDays: days };
-				this.changesPanel?.setState(days, this.changesSelection.category);
-				void this.refreshChanges();
-			},
-			onCategorySelect: (category) => this.selectChangesCategory(category),
-			onOpenNote: (path) => {
-				const id = this.model?.pathToId.get(path);
-				if (id !== undefined) this.openNode(id, !this.plugin.settings.openInSidePane);
-			},
-			onFocusLink: (link) => this.focusChangesLink(link),
-			onFocusCluster: (id) => this.renderer?.zoomToNodes(this.clusterNodeIds(id)),
-			onClose: () => this.changesPanel?.hide(),
-		});
-		this.changesPanel.setState(this.changesSelection.periodDays, this.changesSelection.category);
+		return this.changesActions.ensureChangesPanel();
 	}
 
-	private async refreshChanges(): Promise<void> {
-		if (this.closing || !this.model) return;
-		const generation = ++this.changesGeneration;
-		// A new period supersedes the old request, including its worker.
-		this.changesClient?.stop();
-		this.changesPanel?.setData(null); // skeleton — the view stays interactive
-		if (!this.plugin.snapshotsLoaded) {
-			try {
-				await this.plugin.ensureSnapshots();
-			} catch (error) {
-				console.error("Advanced Graph View: snapshot loading failed", error);
-				return;
-			}
-			if (this.closing || generation !== this.changesGeneration || !this.model) return;
-		}
-		const now = Date.now();
-		const periodStart = now - this.changesSelection.periodDays * 24 * 60 * 60 * 1000;
-		const snapshot = closestSnapshotBefore(this.plugin.snapshotStore, periodStart);
-
-		const nodes = this.model.nodes.map((node) => ({
-			path: node.path,
-			ctime: this.facts[node.id]?.ctime ?? 0,
-			mtime: this.facts[node.id]?.mtime ?? 0,
-		}));
-		const { newNotes, editedNotes } = notesChangedSince(nodes, periodStart);
-
-		const hasMetrics = this.metrics !== null;
-		const cooling = this.metrics
-			? coolingClusters(
-					this.plugin.usageLog,
-					this.model,
-					this.metrics.community,
-					this.metrics.communityCount,
-					this.changesSelection.periodDays,
-					now
-				).map((id) => ({ id, label: this.clusterNames[id] ?? `#${id}` }))
-			: [];
-
-		let diff: TopologyDiff = { addedLinks: [], removedLinks: [], growingHubs: [] };
-		if (snapshot) {
-			this.changesClient ??= new ChangesClient();
-			try {
-				diff = await this.changesClient.compute(snapshot, this.model, this.metrics?.pagerank ?? null);
-			} catch {
-				// Closing or choosing another period cancels the old request.
-			}
-		}
-
-		if (generation !== this.changesGeneration) return;
-		this.changesData = {
-			hasHistory: snapshot !== null,
-			hasMetrics,
-			newNotes,
-			editedNotes,
-			addedLinks: diff.addedLinks,
-			removedLinks: diff.removedLinks,
-			growingHubs: hasMetrics || diff.growingHubs.length > 0 ? diff.growingHubs : [],
-			coolingClusters: cooling,
-		};
-		this.changesPanel?.setData(this.changesData);
-		this.applyChangesMask();
+	private refreshChanges(): Promise<void> {
+		return this.changesActions.refreshChanges();
 	}
 
 	private selectChangesCategory(category: ChangeCategory | null): void {
-		this.changesSelection = { ...this.changesSelection, category };
-		this.changesPanel?.setState(this.changesSelection.periodDays, category);
-		this.applyChangesMask();
+		return this.changesActions.selectChangesCategory(category);
 	}
 
 	/** Fold the selected category into a highlight set; recomputeVisual owns
 	 *  the masks, so no rebuild and no extra pass (§F-10). */
 	private applyChangesMask(): void {
-		const { category } = this.changesSelection;
-		const data = this.changesData;
-		if (!category || !data || !this.model) {
-			this.changesHighlight = null;
-			this.recomputeVisual();
-			return;
-		}
-		const ids = new Set<number>();
-		const addPath = (path: string) => {
-			const id = this.model?.pathToId.get(path);
-			if (id !== undefined) ids.add(id);
-		};
-		switch (category) {
-			case "new-notes": data.newNotes.forEach(addPath); break;
-			case "edited-notes": data.editedNotes.forEach(addPath); break;
-			case "growing-hubs": data.growingHubs.forEach(addPath); break;
-			case "added-links":
-			case "removed-links": {
-				const links = category === "added-links" ? data.addedLinks : data.removedLinks;
-				for (const link of links) {
-					addPath(link.fromPath);
-					addPath(link.toPath);
-				}
-				break;
-			}
-			case "cooling-clusters":
-				for (const cluster of data.coolingClusters) {
-					for (const id of this.clusterNodeIds(cluster.id)) ids.add(id);
-				}
-				break;
-		}
-		this.changesHighlight = ids;
-		this.recomputeVisual();
+		return this.changesActions.applyChangesMask();
 	}
 
 	/** A link row focuses both ends and lights the edge up, like the path tool. */
 	private focusChangesLink(link: LinkChange): void {
-		const from = this.model?.pathToId.get(link.fromPath);
-		const to = this.model?.pathToId.get(link.toPath);
-		if (from === undefined || to === undefined) return;
-		this.renderer?.setPathHighlight([from, to]);
-		this.pathDrawn = true;
-		this.renderer?.zoomToNodes([from, to]);
+		return this.changesActions.focusChangesLink(link);
 	}
 
 	canExportTopicMap(): boolean { return this.exportActions.canExportTopicMap(); }
