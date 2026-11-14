@@ -43,6 +43,8 @@ const EDGE_ALPHA = 0.25;
 // Text rasterization is expensive; creating many labels in one frame causes
 // visible hitches during panning, so budget creations per frame.
 const NEW_LABELS_PER_FRAME = 4;
+const RENDER_ON_DEMAND = true;
+const MAX_IDLE_RENDER_MS = 500;
 const CULL_MIN_INTERVAL_MS = 30;
 const MIN_LABEL_SCREEN_PX = 8;
 const HULL_FILL_ALPHA = 0.1;
@@ -164,6 +166,8 @@ export class GraphRenderer {
 	private app: Application | null = null;
 	private destroyed = false;
 	private paused = false;
+	private needsRender = true;
+	private lastRenderAt = -Infinity;
 	private world = new Container();
 	private edgeMesh: EdgeMesh | null = null;
 	private hullGraphics = new Graphics();
@@ -302,6 +306,7 @@ export class GraphRenderer {
 
 		this.viewport = new Viewport(this.world, app.canvas, () => {
 			this.cullDirty = true;
+			this.invalidate();
 		});
 
 		this.world.addChild(this.lassoGraphics);
@@ -325,6 +330,10 @@ export class GraphRenderer {
 		window.addEventListener("pointermove", this.handlePointerMove);
 		window.addEventListener("pointerup", this.handlePointerUp);
 
+		// TickerPlugin registers this exact function/context pair in Pixi 8.
+		// Keep the ticker for scene updates, but own the decision to draw.
+		// eslint-disable-next-line @typescript-eslint/unbound-method -- The explicit app context matches Pixi's registration.
+		app.ticker.remove(app.render, app);
 		app.ticker.add(() => this.renderFrame());
 		if (this.paused) app.ticker.stop();
 	}
@@ -343,6 +352,7 @@ export class GraphRenderer {
 
 	resume(): void {
 		if (this.destroyed || this.contextLost) return;
+		this.invalidate();
 		const wasPaused = this.paused;
 		this.paused = false;
 		if (wasPaused) this.reproject();
@@ -351,6 +361,7 @@ export class GraphRenderer {
 
 	setModel(model: GraphModel): void {
 		if (!this.app || !this.nodeTexture || !this.colors) return;
+		this.invalidate();
 		this.model = model;
 		this.positions3 = new Float32Array(model.nodes.length * 3);
 		this.targetPositions3 = null;
@@ -396,6 +407,7 @@ export class GraphRenderer {
 	/** New xyz frame from the layout worker (stride 3). It becomes the target
 	 *  the drawn positions ease toward; see `positionSmoothing`. */
 	updatePositions(positions3: Float32Array): void {
+		this.invalidate();
 		// While a drag is active the local pointer position is fresher than the
 		// worker frame (the worker echoes the previous drag-move), so keep the
 		// local coords — otherwise the grabbed node rubber-bands behind the
@@ -436,6 +448,7 @@ export class GraphRenderer {
 	/** Re-run the camera projection into the 2D pipeline arrays. */
 	private reproject(): void {
 		if (!this.positions3) return;
+		this.invalidate();
 		const count = this.positions3.length / 3;
 		if (!this.positions || this.positions.length !== count * 2) {
 			this.positions = new Float32Array(count * 2);
@@ -463,6 +476,7 @@ export class GraphRenderer {
 	 *  transition — repeated calls from settings changes must NOT touch
 	 *  the current viewpoint. */
 	set3DMode(enabled: boolean): void {
+		this.invalidate();
 		const turningOn = enabled && !this.camera.enabled;
 		this.camera.enabled = enabled;
 		if (turningOn) {
@@ -486,6 +500,7 @@ export class GraphRenderer {
 	 *  orientation the 2D→3D toggle starts with, then the whole graph is
 	 *  framed — which also rebuilds pan and zoom from scratch in 2D. */
 	resetCamera(): void {
+		this.invalidate();
 		if (this.camera.enabled) {
 			this.camera.yaw = DEFAULT_3D_YAW;
 			this.camera.pitch = DEFAULT_3D_PITCH;
@@ -533,6 +548,7 @@ export class GraphRenderer {
 
 	/** Fit every visible node into the viewport. */
 	fitAll(): void {
+		this.invalidate();
 		if (!this.positions || !this.radii) return;
 		if (this.camera.enabled && this.positions3) {
 			// 3D: fly the camera back to где всё облако в кадре — fitting the
@@ -565,6 +581,7 @@ export class GraphRenderer {
 		) {
 			return;
 		}
+		this.invalidate();
 		this.app.resize();
 		if (this.camera.enabled && this.viewport) {
 			this.world.scale.set(1);
@@ -574,16 +591,20 @@ export class GraphRenderer {
 	}
 
 	setCameraFocal(focal: number): void {
+		this.invalidate();
 		this.camera.focal = focal;
 		if (this.camera.enabled) this.reproject();
 	}
 
 	setDepthOverride(depths: Float32Array | null): void {
+		this.invalidate();
 		this.depthOverride = depths;
 		this.reproject();
 	}
 
 	setSelected(nodeId: number | null): void {
+		this.invalidate();
+		this.cullDirty = true;
 		this.selectedId = nodeId;
 		this.applyNodeTints();
 	}
@@ -598,6 +619,7 @@ export class GraphRenderer {
 
 	applyEncoding(sizes: Float32Array, tints: Int32Array, glow: Float32Array): void {
 		if (!this.radii || sizes.length !== this.sprites.length) return;
+		this.invalidate();
 		this.encodedTints = tints;
 		this.encodedGlow = glow;
 		let maxRadius = 0;
@@ -617,6 +639,7 @@ export class GraphRenderer {
 	}
 
 	setDimMask(mask: Uint8Array | null): void {
+		this.invalidate();
 		this.dimMask = mask;
 		this.applyNodeAlpha();
 	}
@@ -627,17 +650,20 @@ export class GraphRenderer {
 	private highlightMask: Uint8Array | null = null;
 
 	setHighlightMask(mask: Uint8Array | null): void {
+		this.invalidate();
 		this.highlightMask = mask;
 		this.applyNodeTints();
 		this.applyHoverSize();
 	}
 
 	setAlphaFactors(factors: Float32Array | null): void {
+		this.invalidate();
 		this.alphaFactors = factors;
 		this.applyNodeAlpha();
 	}
 
 	setHiddenMask(mask: Uint8Array | null): void {
+		this.invalidate();
 		this.hiddenMask = mask;
 		this.syncEdgeVisibility();
 		if (this.positions) {
@@ -722,6 +748,7 @@ export class GraphRenderer {
 	private hullGroups: readonly { nodeIds: readonly number[]; color: number }[] | null = null;
 
 	drawClusterHulls(groups: readonly { nodeIds: readonly number[]; color: number }[] | null): void {
+		this.invalidate();
 		this.hullGroups = groups;
 		this.redrawHulls();
 	}
@@ -755,6 +782,7 @@ export class GraphRenderer {
 
 	/** Session trail: node visit order; progress 0..1 for replay animation. */
 	setSessionTrail(nodeIds: number[] | null, progress = 1): void {
+		this.invalidate();
 		this.trailNodeIds = nodeIds ?? [];
 		this.trailProgress = progress;
 		this.redrawTrail();
@@ -783,6 +811,7 @@ export class GraphRenderer {
 
 	/** The chain found by the path tool, in order. Null clears it. */
 	setPathHighlight(nodeIds: readonly number[] | null): void {
+		this.invalidate();
 		this.pathNodeIds = nodeIds ? [...nodeIds] : [];
 		this.redrawPath();
 		// The route names its own notes, so the label pass has to run again.
@@ -815,6 +844,7 @@ export class GraphRenderer {
 	/** Nodes the user has pinned in place. Drawn as rings so a pin is visible
 	 *  without a tooltip — otherwise a node that ignores physics looks broken. */
 	setPinned(ids: ReadonlySet<number>): void {
+		this.invalidate();
 		this.pinnedIds = ids;
 		this.redrawPins();
 	}
@@ -839,8 +869,17 @@ export class GraphRenderer {
 
 	/** Explore mode: what to draw around the node under the camera; null off. */
 	setExploreOverlay(overlay: ExploreOverlay | null): void {
+		const previous = this.explore;
+		if (previous === null && overlay === null) return;
+		if (previous && overlay &&
+			previous.centerId === overlay.centerId &&
+			previous.candidateId === overlay.candidateId &&
+			previous.neighbors.length === overlay.neighbors.length &&
+			previous.neighbors.every((id, index) => id === overlay.neighbors[index])) return;
+		this.invalidate();
+		this.cullDirty = true;
 		const wasExploring = this.explore !== null;
-		this.explore = overlay;
+		this.explore = overlay ? { ...overlay, neighbors: [...overlay.neighbors] } : null;
 		// The rest of the vault's links are the loudest thing on screen once
 		// the nodes are dimmed, so fade the whole edge mesh while the mode
 		// draws its own links on top of it.
@@ -881,6 +920,7 @@ export class GraphRenderer {
 	centerOnNode(nodeId: number): void {
 		if (!this.app || !this.viewport || !this.positions) return;
 		if (nodeId * 2 + 1 >= this.positions.length) return;
+		this.invalidate();
 		this.viewport.centerOn(
 			this.positions[nodeId * 2],
 			this.positions[nodeId * 2 + 1],
@@ -926,6 +966,7 @@ export class GraphRenderer {
 		position: { x: number; y: number; z: number },
 		pivot: { x: number; y: number; z: number }
 	): void {
+		this.invalidate();
 		this.camera.px = position.x;
 		this.camera.py = position.y;
 		this.camera.pz = position.z;
@@ -967,8 +1008,9 @@ export class GraphRenderer {
 
 	/** Current viewport rendered at 2x into a PNG blob. */
 	async exportPng(): Promise<Blob | null> {
-		if (!this.app) return null;
+		if (!this.app || this.contextLost || this.destroyed) return null;
 		try {
+			this.renderFrame(true);
 			const canvas = this.app.renderer.extract.canvas({
 				target: this.app.stage,
 				frame: this.app.screen,
@@ -984,6 +1026,7 @@ export class GraphRenderer {
 	/** Center the viewport on a set of nodes and zoom to fit them. */
 	zoomToNodes(nodeIds: readonly number[]): void {
 		if (!this.app || !this.positions || !this.viewport || nodeIds.length === 0) return;
+		this.invalidate();
 		let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
 		for (const id of nodeIds) {
 			const x = this.positions[id * 2];
@@ -1012,9 +1055,31 @@ export class GraphRenderer {
 		}
 	}
 
-	private renderFrame(): void {
-		if (this.contextLost || this.paused || this.destroyed) return;
-		if (!this.model || !this.positions || !this.radii) return;
+	private invalidate(): void {
+		this.needsRender = true;
+	}
+
+	private renderFrame(force = false): void {
+		if (!this.app || this.contextLost || this.destroyed || (this.paused && !force)) return;
+		// Capture work before scene updates clear flags, including the final
+		// smoothing snap and the last deferred-label pass.
+		if (this.smoothing || this.positionsDirty || this.edgesDirty || this.cullDirty) this.invalidate();
+		this.updateScene(force);
+		const now = performance.now();
+		if (force || !RENDER_ON_DEMAND || this.needsRender || now - this.lastRenderAt >= MAX_IDLE_RENDER_MS) {
+			this.app.render();
+			this.needsRender = false;
+			this.lastRenderAt = now;
+		}
+	}
+
+	private updateScene(force: boolean): void {
+		if (!this.model || !this.positions || !this.radii) {
+			this.positionsDirty = false;
+			this.edgesDirty = false;
+			this.cullDirty = false;
+			return;
+		}
 
 		// Close part of the gap to the worker's latest frame. Once the graph is
 		// settled `smoothing` goes false and the projection stops re-running,
@@ -1058,10 +1123,10 @@ export class GraphRenderer {
 			const now = performance.now();
 			// Culling correctness can lag a frame or two; don't let it eat
 			// the budget on every single frame of a running simulation.
-			if (now - this.lastCullAt >= CULL_MIN_INTERVAL_MS) {
+			if (force || now - this.lastCullAt >= CULL_MIN_INTERVAL_MS) {
 				this.lastCullAt = now;
 				this.cullDirty = false;
-				this.cullAndLabel(); // may re-set cullDirty to finish deferred labels
+				this.cullAndLabel(force); // may re-set cullDirty to finish deferred labels
 			}
 		}
 	}
@@ -1071,7 +1136,7 @@ export class GraphRenderer {
 	/** Zoom the 2D size floor was last applied at; a change re-derives sizes. */
 	private lastSizedScale = 0;
 
-	private cullAndLabel(): void {
+	private cullAndLabel(complete = false): void {
 		if (!this.app || !this.model || !this.positions || !this.radii || !this.viewport) return;
 		const scale = this.viewport.scale;
 		// Sub-percent zoom changes shift the floor by less than a pixel; skip
@@ -1120,7 +1185,7 @@ export class GraphRenderer {
 		const showLabels = this.labelsVisible && (depthGated || zoomRatio >= this.labelZoomThreshold);
 		const readable = !this.labelScaleWithZoom || this.labelFontSize * scale >= MIN_LABEL_SCREEN_PX;
 		let labelBudget = showLabels && readable ? this.labelMaxCount : 0;
-		let creationBudget = NEW_LABELS_PER_FRAME;
+		let creationBudget = complete ? Infinity : NEW_LABELS_PER_FRAME;
 		let creationSkipped = false;
 		const labeled = new Set<number>();
 		const occupiedLabelBounds: LabelBox[] = [];
@@ -1238,6 +1303,7 @@ export class GraphRenderer {
 		maxCount: number,
 		scaleWithZoom: boolean
 	): void {
+		this.invalidate();
 		const changed = fontSize !== this.labelFontSize;
 		this.labelsVisible = show;
 		this.labelFontSize = fontSize;
@@ -1252,6 +1318,7 @@ export class GraphRenderer {
 	}
 
 	setEdgeStyle(show: boolean, width: number, opacity: number): void {
+		this.invalidate();
 		this.edgesVisible = show;
 		this.edgeWidth = width;
 		this.edgeOpacity = opacity;
@@ -1272,6 +1339,8 @@ export class GraphRenderer {
 	 */
 	refreshThemeColors(): void {
 		if (!this.host) return;
+		this.invalidate();
+		this.cullDirty = true;
 		this.colors = readThemeColors(this.host);
 		this.labelHalo = cssColorToNumber(
 			getComputedStyle(this.host).getPropertyValue("--background-primary").trim() || "#1e1e1e",
@@ -1285,6 +1354,7 @@ export class GraphRenderer {
 	}
 
 	setVisualStyle(style: NodeStyle, backdrop: number | null): void {
+		this.invalidate();
 		if (this.app) {
 			this.app.renderer.background.alpha = backdrop === null ? 0 : 1;
 			if (backdrop !== null) this.app.renderer.background.color = backdrop;
@@ -1408,6 +1478,7 @@ export class GraphRenderer {
 				this.world.position.x += dx;
 				this.world.position.y += dy;
 				this.cullDirty = true;
+				this.invalidate();
 			}
 			return;
 		}
@@ -1467,6 +1538,8 @@ export class GraphRenderer {
 		}
 		const nodeId = this.findNodeAt(event.clientX, event.clientY);
 		if (nodeId !== this.hoveredId) {
+			this.invalidate();
+			this.cullDirty = true;
 			this.hoveredId = nodeId;
 			this.updateHoverNeighbors();
 			this.applyNodeTints();
@@ -1669,6 +1742,7 @@ export class GraphRenderer {
 	private extendLasso(event: PointerEvent): void {
 		const point = this.toWorldPoint(event);
 		if (!point || !this.lassoPoints) return;
+		this.invalidate();
 		this.lassoPoints.push(point);
 		const g = this.lassoGraphics;
 		g.clear();
@@ -1682,6 +1756,7 @@ export class GraphRenderer {
 	}
 
 	private finishLasso(event: PointerEvent): void {
+		this.invalidate();
 		const polygon = this.lassoPoints;
 		this.lassoPoints = null;
 		this.lassoGraphics.clear();

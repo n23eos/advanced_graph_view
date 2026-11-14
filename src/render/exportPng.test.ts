@@ -3,6 +3,7 @@ import { GraphRenderer, type RendererCallbacks } from "./GraphRenderer";
 
 interface ExportHarness {
 	app: {
+		render: ReturnType<typeof vi.fn>;
 		stage: object;
 		screen: { x: number; y: number; width: number; height: number };
 		renderer: {
@@ -36,6 +37,7 @@ describe("GraphRenderer PNG export", () => {
 			return canvas;
 		});
 		harness.app = {
+			render: vi.fn(),
 			stage,
 			screen,
 			renderer: { extract: { canvas: extractCanvas } },
@@ -55,6 +57,7 @@ describe("GraphRenderer PNG export", () => {
 		const error = new RangeError("Invalid typed array length 101221965600");
 		const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
 		harness.app = {
+			render: vi.fn(),
 			stage: {},
 			screen: { x: 0, y: 0, width: 988, height: 1174 },
 			renderer: { extract: { canvas: vi.fn(() => { throw error; }) } },
