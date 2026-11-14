@@ -58,3 +58,8 @@ A8: версия 0.10.2 подготовлена локально отдельн
 
 - B2: таблица зависимостей подтверждена чтением методов. Чистый panelDiff: 10 новых тестов; integration RED 2 FAIL / 1 PASS до wiring. Предыдущее состояние захватывается до savePanelState, четыре дорогих эффекта gated; полное применение presets/rebuild и остальные вызовы сохранены.
 - B2: изолированный staged verify/build PASS, 791 тест / 95 файлов, lint 12 прежних предупреждений. Повтор benchmark запущен; код standalone renderer/worker в B2 не меняется.
+
+- B3: Pixi 8.19 source/TickerPlugin и Context7 подтверждают ticker.stop/start. Visibility observer подключён после успешного init в обеих views и отключается до первого await в close. Поздние callbacks игнорируются. Worker продолжает работу; скрытый renderer принимает последние координаты для save/autoFit, resume обновляет projection. 16 новых тестов с RED до реализации, нативно пока не проверено.
+
+- B2 benchmark: layout 28.2 FPS, pan 16.8, zoom 16.5; worker interval 184.8/367.9 мс; idle 1754 render/30 с, render JS 2127.7 мс, tick JS 14.3 мс, ошибок 0. Исполняемые renderer/worker неизменны относительно B0; фоновая нагрузка не изолирована.
+- B3: изолированный staged verify/build PASS, 807 тестов / 99 файлов, lint 12 прежних предупреждений.

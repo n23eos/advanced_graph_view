@@ -17,6 +17,7 @@ import { activePreset, isLightTheme } from "../render/theme";
 import { effectiveNodeStyle } from "../render/nodeStyle";
 import { degreeRadius } from "../render/nodeAppearance";
 import { AutoFitGate } from "./autoFitGate";
+import { observeRendererVisibility } from "./rendererVisibility";
 import { t } from "../i18n";
 import { renderGraphStartupError } from "../ui/GraphStartupError";
 import type GraphInsightPlugin from "../main";
@@ -31,6 +32,7 @@ const ROOT_SIZE_BOOST = 1.6;
 
 export class LocalGraphView extends ItemView {
 	private renderer: GraphRenderer | null = null;
+	private stopObservingRendererVisibility: (() => void) | null = null;
 	private layout: LayoutClient | null = null;
 	private readonly autoFit = new AutoFitGate();
 	private neighborhood: Neighborhood | null = null;
@@ -114,6 +116,8 @@ export class LocalGraphView extends ItemView {
 			if (this.renderer === renderer) this.renderer = null;
 			return;
 		}
+		this.stopObservingRendererVisibility?.();
+		this.stopObservingRendererVisibility = observeRendererVisibility(container, renderer);
 		window.requestAnimationFrame(() => {
 			if (!this.closing && this.openGeneration === openGeneration && this.renderer === renderer) {
 				renderer.resize();
@@ -168,6 +172,8 @@ export class LocalGraphView extends ItemView {
 	async onClose(): Promise<void> {
 		this.closing = true;
 		this.openGeneration++;
+		this.stopObservingRendererVisibility?.();
+		this.stopObservingRendererVisibility = null;
 		this.layout?.stop();
 		this.renderer?.destroy();
 		this.renderer = null;

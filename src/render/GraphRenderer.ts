@@ -163,6 +163,7 @@ function readThemeColors(host: HTMLElement): ThemeColors {
 export class GraphRenderer {
 	private app: Application | null = null;
 	private destroyed = false;
+	private paused = false;
 	private world = new Container();
 	private edgeMesh: EdgeMesh | null = null;
 	private hullGraphics = new Graphics();
@@ -325,6 +326,27 @@ export class GraphRenderer {
 		window.addEventListener("pointerup", this.handlePointerUp);
 
 		app.ticker.add(() => this.renderFrame());
+		if (this.paused) app.ticker.stop();
+	}
+
+	pause(): void {
+		if (this.destroyed) return;
+		this.paused = true;
+		// Persist the latest worker frame even if smoothing had not reached it
+		// when the pane was hidden. Projection can wait until the pane returns.
+		if (this.smoothing && this.targetPositions3) {
+			this.positions3 = new Float32Array(this.targetPositions3);
+			this.smoothing = false;
+		}
+		this.app?.ticker.stop();
+	}
+
+	resume(): void {
+		if (this.destroyed || this.contextLost) return;
+		const wasPaused = this.paused;
+		this.paused = false;
+		if (wasPaused) this.reproject();
+		this.app?.ticker.start();
 	}
 
 	setModel(model: GraphModel): void {
@@ -391,10 +413,12 @@ export class GraphRenderer {
 		}
 		this.targetPositions3 = positions3;
 
+		// Hidden panes adopt the frame so persistence and auto-fit stay current.
 		// First frame of a model, or a node-count change: adopt it outright.
 		// Easing from a zeroed array would explode the graph out of the origin
 		// and hand `fitAll` a knot to frame.
 		if (
+			this.paused ||
 			!this.hasWorkerFrame ||
 			!this.positions3 ||
 			this.positions3.length !== positions3.length
@@ -989,7 +1013,7 @@ export class GraphRenderer {
 	}
 
 	private renderFrame(): void {
-		if (this.contextLost) return;
+		if (this.contextLost || this.paused || this.destroyed) return;
 		if (!this.model || !this.positions || !this.radii) return;
 
 		// Close part of the gap to the worker's latest frame. Once the graph is

@@ -1,3 +1,4 @@
+import { observeRendererVisibility } from "./rendererVisibility";
 import { panelDiff } from "./panelDiff";
 import {
 	ItemView,
@@ -108,6 +109,7 @@ const EXPLORE_BACKGROUND_ALPHA = 0.05;
 
 export class GraphInsightView extends ItemView {
 	private renderer: GraphRenderer | null = null;
+	private stopObservingRendererVisibility: (() => void) | null = null;
 	private layout: LayoutClient | null = null;
 	/** Frames the graph after the first layout and after a preset switch. */
 	private readonly autoFit = new AutoFitGate();
@@ -306,6 +308,9 @@ export class GraphInsightView extends ItemView {
 			if (this.renderer === renderer) this.renderer = null;
 			return;
 		}
+
+		this.stopObservingRendererVisibility?.();
+		this.stopObservingRendererVisibility = observeRendererVisibility(container, renderer);
 
 		// Any manual pan/zoom/drag means the user framed the view themselves.
 		this.registerDomEvent(container, "pointerdown", () => this.autoFit.cancel());
@@ -2812,6 +2817,8 @@ export class GraphInsightView extends ItemView {
 	async onClose(): Promise<void> {
 		this.closing = true;
 		this.openGeneration++;
+		this.stopObservingRendererVisibility?.();
+		this.stopObservingRendererVisibility = null;
 		this.rebuildGeneration++;
 		this.rebuilding = false;
 		this.rebuildPending = false;

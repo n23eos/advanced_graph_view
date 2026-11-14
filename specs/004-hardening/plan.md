@@ -190,7 +190,7 @@
 **Тест.** Чистая функция `panelDiff(prev, next)` с флагами; тесты на каждую строку таблицы и на "prev отсутствует -> всё true".
 
 ### B3. Остановка рендера на скрытой вкладке
-- [ ] Статус `[NATIVE]`
+- [x] Реализация и unit; `[NATIVE]` не проверено
 
 **Правка.** `GraphRenderer`: методы `pause()` / `resume()` -> `app.ticker.stop()` / `app.ticker.start()` (сверь API по `node_modules/pixi.js`, версия 8.19). `GraphView`: `IntersectionObserver` на `contentEl` (создан в `onOpen`, `disconnect` в `onClose`): невидим -> `pause`, видим -> `resume` + `renderer.resize()`. То же для `LocalGraphView`.
 
