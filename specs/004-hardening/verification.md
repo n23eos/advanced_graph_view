@@ -184,3 +184,9 @@ Mac по-прежнему заблокирован. Нативные прове�
 - Extended only browser host API stubs for offref, flushSettings, snapshots and containerEl so the existing UI harness can exercise the current runtime. The FuzzySuggestModal stub still does not render a real picker: that route is not accepted in this harness.
 - Real GraphView, renderer and workers on 42 synthetic notes: Explore entry, opening its note, detached mode and exit; narrow 360 px/light theme; overflow menu and Changes category/open-note; committed tag:graph filter shows 6/42; broken-links task applies its preset and clears query, Undo restores query; empty-vault teardown and remount to 42 notes. No application errors in the error panel or captured app logs. Unrelated wallet extension errors were excluded by source URL. Screenshots inspected at 1200 px/dark and 360 px/light.
 - D1-D7 independent reviews found no substantial defects. D6/D7 reviewer additionally ran 22 targeted tests in four files. Full native Obsidian route, actual popout and full restart remain unverified because the Mac is locked. No BRAT beta/release is published under the owner's restriction.
+
+## D close: unpublished 0.11.0-beta.1, 2026-11-14
+
+- Seven controllers extracted in seven commits, with separate browser adapter support. GraphView retains orchestration and shared state; no runtime behavior, settings formats or original test assertions changed by the extraction.
+- Final verify: 912 tests / 124 files PASS, typecheck PASS, lint 0 errors/0 warnings. Production build PASS. Logs: /tmp/hardening-d-final-verify.log and /tmp/hardening-d-final-build.log.
+- Manifest/package/lock root, versions.json, CHANGELOG and English draft notes prepared. Native full-route acceptance remains open. No tag, release or BRAT beta publication.

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0-beta.1] - 2026-11-14
+
+### Changed
+
+- Move graph export, menus, note navigation, presets, Changes, tooltip and Explore actions into dedicated controllers with live dependencies.
+- Preserve existing behavior, settings, command IDs and data formats throughout the extraction.
+
 ## [0.10.4] - 2026-11-14
 
 ### Changed

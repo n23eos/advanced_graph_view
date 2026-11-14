@@ -1,15 +1,13 @@
-# Advanced Graph View 0.10.4
+# Advanced Graph View 0.11.0-beta.1
 
-Draft release preparation. Not published. Native acceptance remains incomplete; publication is not authorized.
+Unpublished beta candidate. Release and BRAT publication are not authorized.
 
-- New notes start near an existing neighbor when saved positions are available.
-- Reduced motion makes camera flights and trail replay immediate and disables interface transitions.
-- Main and local graph panes use their own window for rendering, pointer and keyboard input, timers and theme colors.
-- Moving a pane recreates its renderer. Closing during a move cancels reopening, and failed persistence still releases resources.
-- The manifest includes the existing Ko-fi support link.
+This candidate organizes GraphView into seven controllers: exports, menus, note navigation, presets and tasks, Changes, tooltips and Explore. Existing behavior, settings and data formats are preserved.
 
-Verification: 912 tests in 124 files, typecheck, lint with zero warnings and production build passed. Independent review fixes have regression coverage.
+Verification: all 912 existing tests in 124 files, typecheck, lint with zero warnings and production build pass. Each controller was committed separately. Independent review covered every extraction.
 
-Popout interaction, reduced-motion appearance and the remaining native checks from earlier hardening stages are not yet accepted. The Mac was locked during these checks. This draft must not be treated as a published or natively accepted release.
+Browser checks use the real graph and workers with a synthetic Obsidian host: Explore entry/detach/exit, note navigation, search, task presets and Undo, Changes, empty-vault remount, narrow and light layouts. This is not full native Obsidian acceptance. The actual fuzzy note picker is unsupported by the browser adapter.
+
+Native popout, restart persistence and the complete release-readiness route remain open while the Mac is locked. No beta or release has been published.
 
 Requires Obsidian 1.13.0 or later. Desktop only.
