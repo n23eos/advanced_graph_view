@@ -81,6 +81,7 @@ export interface ExploreOverlay {
 
 export interface RendererCallbacks {
 	onCameraChanged?(): void;
+	onNodePreview?(nodeId: number | null, event: PointerEvent): void;
 	onNodeHover(nodeId: number | null, clientX: number, clientY: number): void;
 	onNodeClick(nodeId: number, event: PointerEvent): void;
 	onNodeDoubleClick(nodeId: number): void;
@@ -296,6 +297,16 @@ export class GraphRenderer {
 		this.invalidate();
 		this.cullDirty = true;
 		this.reproject();
+	}
+
+	previewNodeAt(clientX: number, clientY: number): number | null {
+		const rect = this.app?.canvas.getBoundingClientRect();
+		if (!rect || clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) return null;
+		return this.findNodeAt(clientX, clientY);
+	}
+
+	get canvasElement(): HTMLCanvasElement | null {
+		return this.app?.canvas ?? null;
 	}
 
 	async init(host: HTMLElement, renderScale: RenderScale = "standard"): Promise<void> {
@@ -1632,6 +1643,7 @@ export class GraphRenderer {
 			if (nodeId !== null) {
 				this.callbacks.onNodeHover(nodeId, event.clientX, event.clientY);
 			}
+			this.callbacks.onNodePreview?.(nodeId, event);
 			return;
 		}
 		const nodeId = this.findNodeAt(event.clientX, event.clientY);
@@ -1645,6 +1657,7 @@ export class GraphRenderer {
 			this.applyHoverSize();
 		}
 		this.callbacks.onNodeHover(nodeId, event.clientX, event.clientY);
+		this.callbacks.onNodePreview?.(nodeId, event);
 	};
 
 	/** Which link the pointer is aiming down, in explore mode. */

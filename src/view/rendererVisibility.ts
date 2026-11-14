@@ -5,7 +5,7 @@ interface VisibleRenderer {
 }
 
 /** Keep hidden panes off the render loop; cleanup also rejects queued events. */
-export function observeRendererVisibility(host: HTMLElement, renderer: VisibleRenderer): () => void {
+export function observeRendererVisibility(host: HTMLElement, renderer: VisibleRenderer, onHidden?: () => void): () => void {
 	const fallbackObserver = typeof IntersectionObserver === "undefined" ? undefined : IntersectionObserver;
 	const ownerWindow = host.ownerDocument?.defaultView;
 	const Observer = ownerWindow ? ownerWindow.IntersectionObserver : fallbackObserver;
@@ -22,6 +22,7 @@ export function observeRendererVisibility(host: HTMLElement, renderer: VisibleRe
 				renderer.resize();
 			} else {
 				renderer.pause();
+				onHidden?.();
 			}
 		}
 	});

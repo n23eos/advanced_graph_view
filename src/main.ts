@@ -104,6 +104,7 @@ export default class GraphInsightPlugin extends Plugin {
 		const loaded = await this.dataStore.loadUsage();
 		this.usageLog = loaded ? compactLog(loaded, Date.now()) : emptyLog();
 
+		this.registerHoverLinkSource(GRAPH_INSIGHT_VIEW_TYPE, { display: this.manifest.name, defaultMod: true });
 		this.registerView(GRAPH_INSIGHT_VIEW_TYPE, (leaf) => new GraphInsightView(leaf, this));
 		this.registerView(INSIGHTS_VIEW_TYPE, (leaf) => new InsightsView(leaf, this));
 		this.registerView(LOCAL_GRAPH_VIEW_TYPE, (leaf) => new LocalGraphView(leaf, this));

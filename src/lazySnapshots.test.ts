@@ -14,6 +14,7 @@ vi.mock("obsidian", async (importOriginal) => ({
 		constructor(public app: unknown, public manifest: unknown) {}
 		loadData = async () => ({ ...DEFAULT_SETTINGS, physicsDefaultsVersion: 1, viewPresetsVersion: 8 });
 		async saveData(): Promise<void> {}
+		registerHoverLinkSource(): void {}
 		registerView(): void {}
 		addSettingTab(): void {}
 		addCommand(): void {}

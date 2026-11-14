@@ -1,3 +1,4 @@
+import { NativeHoverPreview } from "./nativeHoverPreview";
 import { ExploreBindings } from "./exploreBindings";
 import { TooltipController } from "./tooltip";
 import { ChangesController } from "./changesController";
@@ -93,6 +94,7 @@ const COLLIDE_BASE_RADIUS = 0;
 const EXPLORE_BACKGROUND_ALPHA = 0.05;
 
 export class GraphInsightView extends ItemView {
+	private nativeHoverPreview: NativeHoverPreview | null = null;
 	private exploreBindingsController?: ExploreBindings;
 	private get exploreBindings(): ExploreBindings {
 		return this.exploreBindingsController ??= new ExploreBindings({
@@ -563,6 +565,12 @@ export class GraphInsightView extends ItemView {
 		this.pendingWorkspaceQueryUi = true;
 	}
 
+	private nativePreviewPath(nodeId: number | null): string | null {
+		const path = nodeId === null ? undefined : this.model?.nodes[nodeId]?.path;
+		const file = path ? this.app.vault.getAbstractFileByPath(path) : null;
+		return file instanceof TFile ? file.path : null;
+	}
+
 	async onOpen(): Promise<void> {
 		this.clearOpenListeners();
 		const openGeneration = ++this.openGeneration;
@@ -591,6 +599,9 @@ export class GraphInsightView extends ItemView {
 
 		const renderer = new GraphRenderer({
 			onCameraChanged: () => this.handleCameraChanged(),
+			onNodePreview: (nodeId, event) => {
+				this.nativeHoverPreview?.hover(this.nativePreviewPath(nodeId), event);
+			},
 			onNodeHover: (nodeId, clientX, clientY) => {
 				if (this.isExploring) this.showExploreTarget(nodeId, clientX, clientY);
 				else this.showTooltip(nodeId, clientX, clientY);
@@ -650,8 +661,15 @@ export class GraphInsightView extends ItemView {
 			return;
 		}
 
+		this.nativeHoverPreview?.destroy();
+		this.nativeHoverPreview = renderer.canvasElement ? new NativeHoverPreview(
+			renderer.canvasElement, GRAPH_INSIGHT_VIEW_TYPE,
+			(name, payload) => this.app.workspace.trigger(name, payload),
+			(x, y) => this.nativePreviewPath(renderer.previewNodeAt(x, y)),
+		) : null;
+
 		this.stopObservingRendererVisibility?.();
-		this.stopObservingRendererVisibility = observeRendererVisibility(container, renderer);
+		this.stopObservingRendererVisibility = observeRendererVisibility(container, renderer, () => this.nativeHoverPreview?.clear());
 
 		// Any manual pan/zoom/drag means the user framed the view themselves.
 		const cancelAutoFit = () => this.autoFit.cancel();
@@ -1600,6 +1618,7 @@ export class GraphInsightView extends ItemView {
 			// Frame the graph once the very first layout settles; later rebuilds
 			// (vault edits) keep whatever framing the user has.
 			if (!this.model && this.pendingWorkspaceCamera === null) this.autoFit.request();
+			this.nativeHoverPreview?.clear();
 			this.model = model;
 			consumeRenames(this.renamed, renamed);
 			this.facts = this.buildFacts(model, files);
@@ -1789,6 +1808,7 @@ export class GraphInsightView extends ItemView {
 		// The layout client tore itself down on the error; a rebuild spawns a
 		// fresh worker. Clearing the model defeats the "nothing changed" guard,
 		// which would otherwise make the rebuild a no-op.
+		this.nativeHoverPreview?.clear();
 		this.model = null;
 		this.rebuilding = false;
 		await this.rebuildGraph();
@@ -2532,6 +2552,8 @@ export class GraphInsightView extends ItemView {
 	}
 
 	private async teardown(): Promise<void> {
+		this.nativeHoverPreview?.destroy();
+		this.nativeHoverPreview = null;
 		this.closing = true;
 		this.cancelWorkspaceSave();
 		this.openGeneration++;
