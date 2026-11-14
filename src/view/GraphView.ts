@@ -14,6 +14,7 @@ import { buildAdjacency, computeDistances, focusFalloff, shortestPath, type Adja
 import { nameClusters, type ClusterContent } from "../analysis/clusterNames";
 import { computeOverlayMask, countOverlayMatches } from "../analysis/overlays";
 import { buildGraphModel, sameGraphModel, type GraphModel } from "../data/GraphStore";
+import { carryMetrics, diffFacts } from "./factsRefresh";
 import { stripMarkdown } from "../data/stripMarkdown";
 import { countRecentOpens } from "../data/UsageTracker";
 import type { PositionMap } from "../data/persistence";
@@ -1730,7 +1731,10 @@ export class GraphInsightView extends ItemView {
 			this.rebuildPending = true;
 			return;
 		}
-		if (this.model && sameGraphModel(this.model, model)) return;
+		if (this.model && sameGraphModel(this.model, model)) {
+			this.refreshFacts(files);
+			return;
+		}
 		this.rebuilding = true;
 
 		const generation = ++this.rebuildGeneration;
@@ -2070,6 +2074,27 @@ export class GraphInsightView extends ItemView {
 			this.layout?.pin(id, seed[id * 3], seed[id * 3 + 1], seed[id * 3 + 2]);
 		}
 		this.renderer?.setPinned(new Set(this.explicitPins));
+	}
+
+	private refreshFacts(files: TFile[]): void {
+		// An incomplete view has no facts to refresh until its first build finishes.
+		if (!this.model || this.facts.length !== this.model.nodes.length) return;
+		const next = carryMetrics(this.facts, this.buildFacts(this.model, files));
+		const { changed, groupingChanged } = diffFacts(this.facts, next);
+		if (!changed) return;
+		this.facts = next;
+		this.tooltipNodeId = null;
+		const panel = this.plugin.settings.panel;
+		this.applyEncoding(panel);
+		this.recomputeVisual();
+		const vocabulary = collectVocabulary(this.facts);
+		this.searchBar?.setVocabulary(...vocabulary);
+		this.filterChips?.setVocabulary(...vocabulary);
+		this.refreshTimelineData();
+		if (groupingChanged) {
+			this.appliedLayoutRule = null;
+			this.applyLayoutRule(panel.layoutRule);
+		}
 	}
 
 	private buildFacts(model: GraphModel, files: TFile[]): NodeFacts[] {

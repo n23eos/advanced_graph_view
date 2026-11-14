@@ -102,3 +102,46 @@ describe("queued graph rebuild", () => {
 		expect(view.rebuildPending).toBe(false);
 	});
 });
+
+describe("facts refresh with unchanged topology", () => {
+	test("updates metadata and usage while keeping worker metrics and layout", async () => {
+		const { view, files, fileCache, plugin, layout, effects } = build();
+		await view.rebuildGraph();
+		view.facts[0].pagerank = 0.7;
+		view.facts[0].cluster = "Work";
+		const model = view.model;
+		vi.clearAllMocks();
+		files[0].stat.mtime = 20;
+		files[0].stat.size = 40;
+		fileCache.tags = ["#new"];
+		plugin.usageLog = { "a.md": { total: 3, days: {} } };
+		await view.rebuildGraph();
+		expect(view.facts[0]).toMatchObject({ mtime: 20, size: 40, tags: ["new"], opensTotal: 3, pagerank: 0.7, cluster: "Work" });
+		expect(view.model).toBe(model);
+		expect(layout.start).not.toHaveBeenCalled();
+		expect(effects.applyEncoding).toHaveBeenCalledOnce();
+		expect(effects.recomputeVisual).toHaveBeenCalledOnce();
+		expect(effects.refreshTimelineData).toHaveBeenCalledOnce();
+		expect(effects.applyLayoutRule).toHaveBeenCalledOnce();
+	});
+	test("an mtime change refreshes visuals but does not regroup nodes", async () => {
+		const { view, files, effects } = build();
+		await view.rebuildGraph();
+		vi.clearAllMocks();
+		files[0].stat.mtime = 30;
+		await view.rebuildGraph();
+		expect(view.facts[0].mtime).toBe(30);
+		expect(effects.applyEncoding).toHaveBeenCalledOnce();
+		expect(effects.applyLayoutRule).not.toHaveBeenCalled();
+	});
+	test("unchanged facts leave visuals and layout untouched", async () => {
+		const { view, effects, layout } = build();
+		await view.rebuildGraph();
+		const facts = view.facts;
+		vi.clearAllMocks();
+		await view.rebuildGraph();
+		expect(view.facts).toBe(facts);
+		expect(effects.applyEncoding).not.toHaveBeenCalled();
+		expect(layout.start).not.toHaveBeenCalled();
+	});
+});
