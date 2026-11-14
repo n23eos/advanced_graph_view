@@ -147,3 +147,9 @@ Mac по-прежнему заблокирован. Нативные прове�
 - Moved node, lasso, task and responsive overflow menu bodies into GraphMenus with narrow live getters and callbacks. GraphView keeps all four private wrappers and lazy facade initialization for prototype-based fixtures.
 - Existing menu behavior, task action ids, clipboard writes, pin and hidden-node mutations, navigation callbacks and popup positions are unchanged. No existing tests changed.
 - verify: 912 tests / 124 files PASS, typecheck and lint zero warnings PASS; build PASS. Logs: /tmp/hardening-d2-verify.log and /tmp/hardening-d2-build.log.
+
+## D3: note navigation extraction, 2026-11-14
+
+- Moved note opening, companion pane reuse and file explorer reveal behavior into NoteNavigation with narrow live getters and state callbacks. GraphView keeps the private entry wrappers and lazy facade initialization for prototype-based fixtures.
+- Graph model lookup, self-open suppression, companion leaf state and file explorer capability probing are unchanged. No existing tests changed.
+- verify: 912 tests / 124 files PASS, typecheck and lint zero warnings PASS; build PASS. Logs: /tmp/hardening-d3-verify.log and /tmp/hardening-d3-build.log.

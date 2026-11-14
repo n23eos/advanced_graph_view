@@ -1,5 +1,6 @@
 import { ExportActions } from "./exportActions";
 import { GraphMenus } from "./menus";
+import { NoteNavigation, type FileExplorerView } from "./noteNavigation";
 import { observeRendererVisibility } from "./rendererVisibility";
 import { panelDiff } from "./panelDiff";
 import {
@@ -11,8 +12,6 @@ import {
 	getAllTags,
 	type EventRef,
 	type Events,
-	type TAbstractFile,
-	type View,
 	type WorkspaceLeaf,
 } from "obsidian";
 import { buildAdjacency, computeDistances, focusFalloff, shortestPath, type Adjacency } from "../analysis/focus";
@@ -34,7 +33,6 @@ import { effectiveNodeStyle } from "../render/nodeStyle";
 import type { NodeFacts } from "../encoding/metrics";
 import { ExploreSession } from "../explore/ExploreSession";
 import { DEFAULT_EXPLORE_TUNING } from "../explore/ExploreController";
-import { chooseCompanionAction } from "./companionPane";
 import { motionMs, motionSeconds, prefersReducedMotion } from "../render/motion";
 import { GraphRenderer } from "../render/GraphRenderer";
 import { ControlPanel, type PanelState } from "../ui/ControlPanel";
@@ -147,6 +145,18 @@ export class GraphInsightView extends ItemView {
 			toggleExplore: () => void (this.exploreSession ? this.exitExplore() : this.enterExplore()),
 			openPresetManager: () => this.openPresetManager(),
 			toggleChangesPanel: () => this.toggleChangesPanel(),
+		});
+	}
+	private noteNavigationController?: NoteNavigation;
+	private get noteNavigation(): NoteNavigation {
+		return this.noteNavigationController ??= new NoteNavigation({
+			getApp: () => this.app,
+			getLeaf: () => this.leaf,
+			getModel: () => this.model,
+			getOpenInSidePane: () => this.plugin.settings.openInSidePane,
+			setSelfOpenedPath: (path) => { this.selfOpenedPath = path; },
+			getCompanionLeafId: () => this.companionLeafId,
+			setCompanionLeafId: (id) => { this.companionLeafId = id; },
 		});
 	}
 
@@ -1525,63 +1535,22 @@ export class GraphInsightView extends ItemView {
 	}
 
 	private openNode(nodeId: number, newTab: boolean): void {
-		const file = this.nodeFile(nodeId);
-		if (!file) return;
-		// An explicit "new tab" (middle click, menu item) still means a new tab;
-		// the side-pane mode only changes what a plain click does.
-		if (!newTab && this.plugin.settings.openInSidePane) {
-			this.openNodeInSplit(nodeId);
-			return;
-		}
-		this.selfOpenedPath = file.path;
-		void this.app.workspace.getLeaf(newTab ? "tab" : false).openFile(file);
+		this.noteNavigation.openNode(nodeId, newTab);
 	}
 
 	/** Open beside the graph, reusing the pane from the previous note. */
 	private openNodeInSplit(nodeId: number): void {
-		const file = this.nodeFile(nodeId);
-		if (!file) return;
-		this.selfOpenedPath = file.path;
-
-		const openLeafIds: string[] = [];
-		this.app.workspace.iterateAllLeaves((leaf) => openLeafIds.push(leafId(leaf)));
-		const action = chooseCompanionAction(this.companionLeafId, openLeafIds, leafId(this.leaf));
-		const companion =
-			action === "reuse" && this.companionLeafId !== null
-				? this.app.workspace.getLeafById(this.companionLeafId)
-				: null;
-		// Split from the graph's own pane, not the active one — otherwise the
-		// new pane lands wherever focus happens to be.
-		const target = companion ?? this.app.workspace.createLeafBySplit(this.leaf, "vertical");
-		this.companionLeafId = leafId(target);
-		// active: false keeps the graph focused — a click is "show me that",
-		// not "take me there", and explore mode must not lose the camera.
-		void target.openFile(file, { active: false });
+		this.noteNavigation.openNodeInSplit(nodeId);
 	}
 
 	/** Show the note in the file explorer's tree, the way the core graph does. */
 	private revealNode(nodeId: number): void {
-		const file = this.nodeFile(nodeId);
-		const explorer = this.fileExplorer();
-		if (!file || !explorer) return;
-		void this.app.workspace.revealLeaf(explorer.leaf);
-		explorer.view.revealInFolder(file);
-	}
-
-	private nodeFile(nodeId: number): TFile | null {
-		const path = this.model?.nodes[nodeId]?.path;
-		if (!path) return null;
-		const file = this.app.vault.getAbstractFileByPath(path);
-		return file instanceof TFile ? file : null;
+		this.noteNavigation.revealNode(nodeId);
 	}
 
 	/** The core file explorer, if it is loaded and still exposes revealInFolder. */
 	private fileExplorer(): { leaf: WorkspaceLeaf; view: FileExplorerView } | null {
-		for (const leaf of this.app.workspace.getLeavesOfType("file-explorer")) {
-			const view = asFileExplorer(leaf.view);
-			if (view) return { leaf, view };
-		}
-		return null;
+		return this.noteNavigation.fileExplorer();
 	}
 
 	/** Panel rows carry the translated name; the stored preset keeps its own. */
@@ -2807,26 +2776,6 @@ export class GraphInsightView extends ItemView {
 		this.viewWindow = null;
 		this.viewDocument = null;
 	}
-}
-
-/** The core file explorer reveals a file through `revealInFolder`, which is not
- *  part of the public typings. Probed for at runtime rather than assumed: a
- *  future Obsidian may drop it, and a missing menu item beats a crash. */
-interface FileExplorerView extends View {
-	revealInFolder(file: TAbstractFile): void;
-}
-
-function asFileExplorer(view: View): FileExplorerView | null {
-	const candidate = view as Partial<FileExplorerView>;
-	return typeof candidate.revealInFolder === "function" ? (view as FileExplorerView) : null;
-}
-
-/** Leaf ids exist at runtime (getLeafById is public API) but are missing from
- *  the typings. An id-less leaf yields "" — it matches nothing, so the worst
- *  case is one extra split, never a crash. */
-function leafId(leaf: WorkspaceLeaf): string {
-	const id = (leaf as WorkspaceLeaf & { id?: unknown }).id;
-	return typeof id === "string" ? id : "";
 }
 
 function callAsPromise<T>(action: () => Promise<T>): Promise<T> {
