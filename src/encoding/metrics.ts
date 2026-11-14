@@ -21,6 +21,8 @@ export interface NodeFacts {
 	opens7: number;
 	opens30: number;
 	opens90: number;
+	/** Normalized frontmatter values, absent for legacy and non-vault facts. */
+	properties?: Readonly<Record<string, readonly string[]>>;
 }
 
 export type NumericMetricId =
@@ -36,7 +38,9 @@ export type NumericMetricId =
 	| "file-size"
 	| "pagerank";
 
-export type CategoricalMetricId = "folder" | "tag" | "cluster";
+export type PropertyMetricId = `prop:${string}`;
+
+export type CategoricalMetricId = "folder" | "tag" | "cluster" | PropertyMetricId;
 
 export type MetricId = NumericMetricId | CategoricalMetricId;
 
@@ -61,6 +65,8 @@ export const CATEGORICAL_METRIC_IDS: readonly CategoricalMetricId[] = ["folder",
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function computeMetric(metric: MetricId, facts: NodeFacts, now: number): number | string {
+	const propertyKey = propertyKeyFromMetric(metric);
+	if (propertyKey !== null) return facts.properties?.[propertyKey]?.[0] ?? "";
 	switch (metric) {
 		case "opens-total": return facts.opensTotal;
 		case "opens-90": return facts.opens90;
@@ -77,11 +83,30 @@ export function computeMetric(metric: MetricId, facts: NodeFacts, now: number): 
 		case "folder": return facts.folder;
 		case "tag": return facts.tags[0] ?? "";
 		case "cluster": return facts.cluster;
+		default: return "";
 	}
 }
 
 export function isCategoricalMetric(metric: MetricId): metric is CategoricalMetricId {
-	return metric === "folder" || metric === "tag" || metric === "cluster";
+	return metric === "folder" || metric === "tag" || metric === "cluster" || isPropertyMetricId(metric);
+}
+
+export function isNumericMetricId(value: unknown): value is NumericMetricId {
+	return typeof value === "string" && (NUMERIC_METRIC_IDS as readonly string[]).includes(value);
+}
+
+export function propertyMetricId(key: string): PropertyMetricId {
+	return `prop:${key.trim().toLowerCase()}`;
+}
+
+export function isPropertyMetricId(value: unknown): value is PropertyMetricId {
+	if (typeof value !== "string" || !value.startsWith("prop:")) return false;
+	const key = value.slice("prop:".length);
+	return key.length > 0 && key === key.trim().toLowerCase();
+}
+
+export function propertyKeyFromMetric(metric: string): string | null {
+	return isPropertyMetricId(metric) ? metric.slice("prop:".length) : null;
 }
 
 /**

@@ -116,6 +116,7 @@ export const fr: Translation = {
 	"metric.folder": "Dossier",
 	"metric.tag": "Étiquette",
 	"metric.cluster": "Grappe",
+	"metric.property": "Propriété : {key}",
 
 	"scale.recency": "Ambre → acier",
 	"scale.heat": "Feu",

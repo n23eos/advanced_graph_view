@@ -5,9 +5,17 @@
  */
 import { t, type TranslationKey } from "../i18n";
 import { SCALE_PRESETS } from "./colorScales";
-import { CATEGORICAL_METRIC_IDS, NUMERIC_METRIC_IDS, type MetricId } from "./metrics";
+import {
+	CATEGORICAL_METRIC_IDS,
+	NUMERIC_METRIC_IDS,
+	propertyKeyFromMetric,
+	propertyMetricId,
+	type MetricId,
+} from "./metrics";
 
 export function metricLabel(metric: MetricId): string {
+	const propertyKey = propertyKeyFromMetric(metric);
+	if (propertyKey !== null) return t("metric.property", { key: propertyKey });
 	return t(`metric.${metric}` as TranslationKey);
 }
 
@@ -20,8 +28,20 @@ export function numericMetricOptions(): Record<string, string> {
 	return Object.fromEntries(NUMERIC_METRIC_IDS.map((id) => [id, metricLabel(id)]));
 }
 
-export function categoricalMetricOptions(): Record<string, string> {
-	return Object.fromEntries(CATEGORICAL_METRIC_IDS.map((id) => [id, metricLabel(id)]));
+export function categoricalMetricOptions(
+	propertyKeys: readonly string[] = [],
+	activeMetric: string | null = null
+): Record<string, string> {
+	const activeKey = activeMetric ? propertyKeyFromMetric(activeMetric) : null;
+	const keys = [...propertyKeys];
+	if (activeKey && !keys.includes(activeKey)) keys.push(activeKey);
+	return Object.fromEntries([
+		...CATEGORICAL_METRIC_IDS.map((id) => [id, metricLabel(id)] as const),
+		...keys.map((key) => {
+			const id = propertyMetricId(key);
+			return [id, metricLabel(id)] as const;
+		}),
+	]);
 }
 
 export function scaleOptions(): Record<string, string> {

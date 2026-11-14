@@ -116,6 +116,7 @@ export const ptBR: Translation = {
 	"metric.folder": "Pasta",
 	"metric.tag": "Tag",
 	"metric.cluster": "Cluster",
+	"metric.property": "Propriedade: {key}",
 
 	"scale.recency": "Âmbar → aço",
 	"scale.heat": "Fogo",

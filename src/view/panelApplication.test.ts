@@ -30,7 +30,7 @@ function harness() {
 		settings: structuredClone(DEFAULT_SETTINGS),
 		savePanelState: vi.fn((panel: PanelState) => { plugin.settings.panel = panel; return Promise.resolve(); }),
 	};
-	Object.assign(view, effects, { plugin, renderer: { setLabelOptions: vi.fn(), setEdgeStyle: vi.fn() } });
+	Object.assign(view, effects, { plugin, facts: [], renderer: { setLabelOptions: vi.fn(), setEdgeStyle: vi.fn() } });
 	return { view, effects, plugin };
 }
 

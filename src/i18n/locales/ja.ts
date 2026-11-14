@@ -116,6 +116,7 @@ export const ja: Translation = {
 	"metric.folder": "フォルダ",
 	"metric.tag": "タグ",
 	"metric.cluster": "クラスタ",
+	"metric.property": "プロパティ: {key}",
 
 	"scale.recency": "琥珀 → 鋼",
 	"scale.heat": "炎",

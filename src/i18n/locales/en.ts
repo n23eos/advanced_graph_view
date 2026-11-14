@@ -131,6 +131,7 @@ export const en = {
 	"metric.folder": "Folder",
 	"metric.tag": "Tag",
 	"metric.cluster": "Cluster",
+	"metric.property": "Property: {key}",
 
 	// ── Color scales ──────────────────────────────────────────────────
 	"scale.recency": "Amber → steel",

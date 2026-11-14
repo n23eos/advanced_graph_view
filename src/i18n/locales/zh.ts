@@ -116,6 +116,7 @@ export const zh: Translation = {
 	"metric.folder": "文件夹",
 	"metric.tag": "标签",
 	"metric.cluster": "聚类",
+	"metric.property": "属性: {key}",
 
 	"scale.recency": "琥珀 → 钢蓝",
 	"scale.heat": "火焰",

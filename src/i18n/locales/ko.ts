@@ -116,6 +116,7 @@ export const ko: Translation = {
 	"metric.folder": "폴더",
 	"metric.tag": "태그",
 	"metric.cluster": "클러스터",
+	"metric.property": "속성: {key}",
 
 	"scale.recency": "호박색 → 강청색",
 	"scale.heat": "불꽃",

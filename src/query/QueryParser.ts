@@ -22,6 +22,7 @@ export type QueryTerm =
 	| { kind: "file"; needle: string }
 	| { kind: "tag"; needle: string }
 	| { kind: "cluster"; needle: string }
+	| { kind: "property"; key: string; value: string }
 	| { kind: "opened"; windowDays: number | null; condition: NumericCondition }
 	| { kind: "links"; field: "total" | "in" | "out" | "unresolved"; condition: NumericCondition }
 	| { kind: "edited-days"; comparator: Comparator; days: number }
@@ -79,6 +80,14 @@ function parseDateArg(raw: string): { comparator: Comparator; days?: number; ts?
 	return null;
 }
 
+function parsePropertyArg(raw: string): { key: string; value: string } | null {
+	const equals = raw.indexOf("=");
+	if (equals < 0) return null;
+	const key = raw.slice(0, equals).trim().toLowerCase();
+	const value = raw.slice(equals + 1).trim().toLowerCase();
+	return key && value ? { key, value } : null;
+}
+
 function parseToken(token: string): ParsedTerm {
 	let negated = false;
 	let body = token;
@@ -103,6 +112,10 @@ function parseToken(token: string): ParsedTerm {
 		case "file": return { negated, term: { kind: "file", needle: arg.toLowerCase() } };
 		case "tag": return { negated, term: { kind: "tag", needle: arg.replace(/^#/, "").toLowerCase() } };
 		case "cluster": return { negated, term: { kind: "cluster", needle: arg.toLowerCase() } };
+		case "prop": {
+			const property = parsePropertyArg(arg);
+			return property ? { negated, term: { kind: "property", ...property } } : asText;
+		}
 		case "opened": {
 			// opened:>10  |  opened:30d>5
 			const windowed = arg.match(/^(\d+)d(>=|<=|>|<|=)?(\d+)$/);
@@ -166,6 +179,7 @@ export interface QueryDiagnostic {
  *  parser's lenient contract: unknown operators degrade to plain text. */
 const KNOWN_OPERATORS = new Set([
 	"content", "слово", "path", "file", "tag", "cluster",
+	"prop",
 	"opened", "links", "inlinks", "outlinks", "unresolved", "edited", "created",
 ]);
 
@@ -182,6 +196,8 @@ function isValidArg(key: string, arg: string): boolean {
 		case "edited":
 		case "created":
 			return parseDateArg(arg) !== null;
+		case "prop":
+			return parsePropertyArg(arg) !== null;
 		default:
 			// Text-like operators accept any non-empty needle.
 			return true;
@@ -258,6 +274,9 @@ function termMatches(
 			});
 		case "cluster":
 			return facts.cluster.toLowerCase().includes(term.needle);
+		case "property":
+			return (facts.properties?.[term.key] ?? [])
+				.some((value) => value.trim().toLowerCase() === term.value);
 		case "opened": {
 			const actual = term.windowDays === null ? facts.opensTotal : windowOpens(facts, term.windowDays);
 			return compare(actual, term.condition);

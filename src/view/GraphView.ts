@@ -35,6 +35,7 @@ import { categoryColor } from "../encoding/colorScales";
 import { activePreset, isLightTheme } from "../render/theme";
 import { effectiveNodeStyle } from "../render/nodeStyle";
 import type { NodeFacts } from "../encoding/metrics";
+import { collectPropertyKeys, normalizeFrontmatterProperties } from "../encoding/frontmatterProperties";
 import type { ExploreSession } from "../explore/ExploreSession";
 import { motionMs, prefersReducedMotion } from "../render/motion";
 import { GraphRenderer } from "../render/GraphRenderer";
@@ -1622,6 +1623,7 @@ export class GraphInsightView extends ItemView {
 			this.model = model;
 			consumeRenames(this.renamed, renamed);
 			this.facts = this.buildFacts(model, files);
+			this.panel?.setPropertyKeys(collectPropertyKeys(this.facts, this.plugin.settings.panel.channels.color));
 			this.metrics = null;
 			this.hasLayoutPositions = false;
 			this.renderer.setModel(model);
@@ -1994,6 +1996,8 @@ export class GraphInsightView extends ItemView {
 		this.facts = next;
 		this.tooltipNodeId = null;
 		const panel = this.plugin.settings.panel;
+		this.panel?.setPropertyKeys(collectPropertyKeys(this.facts, panel.channels.color));
+		if (this.model) this.panel?.setOverlayCounts(countOverlayMatches(this.model));
 		this.applyEncoding(panel);
 		this.recomputeVisual();
 		const vocabulary = collectVocabulary(this.facts);
@@ -2031,6 +2035,7 @@ export class GraphInsightView extends ItemView {
 				opens90: countRecentOpens(log, node.path, 90, now),
 				pagerank: 0,
 				cluster: "",
+				properties: normalizeFrontmatterProperties(fileCache?.frontmatter),
 			};
 		});
 	}
@@ -2186,7 +2191,8 @@ export class GraphInsightView extends ItemView {
 			},
 			onPresetDelete: (index) => void this.deleteViewPreset(index),
 			onModeChange: (mode) => void this.plugin.savePanelMode(mode),
-		}, this.plugin.settings.panelMode, this.plugin.settings.collapsedSections);
+		}, this.plugin.settings.panelMode, this.plugin.settings.collapsedSections,
+		collectPropertyKeys(this.facts, state.channels.color));
 	}
 
 	// ── View presets ──────────────────────────────────────────────────

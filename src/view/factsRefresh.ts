@@ -22,8 +22,24 @@ export function diffFacts(prev: readonly NodeFacts[], next: readonly NodeFacts[]
 			changed = true;
 		}
 		for (const key of Object.keys(after) as (keyof NodeFacts)[]) {
-			if (key !== "tags" && before[key] !== after[key]) changed = true;
+			if (key !== "tags" && key !== "properties" && before[key] !== after[key]) changed = true;
 		}
+		if (!equalProperties(before.properties, after.properties)) changed = true;
 	}
 	return { changed, groupingChanged };
+}
+
+function equalProperties(
+	left: NodeFacts["properties"],
+	right: NodeFacts["properties"]
+): boolean {
+	const leftEntries = Object.entries(left ?? {});
+	const rightEntries = Object.entries(right ?? {});
+	if (leftEntries.length !== rightEntries.length) return false;
+	for (const [key, leftValues] of leftEntries) {
+		const rightValues = right?.[key];
+		if (!rightValues || leftValues.length !== rightValues.length) return false;
+		if (leftValues.some((value, index) => value !== rightValues[index])) return false;
+	}
+	return true;
 }

@@ -119,6 +119,7 @@ export class ControlPanel {
 	private viewPresets: ViewPresetRow[] = [];
 	private selectedPresetIndex: number | null = null;
 	private hiddenCountEl: HTMLElement | null = null;
+	private hiddenNodeCount = 0;
 	private header: HTMLButtonElement;
 
 	constructor(
@@ -126,7 +127,8 @@ export class ControlPanel {
 		private state: PanelState,
 		private readonly callbacks: PanelCallbacks,
 		private mode: PanelMode = "expert",
-		collapsedSections?: { physics: boolean }
+		collapsedSections?: { physics: boolean },
+		private propertyKeys: readonly string[] = []
 	) {
 		// The physics collapse survives restarts (F-07); other sections keep
 		// their session-only static default.
@@ -185,7 +187,7 @@ export class ControlPanel {
 			view,
 			t("appearance.color"),
 			this.state.channels.color,
-			{ ...numericMetricOptions(), ...categoricalMetricOptions() },
+			{ ...numericMetricOptions(), ...categoricalMetricOptions(this.propertyKeys, this.state.channels.color) },
 			(value) => {
 				this.setState({ ...this.state, channels: { ...this.state.channels, color: value as MetricId | null } });
 			}
@@ -297,7 +299,10 @@ export class ControlPanel {
 
 		const hiddenRow = layers.createDiv({ cls: "graph-insight-panel-row" });
 		hiddenRow.createSpan({ cls: "graph-insight-panel-label", text: t("layers.hidden") });
-		this.hiddenCountEl = hiddenRow.createSpan({ cls: "graph-insight-panel-count", text: "0" });
+		this.hiddenCountEl = hiddenRow.createSpan({
+			cls: "graph-insight-panel-count",
+			text: String(this.hiddenNodeCount),
+		});
 		const showHidden = hiddenRow.createEl("button", { text: t("layers.showAll"), cls: "graph-insight-searchbar-btn" });
 		showHidden.addEventListener("click", () => this.callbacks.onShowHiddenNodes());
 
@@ -406,7 +411,7 @@ export class ControlPanel {
 			body,
 			t("simple.colorBy"),
 			this.state.channels.color,
-			categoricalMetricOptions(),
+			categoricalMetricOptions(this.propertyKeys, this.state.channels.color),
 			(value) => {
 				this.setState({ ...this.state, channels: { ...this.state.channels, color: value as MetricId | null } });
 			}
@@ -534,12 +539,19 @@ export class ControlPanel {
 	}
 
 	setHiddenNodeCount(count: number): void {
+		this.hiddenNodeCount = count;
 		this.hiddenCountEl?.setText(String(count));
 	}
 
 	setViewPresets(rows: readonly ViewPresetRow[]): void {
 		this.viewPresets = [...rows];
 		this.renderPresetOptions();
+	}
+
+	setPropertyKeys(keys: readonly string[]): void {
+		if (keys.length === this.propertyKeys.length && keys.every((key, index) => key === this.propertyKeys[index])) return;
+		this.propertyKeys = [...keys];
+		this.renderBody();
 	}
 
 	/** Keep the applied preset shown as selected (and thus deletable) across

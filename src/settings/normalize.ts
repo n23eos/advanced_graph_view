@@ -9,6 +9,13 @@ import type { PanelState } from "../ui/ControlPanel";
 import type { LayoutRule } from "../workers/layoutEngine";
 import type { ViewPreset } from "../view/builtinPresets";
 import { isNodeStyle, nodeStyleFromPreset } from "../render/nodeStyle";
+import {
+	isCategoricalMetric,
+	isNumericMetricId,
+	isPropertyMetricId,
+	type MetricId,
+	type NumericMetricId,
+} from "../encoding/metrics";
 
 const LAYOUT_RULES: readonly LayoutRule[] = [
 	"links", "tags", "folders", "cluster", "age", "recency", "hubs",
@@ -29,10 +36,15 @@ export function normalizeLayoutRule(value: unknown): LayoutRule {
 export function normalizePanel(raw: unknown): PanelState {
 	const saved = asObject(raw) as Partial<PanelState>;
 	const base = DEFAULT_SETTINGS.panel;
+	const savedChannels = asObject(saved.channels);
 	return {
 		...base,
 		...saved,
-		channels: { ...base.channels, ...asObject(saved.channels) },
+		channels: {
+			size: normalizeNumericChannel(savedChannels.size, base.channels.size),
+			color: normalizeColorChannel(savedChannels.color, base.channels.color),
+			glow: normalizeNumericChannel(savedChannels.glow, base.channels.glow),
+		},
 		overlays: { ...base.overlays, ...asObject(saved.overlays) },
 		physics: { ...base.physics, ...asObject(saved.physics) },
 		labels: { ...base.labels, ...asObject(saved.labels) },
@@ -43,6 +55,18 @@ export function normalizePanel(raw: unknown): PanelState {
 			: isNodeStyle(saved.nodeStyle) ? saved.nodeStyle : base.nodeStyle,
 		layoutRule: normalizeLayoutRule(saved.layoutRule),
 	};
+}
+
+function normalizeNumericChannel(value: unknown, fallback: NumericMetricId | null): NumericMetricId | null {
+	return value === null || isNumericMetricId(value) ? value : fallback;
+}
+
+function normalizeColorChannel(value: unknown, fallback: MetricId | null): MetricId | null {
+	if (value === null || isNumericMetricId(value)) return value;
+	if (typeof value === "string" && (isCategoricalMetric(value as MetricId) || isPropertyMetricId(value))) {
+		return value as MetricId;
+	}
+	return fallback;
 }
 
 /** Backfill id and timestamps on legacy { name, query } rows, drop anything

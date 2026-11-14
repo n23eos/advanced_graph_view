@@ -116,6 +116,7 @@ export const ru: Translation = {
 	"metric.folder": "Папка",
 	"metric.tag": "Тег",
 	"metric.cluster": "Кластер",
+	"metric.property": "Свойство: {key}",
 
 	"scale.recency": "Янтарь → сталь",
 	"scale.heat": "Огонь",

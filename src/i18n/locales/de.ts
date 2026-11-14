@@ -117,6 +117,7 @@ export const de: Translation = {
 	"metric.folder": "Ordner",
 	"metric.tag": "Tag",
 	"metric.cluster": "Cluster",
+	"metric.property": "Eigenschaft: {key}",
 
 	"scale.recency": "Bernstein → Stahl",
 	"scale.heat": "Feuer",

@@ -116,6 +116,7 @@ export const uk: Translation = {
 	"metric.folder": "Тека",
 	"metric.tag": "Тег",
 	"metric.cluster": "Кластер",
+	"metric.property": "Властивість: {key}",
 
 	"scale.recency": "Бурштин → сталь",
 	"scale.heat": "Вогонь",
