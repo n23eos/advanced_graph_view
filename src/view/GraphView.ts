@@ -198,6 +198,7 @@ export class GraphInsightView extends ItemView {
 
 	private rebuildDebounced = debounce(() => void this.refreshVault(), 2000, true);
 	private rebuilding = false;
+	private rebuildPending = false;
 	private floatingLayout: FloatingLayout | null = null;
 	private changesGeneration = 0;
 	private rebuildGeneration = 0;
@@ -1725,7 +1726,10 @@ export class GraphInsightView extends ItemView {
 		const cache = this.app.metadataCache;
 		const model = buildGraphModel(files.map((f) => f.path), cache.resolvedLinks, cache.unresolvedLinks);
 
-		if (this.rebuilding) return;
+		if (this.rebuilding) {
+			this.rebuildPending = true;
+			return;
+		}
 		if (this.model && sameGraphModel(this.model, model)) return;
 		this.rebuilding = true;
 
@@ -1778,7 +1782,13 @@ export class GraphInsightView extends ItemView {
 			if (generation === this.rebuildGeneration) this.model = null;
 			throw error;
 		} finally {
-			if (generation === this.rebuildGeneration) this.rebuilding = false;
+			if (generation === this.rebuildGeneration && !this.closing) {
+				this.rebuilding = false;
+				if (this.rebuildPending) {
+					this.rebuildPending = false;
+					this.rebuildDebounced();
+				}
+			}
 		}
 	}
 
@@ -2751,6 +2761,7 @@ export class GraphInsightView extends ItemView {
 		this.openGeneration++;
 		this.rebuildGeneration++;
 		this.rebuilding = false;
+		this.rebuildPending = false;
 		this.changesGeneration++;
 		this.floatingLayout?.destroy();
 		this.floatingLayout = null;
