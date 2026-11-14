@@ -50,6 +50,7 @@ function build() {
 		settings: DEFAULT_SETTINGS,
 		usageLog: {},
 		dataStore: { loadPositions: vi.fn(async () => null), savePositions: vi.fn(async () => {}) },
+		flushSettings: vi.fn(async () => {}),
 	};
 	const view = new GraphInsightView({ app } as unknown as WorkspaceLeaf, plugin as never) as unknown as Internals;
 	const renderer = { currentPositions: null as Float32Array | null, setModel: vi.fn(), setPinned: vi.fn(), setLabelOptions: vi.fn(), setEdgeStyle: vi.fn(), destroy: vi.fn() };

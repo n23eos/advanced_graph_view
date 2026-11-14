@@ -19,7 +19,15 @@ vi.mock("obsidian", async (importOriginal) => ({
 	PluginSettingTab: class {},
 	ItemView: class {},
 	getLanguage: () => "en",
-	debounce: (callback: () => void) => callback,
+	debounce: (callback: () => void) => {
+		const debounced = () => {
+			callback();
+			return debounced;
+		};
+		debounced.cancel = () => debounced;
+		debounced.run = () => callback();
+		return debounced;
+	},
 }));
 vi.mock("./render/GraphRenderer", () => ({ GraphRenderer: class {} }));
 

@@ -158,7 +158,7 @@
 Перед этапом сними замеры на стенде `bench/` (10k узлов): FPS при pan/zoom, время тика, и загрузку GPU/CPU на остывшем графе за 30 с. Запиши в `verification.md`. После каждого шага повтори.
 
 ### B1. Дебаунс записи настроек панели
-- [ ] Статус
+- [x] Статус
 
 **Проблема.** `ControlPanel.physicsSlider`/слайдеры шлют `input` на каждый пиксель; `GraphView.buildPanel.onChange` на каждый вызывает `plugin.savePanelState` -> `saveData` всего `data.json`.
 

@@ -46,7 +46,14 @@ interface Internals {
 beforeAll(() => { installObsidianDom(); initI18n("en"); });
 function makeView() {
 	const leaf = { app: {} } as unknown as WorkspaceLeaf;
-	const view = new GraphInsightView(leaf, { settings: { openInSidePane: false } } as ConstructorParameters<typeof GraphInsightView>[1]) as unknown as Internals;
+	const plugin = {
+		settings: { openInSidePane: false },
+		flushSettings: vi.fn(async () => {}),
+	};
+	const view = new GraphInsightView(
+		leaf,
+		plugin as unknown as ConstructorParameters<typeof GraphInsightView>[1]
+	) as unknown as Internals;
 	view.model = buildGraphModel(["a.md", "folder/b.md", "c.md"], {}, {});
 	view.renderer = { setSelected: vi.fn(), destroy: vi.fn() };
 	const session = { currentId: 0, travelTo: vi.fn(), stop: vi.fn() };

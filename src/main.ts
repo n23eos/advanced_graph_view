@@ -46,6 +46,7 @@ import type { ViewPreset } from "./view/builtinPresets";
 
 const SESSION_TRAIL_CAP = 200;
 const USAGE_SAVE_DEBOUNCE_MS = 30_000;
+const SETTINGS_SAVE_DEBOUNCE_MS = 400;
 
 export default class GraphInsightPlugin extends Plugin {
 	settings: GraphInsightSettings = DEFAULT_SETTINGS;
@@ -55,8 +56,15 @@ export default class GraphInsightPlugin extends Plugin {
 
 	private usageDirty = false;
 	private usageWriter = new LatestWriteQueue<UsageLog>((log) => this.dataStore.saveUsage(log));
+	private settingsWriter = new LatestWriteQueue<unknown>((data) => super.saveData(data));
+	private settingsDirty = false;
 	private dwellTimer: number | null = null;
 	private saveUsageDebounced = debounce(() => this.flushUsage(), USAGE_SAVE_DEBOUNCE_MS, true);
+	private saveSettingsDebounced = debounce(() => this.flushSettings(), SETTINGS_SAVE_DEBOUNCE_MS, true);
+
+	override saveData(data: unknown): Promise<void> {
+		return this.settingsWriter.enqueue(data);
+	}
 
 	async onload(): Promise<void> {
 		// Follow the app language. Must run before any view, command or settings
@@ -288,7 +296,9 @@ export default class GraphInsightPlugin extends Plugin {
 		});
 
 		this.registerEvent(this.app.workspace.on("quit", (tasks) => {
-			tasks.add(() => this.flushUsage());
+			tasks.add(async () => {
+				await Promise.all([this.flushUsage(), this.flushSettings()]);
+			});
 			const view = this.getGraphView();
 			if (view) tasks.add(() => view.flushPositions());
 		}));
@@ -357,7 +367,23 @@ export default class GraphInsightPlugin extends Plugin {
 
 	async savePanelState(panel: PanelState): Promise<void> {
 		this.settings = { ...this.settings, panel };
-		await this.saveData(this.settings);
+		this.settingsDirty = true;
+		this.saveSettingsDebounced();
+	}
+
+	async flushSettings(): Promise<void> {
+		this.saveSettingsDebounced.cancel();
+		if (!this.settingsDirty) {
+			await this.settingsWriter.flush();
+			return;
+		}
+		this.settingsDirty = false;
+		try {
+			await this.saveData(this.settings);
+		} catch (error) {
+			this.settingsDirty = true;
+			throw error;
+		}
 	}
 
 	async saveLocalGraph(localGraph: LocalGraphSettings): Promise<void> {
@@ -496,5 +522,6 @@ export default class GraphInsightPlugin extends Plugin {
 	onunload(): void {
 		if (this.dwellTimer !== null) window.clearTimeout(this.dwellTimer);
 		void this.flushUsage();
+		void this.flushSettings();
 	}
 }

@@ -39,9 +39,12 @@ function build() {
 		vault: { getMarkdownFiles: () => [{ path: "a.md" }] },
 		metadataCache: { resolvedLinks: {}, unresolvedLinks: {} },
 	};
-	const plugin = { snapshotStore: { version: 1, snapshots: [{
-		version: 1, capturedAt: 0, paths: ["a.md"], edges: [], pagerank: [],
-	}] } };
+	const plugin = {
+		snapshotStore: { version: 1, snapshots: [{
+			version: 1, capturedAt: 0, paths: ["a.md"], edges: [], pagerank: [],
+		}] },
+		flushSettings: vi.fn(async () => {}),
+	};
 	const view = new GraphInsightView({ app } as unknown as WorkspaceLeaf, plugin as never) as unknown as Internals;
 	view.applyChangesMask = vi.fn();
 	return view;

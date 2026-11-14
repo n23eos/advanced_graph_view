@@ -94,7 +94,11 @@ describe("graph startup failure", () => {
 
 	test("retry starts a fresh renderer and a close discards its late init", async () => {
 		startup.init = () => Promise.reject(new Error("WebGL unavailable"));
-		const view = new GraphInsightView(leaf(), {} as ConstructorParameters<typeof GraphInsightView>[1]);
+		const plugin = { flushSettings: vi.fn(async () => {}) };
+		const view = new GraphInsightView(
+			leaf(),
+			plugin as unknown as ConstructorParameters<typeof GraphInsightView>[1]
+		);
 		await view.onOpen();
 		let finish!: () => void;
 		startup.init = () => new Promise<void>((resolve) => { finish = resolve; });
@@ -119,6 +123,7 @@ describe("graph startup failure", () => {
 		const plugin = {
 			settings: DEFAULT_SETTINGS,
 			showOnboarding: vi.fn(),
+			flushSettings: vi.fn(async () => {}),
 		};
 		const view = new GraphInsightView(
 			leaf(app),

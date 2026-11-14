@@ -49,7 +49,11 @@ function makeView(bodies: Record<string, string>, read?: (file: { path: string }
 		metadataCache: { resolvedLinks: {}, unresolvedLinks: {} },
 	};
 	const leaf = { app } as unknown as WorkspaceLeaf;
-	const view = new GraphInsightView(leaf, {} as ConstructorParameters<typeof GraphInsightView>[1]);
+	const plugin = { flushSettings: vi.fn(async () => {}) };
+	const view = new GraphInsightView(
+		leaf,
+		plugin as unknown as ConstructorParameters<typeof GraphInsightView>[1]
+	);
 	const internal = view as unknown as ViewInternals;
 	internal.hardQuery = parseQuery("content:foo");
 	internal.recomputeVisual = vi.fn();

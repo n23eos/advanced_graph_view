@@ -2828,7 +2828,7 @@ export class GraphInsightView extends ItemView {
 		this.exploreSession = null;
 		this.exploreDetached = false;
 		this.exploreOverride = false;
-		await this.savePositions();
+		await Promise.all([this.savePositions(), this.plugin.flushSettings()]);
 		this.renamed.clear();
 		this.hasLayoutPositions = false;
 		this.layout?.stop();
