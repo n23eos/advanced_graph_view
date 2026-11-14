@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.2] - 2026-11-14
+
+### Fixed
+
+- Apply legacy physics defaults only once, preserving later user adjustments and imported profile versions.
+- Ignore deferred graph tabs until their views are loaded, and hide graph export commands when no loaded view is available.
+- Queue vault changes received during graph rebuilding instead of dropping them.
+- Refresh tags, timestamps, sizes and usage facts when graph topology stays unchanged, preserving calculated metrics.
+- Preserve coordinates and pins across note renames, including chained renames and shutdown before rebuilding.
+- Flush usage and valid layout positions on application quit, wait for pending writes and prevent older writes from overwriting newer state.
+- Avoid saving zero-filled renderer buffers before the first layout update.
+- Strip Windows-style frontmatter from note previews.
+
 ## [0.10.1] - 2026-10-20
 
 ### Changed
