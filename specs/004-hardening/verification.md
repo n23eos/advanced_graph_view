@@ -222,3 +222,7 @@ Mac по-прежнему заблокирован. Нативные прове�
 - Installed unpublished candidate 0.12.0 over 0.10.1 in Raincoat. Full plugin and workspace/community-plugin backup: /Users/nickeo23/.codex/backups/obsidian/Raincoat/graph-insight/20261114-191327-before-hardening. Replaced only main.js, manifest.json and styles.css; SHA-256 matches final production build. Six non-runtime files were unchanged during installation.
 - Official Obsidian CLI reload succeeded. Plugin info confirms name Advanced Graph View, version 0.12.0, enabled true. Captured error buffer is empty. After reload, five non-runtime files remain byte-identical; data.json gained only graphScope, physicsDefaultsVersion and renderScale. All existing settings values are unchanged; both graphScope flags are false.
 - Native visual acceptance remains incomplete: macOS is locked. CLI reload is not evidence of native rendering, full restart, hover popup, popout or Retina interaction. No merge, tag or release was performed.
+
+## Beta authorization, 2026-11-14
+
+Owner explicitly requested commit, push and beta publication, superseding the earlier release prohibition. Preparing 0.12.0-beta.1 with existing native acceptance limitations disclosed.
