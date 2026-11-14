@@ -146,6 +146,7 @@ function createHost(mode: VaultMode, host: HTMLElement, report: (message: string
 	}));
 	const fileByPath = new Map(files.map((file) => [file.path, file]));
 	const specByPath = new Map(specs.map((note) => [note.path, note]));
+	const vaultEvents = new Events();
 	const metadataEvents = new Events();
 	const workspaceEvents = new Events();
 	const resolvedLinks: Record<string, Record<string, number>> = {};
@@ -157,6 +158,7 @@ function createHost(mode: VaultMode, host: HTMLElement, report: (message: string
 		: {};
 
 	const vault = {
+		on: (name: string, callback: (...args: any[]) => void) => vaultEvents.on(name, callback),
 		getMarkdownFiles: () => files,
 		getAbstractFileByPath: (path: string) => fileByPath.get(path) ?? null,
 		cachedRead: async (file: TFile) => specByPath.get(file.path)?.text ?? "",
