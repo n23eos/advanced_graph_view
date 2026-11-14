@@ -14,6 +14,7 @@ import { buildAdjacency, computeDistances, focusFalloff, shortestPath, type Adja
 import { nameClusters, type ClusterContent } from "../analysis/clusterNames";
 import { computeOverlayMask, countOverlayMatches } from "../analysis/overlays";
 import { buildGraphModel, sameGraphModel, type GraphModel } from "../data/GraphStore";
+import { consumeRenames, recordRename, remapPinnedPaths, resolvePreviousPath } from "./renamedPaths";
 import { carryMetrics, diffFacts } from "./factsRefresh";
 import { stripMarkdown } from "../data/stripMarkdown";
 import { countRecentOpens } from "../data/UsageTracker";
@@ -200,6 +201,7 @@ export class GraphInsightView extends ItemView {
 	private rebuildDebounced = debounce(() => void this.refreshVault(), 2000, true);
 	private rebuilding = false;
 	private rebuildPending = false;
+	private renamed = new Map<string, string>();
 	private floatingLayout: FloatingLayout | null = null;
 	private changesGeneration = 0;
 	private rebuildGeneration = 0;
@@ -482,6 +484,11 @@ export class GraphInsightView extends ItemView {
 		await this.rebuildGraph();
 		if (this.closing || this.openGeneration !== openGeneration) return;
 
+		if (this.model) {
+			this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
+				if (file instanceof TFile) recordRename(this.renamed, oldPath, file.path);
+			}));
+		}
 		this.registerEvent(this.app.metadataCache.on("resolved", () => this.handleMetadataResolved()));
 		this.registerEvent(
 			this.app.workspace.on("file-open", (file) => this.handleActiveNoteChanged(file))
@@ -1739,12 +1746,14 @@ export class GraphInsightView extends ItemView {
 
 		const generation = ++this.rebuildGeneration;
 		try {
-			const { seed, pinnedPaths } = await this.buildSeedPositions(model);
+			const renamed = new Map(this.renamed);
+			const { seed, pinnedPaths } = await this.buildSeedPositions(model, renamed);
 			if (generation !== this.rebuildGeneration || this.closing) return;
 			// Frame the graph once the very first layout settles; later rebuilds
 			// (vault edits) keep whatever framing the user has.
 			if (!this.model) this.autoFit.request();
 			this.model = model;
+			consumeRenames(this.renamed, renamed);
 			this.facts = this.buildFacts(model, files);
 			this.metrics = null;
 			this.renderer.setModel(model);
@@ -2017,15 +2026,16 @@ export class GraphInsightView extends ItemView {
 	 *  Also reports which notes are pinned, by path: a rebuild reassigns node
 	 *  ids, so the pins held in memory have to be re-resolved either way. */
 	private async buildSeedPositions(
-		model: GraphModel
+		model: GraphModel,
+		renamed: ReadonlyMap<string, string> = this.renamed
 	): Promise<{ seed: Float32Array | undefined; pinnedPaths: string[] }> {
 		const previous = this.renderer?.currentPositions;
 		const saved = previous ? null : await this.plugin.dataStore.loadPositions();
-		const pinnedPaths = saved
+		const pinnedPaths = remapPinnedPaths(saved
 			? saved.pins
 			: [...this.explicitPins]
 					.map((id) => this.model?.nodes[id]?.path)
-					.filter((path): path is string => path !== undefined);
+					.filter((path): path is string => path !== undefined), renamed);
 		if (!previous && !saved) return { seed: undefined, pinnedPaths };
 
 		const seed = new Float32Array(model.nodes.length * 3);
@@ -2034,14 +2044,14 @@ export class GraphInsightView extends ItemView {
 			let y: number | undefined;
 			let z = 0;
 			if (previous && this.model) {
-				const oldId = this.model.pathToId.get(node.path);
+				const oldId = this.model.pathToId.get(resolvePreviousPath(node.path, renamed));
 				if (oldId !== undefined) {
 					x = previous[oldId * 3];
 					y = previous[oldId * 3 + 1];
 					z = previous[oldId * 3 + 2];
 				}
 			} else if (saved) {
-				const stored = saved.positions[node.path];
+				const stored = saved.positions[resolvePreviousPath(node.path, renamed)];
 				// Older files stored [x, y]; new ones store [x, y, z].
 				if (stored) [x, y, z = 0] = stored;
 			}
@@ -2787,6 +2797,7 @@ export class GraphInsightView extends ItemView {
 		this.rebuildGeneration++;
 		this.rebuilding = false;
 		this.rebuildPending = false;
+		this.renamed.clear();
 		this.changesGeneration++;
 		this.floatingLayout?.destroy();
 		this.floatingLayout = null;

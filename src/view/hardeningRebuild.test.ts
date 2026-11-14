@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import type { WorkspaceLeaf, TFile } from "obsidian";
 import { GraphInsightView } from "./GraphView";
-import type { GraphModel } from "../data/GraphStore";
+import { buildGraphModel, type GraphModel } from "../data/GraphStore";
 import { DEFAULT_SETTINGS } from "../settings/schema";
 import type { NodeFacts } from "../encoding/metrics";
 
@@ -25,6 +25,8 @@ vi.mock("../render/GraphRenderer", () => ({ GraphRenderer: class {} }));
 
 interface Internals {
 	model: GraphModel | null;
+	renamed: Map<string, string>;
+	explicitPins: Set<number>;
 	facts: NodeFacts[];
 	rebuilding: boolean;
 	rebuildPending: boolean;
@@ -143,5 +145,47 @@ describe("facts refresh with unchanged topology", () => {
 		expect(view.facts).toBe(facts);
 		expect(effects.applyEncoding).not.toHaveBeenCalled();
 		expect(layout.start).not.toHaveBeenCalled();
+	});
+});
+
+
+describe("renamed note positions", () => {
+	test("keeps live coordinates and an explicit pin after renaming", async () => {
+		const { view, files, renderer, layout } = build();
+		await view.rebuildGraph();
+		renderer.currentPositions = new Float32Array([41, 52, 63]);
+		view.explicitPins.add(0);
+		files[0].path = "renamed.md";
+		view.renamed = new Map([["renamed.md", "a.md"]]);
+		await view.rebuildGraph();
+		expect(layout.start).toHaveBeenLastCalledWith(expect.anything(), new Float32Array([41, 52, 63]), 3);
+		expect(layout.pin).toHaveBeenLastCalledWith(0, 41, 52, 63);
+		expect(view.explicitPins.has(0)).toBe(true);
+		expect(view.renamed.size).toBe(0);
+	});
+	test("loads saved positions and pins under the previous path", async () => {
+		const { view, files, plugin, layout } = build();
+		files[0].path = "renamed.md";
+		view.renamed = new Map([["renamed.md", "a.md"]]);
+		Object.assign(plugin.dataStore, { loadPositions: async () => ({ positions: { "a.md": [11, 22] }, pins: ["a.md"] }) });
+		await view.rebuildGraph();
+		expect(layout.start).toHaveBeenLastCalledWith(expect.anything(), new Float32Array([11, 22, 0]), 3);
+		expect(layout.pin).toHaveBeenLastCalledWith(0, 11, 22, 0);
+	});
+	test("retains a rename arriving during an earlier rebuild for the next model", async () => {
+		const { view, files, renderer } = build();
+		view.model = buildGraphModel(["a.md"], {}, {});
+		view.renamed = new Map([["b.md", "a.md"]]);
+		files[0].path = "b.md";
+		let release!: () => void;
+		view.buildSeedPositions = () => new Promise((resolve) => {
+			release = () => resolve({ seed: new Float32Array([10, 20, 30]), pinnedPaths: [] });
+		});
+		const first = view.rebuildGraph();
+		view.renamed = new Map([["c.md", "a.md"]]);
+		release();
+		await first;
+		renderer.currentPositions = new Float32Array([10, 20, 30]);
+		expect([...view.renamed]).toEqual([["c.md", "b.md"]]);
 	});
 });
