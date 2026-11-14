@@ -1,3 +1,4 @@
+import { ExportActions } from "./exportActions";
 import { observeRendererVisibility } from "./rendererVisibility";
 import { panelDiff } from "./panelDiff";
 import {
@@ -50,18 +51,7 @@ import { ensureBuiltinPreset } from "./builtinPresets";
 import type { BuiltinPresetId } from "./presetNames";
 import { NavigationTrail } from "../explore/navigationTrail";
 import { renderBreadcrumb } from "../ui/breadcrumb";
-import {
-	nextAvailableName,
-	topicMapMarkdown,
-	type TopicMapInput,
-	type TopicMapSource,
-} from "../export/topicMapMarkdown";
-import { buildNeighborhood } from "../analysis/neighborhood";
-import {
-	ExportConflictModal,
-	TopicMapExportModal,
-	type TopicMapExportDraft,
-} from "../ui/TopicMapExportModal";
+import type { TopicMapSource } from "../export/topicMapMarkdown";
 import { ChangesPanel, type ChangesData } from "../ui/ChangesPanel";
 import { ChangesClient } from "../workers/ChangesClient";
 import {
@@ -89,7 +79,6 @@ import { PromptModal } from "../ui/PromptModal";
 import { TimelineBar, type TimelineMode } from "../ui/TimelineBar";
 import { CameraWidget } from "../ui/CameraWidget";
 import { ToolBar, type CursorTool } from "../ui/ToolBar";
-import { graphToGexf, graphToJson } from "../export/exporters";
 import { computeGroups, depthByAge, depthByCluster } from "./layoutGrouping";
 import { presetDisplayName } from "./presetNames";
 import { resolveFollowAction } from "./followActiveNote";
@@ -111,6 +100,23 @@ const COLLIDE_BASE_RADIUS = 0;
 const EXPLORE_BACKGROUND_ALPHA = 0.05;
 
 export class GraphInsightView extends ItemView {
+	private exportController?: ExportActions;
+	private get exportActions(): ExportActions {
+		return this.exportController ??= new ExportActions({
+			getApp: () => this.app,
+			getRenderer: () => this.renderer,
+			getModel: () => this.model,
+			getMetrics: () => this.metrics,
+			getHiddenClusters: () => this.hiddenClusters,
+			getFocusRootId: () => this.focusRootId,
+			getExploreFocus: () => this.exploreFocus,
+			getFocusDepth: () => this.focusDepth,
+			getViewDocument: () => this.viewDocument,
+			getViewWindow: () => this.viewWindow,
+			getContentEl: () => this.contentEl,
+		});
+	}
+
 	private renderer: GraphRenderer | null = null;
 	private stopObservingRendererVisibility: (() => void) | null = null;
 	private viewWindow: Window | null = null;
@@ -858,124 +864,12 @@ export class GraphInsightView extends ItemView {
 		this.renderer?.zoomToNodes([from, to]);
 	}
 
-	// ── F-12: topic map export ────────────────────────────────────────
+	canExportTopicMap(): boolean { return this.exportActions.canExportTopicMap(); }
 
-	/** The one cluster left visible when a cluster filter hides all others —
-	 *  the "unambiguous cluster" the export can act on. */
-	private singleVisibleCluster(): number | null {
-		if (!this.metrics || this.hiddenClusters.size === 0) return null;
-		const visible: number[] = [];
-		for (let c = 0; c < this.metrics.communityCount; c++) {
-			if (!this.hiddenClusters.has(c)) visible.push(c);
-		}
-		return visible.length === 1 ? visible[0] : null;
-	}
+	exportCurrentTopicMap(): void { this.exportActions.exportCurrentTopicMap(); }
 
-	/** Whether the command palette entry has anything to export. */
-	canExportTopicMap(): boolean {
-		return this.focusRootId !== null || this.exploreFocus !== null || this.singleVisibleCluster() !== null;
-	}
-
-	/** Command entry: pick the active source (focus > explore > cluster). */
-	exportCurrentTopicMap(): void {
-		if (this.focusRootId !== null) {
-			this.openTopicMapExport("focus", this.focusRootId);
-			return;
-		}
-		if (this.exploreFocus) {
-			this.openTopicMapExport("explore", this.exploreFocus.centerId);
-			return;
-		}
-		const cluster = this.singleVisibleCluster();
-		if (cluster === null || !this.metrics || !this.model) return;
-		const nodeIds: number[] = [];
-		for (let i = 0; i < this.model.nodes.length; i++) {
-			if (this.metrics.community[i] === cluster) nodeIds.push(i);
-		}
-		this.openTopicMapExport("cluster", null, nodeIds);
-	}
-
-	private openTopicMapExport(
-		source: TopicMapSource,
-		rootId: number | null,
-		flatIds: number[] = []
-	): void {
-		if (!this.model) return;
-		const root = rootId !== null ? this.model.nodes[rootId] : null;
-		new TopicMapExportModal(
-			this.app,
-			{
-				name: root ? `${t("topicmap.modalTitle")} — ${root.name}` : t("topicmap.modalTitle"),
-				// §13.4: default next to the root note; vault root for lasso.
-				folder: root ? root.path.slice(0, Math.max(root.path.lastIndexOf("/"), 0)) : "",
-				depth: Math.min(Math.max(this.focusDepth, 1), 4),
-				includeDirections: true,
-				includeMetrics: true,
-				includeInternalLinks: true,
-			},
-			rootId !== null,
-			(draft) => void this.writeTopicMap(source, rootId, flatIds, draft)
-		).open();
-	}
-
-	private async writeTopicMap(
-		source: TopicMapSource,
-		rootId: number | null,
-		flatIds: number[],
-		draft: TopicMapExportDraft
-	): Promise<void> {
-		if (!this.model) return;
-		const input: TopicMapInput =
-			rootId !== null
-				? { kind: "rooted", neighborhood: buildNeighborhood(this.model, rootId, draft.depth) }
-				: { kind: "flat", model: this.model, nodeIds: flatIds };
-		const body = topicMapMarkdown(input, {
-			source,
-			generatedAt: new Date().toISOString(),
-			includeDirections: draft.includeDirections,
-			includeMetrics: draft.includeMetrics,
-			includeInternalLinks: draft.includeInternalLinks,
-		});
-
-		const folder = draft.folder.replace(/^\/+|\/+$/g, "");
-		const fileName = `${draft.name.replace(/[\\/:]/g, "-")}.md`;
-		const target = folder ? `${folder}/${fileName}` : fileName;
-		const taken = (path: string) => this.app.vault.getAbstractFileByPath(path) !== null;
-
-		if (!taken(target)) {
-			await this.createTopicMapFile(target, folder, body);
-			return;
-		}
-		new ExportConflictModal(this.app, fileName, (choice) => {
-			if (choice === "cancel") return;
-			if (choice === "copy") {
-				void this.createTopicMapFile(nextAvailableName(target, taken), folder, body);
-				return;
-			}
-			const existing = this.app.vault.getAbstractFileByPath(target);
-			if (existing instanceof TFile) {
-				this.app.vault
-					.modify(existing, body)
-					.then(() => new Notice(t("notice.topicMapExported", { name: existing.path })))
-					.catch(() => new Notice(t("notice.topicMapFailed")));
-			} else {
-				// The file vanished between the conflict check and the choice.
-				new Notice(t("notice.topicMapFailed"));
-			}
-		}).open();
-	}
-
-	private async createTopicMapFile(path: string, folder: string, body: string): Promise<void> {
-		try {
-			if (folder && this.app.vault.getAbstractFileByPath(folder) === null) {
-				await this.app.vault.createFolder(folder);
-			}
-			await this.app.vault.create(path, body);
-			new Notice(t("notice.topicMapExported", { name: path }));
-		} catch {
-			// vault.create never leaves a half-written file behind.
-			new Notice(t("notice.topicMapFailed"));
-		}
+	private openTopicMapExport(source: TopicMapSource, rootId: number | null, flatIds: number[] = []): void {
+		this.exportActions.openTopicMapExport(source, rootId, flatIds);
 	}
 
 	/** Previous reachable crumb; filters must not desynchronise the camera and trail. */
@@ -2417,30 +2311,11 @@ export class GraphInsightView extends ItemView {
 		if (id !== undefined) this.enterFocus(id);
 	}
 
-	async exportPngFile(): Promise<void> {
-		const blob = await this.renderer?.exportPng();
-		if (!blob) {
-			new Notice(t("notice.pngFailed"));
-			return;
-		}
-		this.downloadBlob("graph-insight.png", blob);
-	}
+	exportPngFile(): Promise<void> { return this.exportActions.exportPngFile(); }
 
-	exportJsonFile(): void {
-		if (!this.model) return;
-		this.downloadBlob("graph-insight.json", new Blob([graphToJson(this.model)], { type: "application/json" }));
-	}
+	exportJsonFile(): void { this.exportActions.exportJsonFile(); }
 
-	exportGexfFile(): void {
-		if (!this.model) return;
-		this.downloadBlob("graph-insight.gexf", new Blob([graphToGexf(this.model)], { type: "application/xml" }));
-	}
-
-	private downloadBlob(fileName: string, blob: Blob): void {
-		const doc = this.viewDocument ?? this.contentEl.ownerDocument;
-		const ownerWindow = this.viewWindow ?? doc.defaultView;
-		if (ownerWindow) downloadBlob(fileName, blob, doc, ownerWindow);
-	}
+	exportGexfFile(): void { this.exportActions.exportGexfFile(); }
 
 	/** The ONE place panel callbacks are defined — panel is rebuilt from
 	 *  here everywhere, so behavior can never diverge between copies. */
@@ -3026,15 +2901,6 @@ function asFileExplorer(view: View): FileExplorerView | null {
 function leafId(leaf: WorkspaceLeaf): string {
 	const id = (leaf as WorkspaceLeaf & { id?: unknown }).id;
 	return typeof id === "string" ? id : "";
-}
-
-function downloadBlob(fileName: string, blob: Blob, doc: Document, ownerWindow: Window): void {
-	const hostUrl = (ownerWindow as Window & typeof window).URL;
-	const url = hostUrl.createObjectURL(blob);
-	const anchor = doc.body.createEl("a", { attr: { href: url, download: fileName } });
-	anchor.click();
-	anchor.remove();
-	hostUrl.revokeObjectURL(url);
 }
 
 function callAsPromise<T>(action: () => Promise<T>): Promise<T> {

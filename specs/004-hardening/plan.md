@@ -64,7 +64,7 @@
 - C1-C4 завершены локально в chore/polish-0.10.4: c486373. 890 тестов / 115 файлов, lint без ошибок и предупреждений, typecheck/build PASS.
 - C5 реализован: окна хоста, перенос и безопасное закрытие. 912 тестов / 124 файла, lint без замечаний, typecheck/build PASS. Нативная приёмка popout остаётся открытой.
 - Mac заблокирован. Запрошена ручная разблокировка; оставшиеся нативные сценарии не отмечены выполненными.
-- C6: подготовлен кандидат 0.10.4. D и E следующие; нативная приёмка остаётся открытой.
+- C6 завершён: кандидат 0.10.4 b2789d9 отправлен. D выполняется в refactor/graphview-split; E следующий. Нативная приёмка остаётся открытой.
 - Новое разрешение владельца 2026-11-14: выполнить оставшийся план, коммитить, делать push и установить в Raincoat. Публикация релиза запрещена. Теги не создаём, потому что они запускают release workflow. Ветки A, B и C отправлены; дальнейшие этапы остаются в отдельных ветках.
 
 ---
@@ -291,7 +291,7 @@
 - Если перенос требует изменить логику - не переноси этот кусок, оставь заметку.
 
 Порядок (от самого изолированного):
-- [ ] D1. Экспорт: `exportPngFile`, `exportJsonFile`, `exportGexfFile`, `exportCurrentTopicMap`, `createTopicMapFile`, `downloadBlob` -> `src/view/exportActions.ts`.
+- [x] D1. Экспорт: `exportPngFile`, `exportJsonFile`, `exportGexfFile`, `exportCurrentTopicMap`, `createTopicMapFile`, `downloadBlob` -> `src/view/exportActions.ts`.
 - [ ] D2. Меню: `showNodeMenu`, `showLassoMenu`, `showTasksMenu`, `showOverflowMenu` -> `src/view/menus.ts`.
 - [ ] D3. Открытие заметок: `openNode`, `openNodeInSplit`, `revealNode`, `nodeFile`, `fileExplorer`, `asFileExplorer`, `leafId` -> `src/view/noteNavigation.ts`.
 - [ ] D4. Пресеты и задачи: `savePreset`, `persistPresets`, `markPresetUsed`, `openPresetManager`, `applyViewPreset`, `saveViewPreset`, `deleteViewPreset`, `runTask`, `runTaskPreset` -> `src/view/presetActions.ts`.

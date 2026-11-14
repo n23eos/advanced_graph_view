@@ -135,3 +135,9 @@ Mac по-прежнему заблокирован. Нативные прове�
 - The closing-stage run exposed an asynchronous test-fixture omission: onDemand ticker lacked update(), and its resumed RAF outlived the test. Added the missing API stub and per-test pause cleanup without changing assertions. This was recorded in a separate test commit.
 - Final verify: 912 tests / 124 files PASS, typecheck PASS, lint 0 errors/0 warnings. Build PASS. Logs: /tmp/hardening-c6-verify.log and /tmp/hardening-c6-build.log.
 - Independent C5 review: 67 tests / 13 files PASS, no remaining substantial findings after lifecycle and legend fixes. Native acceptance remains incomplete.
+
+## D1: export actions extraction, 2026-11-14
+
+- Moved PNG/JSON/GEXF and topic-map actions into ExportActions with narrow dynamic dependencies. GraphView retains public commands and its topic-map entry wrapper. The facade initializes lazily, including for existing prototype-based fixtures.
+- AST comparison confirmed all 10 moved method bodies match the prior implementation. The existing title separator uses a Unicode escape to preserve its runtime string without adding a forbidden literal character. No behavior or existing tests changed.
+- verify: 912 tests / 124 files PASS, typecheck and lint zero warnings PASS; build PASS. Logs: /tmp/hardening-d1-verify.log and /tmp/hardening-d1-build.log.
