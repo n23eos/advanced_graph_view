@@ -296,7 +296,7 @@
 - [x] D3. Открытие заметок: `openNode`, `openNodeInSplit`, `revealNode`, `nodeFile`, `fileExplorer`, `asFileExplorer`, `leafId` -> `src/view/noteNavigation.ts`.
 - [x] D4. Пресеты и задачи: `savePreset`, `persistPresets`, `markPresetUsed`, `openPresetManager`, `applyViewPreset`, `saveViewPreset`, `deleteViewPreset`, `runTask`, `runTaskPreset` -> `src/view/presetActions.ts`.
 - [x] D5. Панель изменений: `toggleChangesPanel` ... `focusChangesLink` -> `src/view/changesController.ts`.
-- [ ] D6. Тултип и превью: `showTooltip`, `appendNotePreview`, `notePreview` -> `src/view/tooltip.ts`.
+- [x] D6. Тултип и превью: `showTooltip`, `appendNotePreview`, `notePreview` -> `src/view/tooltip.ts`.
 - [ ] D7. Explore-обвязка в view (`enterExplore` ... `renderExploreBar`) - последним и только если D1-D6 прошли без сюрпризов.
 
 Закрытие: полный нативный маршрут проверки из `specs/003-release-polish/release-readiness.md`, выпуск как beta через BRAT.

@@ -1,3 +1,4 @@
+import { TooltipController } from "./tooltip";
 import { ChangesController } from "./changesController";
 import { ExportActions } from "./exportActions";
 import { GraphMenus } from "./menus";
@@ -23,13 +24,11 @@ import { buildGraphModel, sameGraphModel, type GraphModel } from "../data/GraphS
 import { consumeRenames, recordRename, remapPinnedPaths, resolvePreviousPath } from "./renamedPaths";
 import { buildNeighborSeed, type SeedPosition } from "./neighborSeed";
 import { carryMetrics, diffFacts } from "./factsRefresh";
-import { stripFrontmatter, stripMarkdown } from "../data/stripMarkdown";
 import { countRecentOpens } from "../data/UsageTracker";
 import { LatestWriteQueue } from "../data/latestWriteQueue";
 import type { PositionMap, SavedPositions } from "../data/persistence";
 import { buildEncoding, type NodeEncoding } from "../encoding/encode";
 import { categoryColor } from "../encoding/colorScales";
-import { metricLabel } from "../encoding/metricLabels";
 import { activePreset, isLightTheme } from "../render/theme";
 import { effectiveNodeStyle } from "../render/nodeStyle";
 import type { NodeFacts } from "../encoding/metrics";
@@ -88,6 +87,28 @@ const COLLIDE_BASE_RADIUS = 0;
 const EXPLORE_BACKGROUND_ALPHA = 0.05;
 
 export class GraphInsightView extends ItemView {
+	private tooltipController?: TooltipController;
+	private get tooltipActions(): TooltipController {
+		return this.tooltipController ??= new TooltipController({
+			getApp: () => this.app,
+			getContentEl: () => this.contentEl,
+			getFacts: () => this.facts,
+			getModel: () => this.model,
+			getOpenGeneration: () => this.openGeneration,
+			getPlugin: () => this.plugin,
+			getPreviewTimer: () => this.previewTimer,
+			setPreviewTimer: (value) => { this.previewTimer = value; },
+			getTooltip: () => this.tooltip,
+			setTooltip: (value) => { this.tooltip = value; },
+			getTooltipNodeId: () => this.tooltipNodeId,
+			setTooltipNodeId: (value) => { this.tooltipNodeId = value; },
+			getViewWindow: () => this.viewWindow,
+			clearPreviewTimer: () => this.clearPreviewTimer(),
+			appendNotePreview: (nodeId, words) => this.appendNotePreview(nodeId, words),
+			notePreview: (nodeId, words) => this.notePreview(nodeId, words),
+		});
+	}
+
 	private changesController?: ChangesController;
 	private get changesActions(): ChangesController {
 		return this.changesController ??= new ChangesController({
@@ -2000,95 +2021,22 @@ export class GraphInsightView extends ItemView {
 	}
 
 	private showTooltip(nodeId: number | null, clientX: number, clientY: number): void {
-		if (!this.tooltip || !this.model) return;
-		if (nodeId === null) {
-			this.tooltipNodeId = null;
-			this.clearPreviewTimer();
-			this.tooltip.hide();
-			return;
-		}
-		// The tooltip trails the cursor on every move, but only its position.
-		const rect = this.contentEl.getBoundingClientRect();
-		this.tooltip.style.left = `${clientX - rect.left + 12}px`;
-		this.tooltip.style.top = `${clientY - rect.top + 12}px`;
-		// Same node: don't rebuild or re-read — that would cancel the pending
-		// preview read on every micro-movement of the mouse.
-		if (nodeId === this.tooltipNodeId) return;
-		this.tooltipNodeId = nodeId;
-		this.clearPreviewTimer();
-
-		const node = this.model.nodes[nodeId];
-		const facts = this.facts[nodeId];
-		this.tooltip.empty();
-		this.tooltip.createDiv({ cls: "graph-insight-tooltip-title", text: node.name });
-		if (facts) {
-			const meta = this.tooltip.createDiv({ cls: "graph-insight-tooltip-meta" });
-			meta.createDiv({
-				text: t("tooltip.opens", { total: facts.opensTotal, recent: facts.opens30 }),
-			});
-			meta.createDiv({
-				text: t("tooltip.links", { inbound: facts.inCount, outbound: facts.outCount }),
-			});
-			meta.createDiv({
-				text: t("tooltip.edited", { date: new Date(facts.mtime).toLocaleDateString() }),
-			});
-			const channels = this.plugin.settings.panel.channels;
-			const encoding = this.tooltip.createDiv({ cls: "graph-insight-tooltip-encoding" });
-			if (channels.size) encoding.createSpan({ text: `${t("appearance.size")}: ${metricLabel(channels.size)}` });
-			if (channels.color) encoding.createSpan({ text: `${t("appearance.color")}: ${metricLabel(channels.color)}` });
-		}
-		this.tooltip.show();
-
-		const preview = this.plugin.settings.hoverPreview;
-		if (preview.enabled) {
-			const viewWindow = this.viewWindow;
-			if (!viewWindow) return;
-			const generation = this.openGeneration;
-			// Only load once the cursor has settled on this node, so sweeping
-			// across a dense cluster doesn't fire a read per node.
-			this.previewTimer = viewWindow.setTimeout(() => {
-				if (generation !== this.openGeneration) return;
-				this.previewTimer = null;
-				if (nodeId === this.tooltipNodeId) void this.appendNotePreview(nodeId, preview.words);
-			}, Math.max(0, preview.delayMs));
-		}
+		return this.tooltipActions.showTooltip(nodeId, clientX, clientY);
 	}
 
 	private clearPreviewTimer(): void {
-		if (this.previewTimer !== null) {
-			this.viewWindow?.clearTimeout(this.previewTimer);
-			this.previewTimer = null;
-		}
+		return this.tooltipActions.clearPreviewTimer();
 	}
 
 	/** Read the note body off the main thread and append it to the tooltip,
 	 *  unless the hover moved to another node while the read was pending. */
-	private async appendNotePreview(nodeId: number, words: number): Promise<void> {
-		const generation = this.openGeneration;
-		const tooltip = this.tooltip;
-		const text = await this.notePreview(nodeId, words);
-		if (generation !== this.openGeneration || tooltip !== this.tooltip ||
-			nodeId !== this.tooltipNodeId || !tooltip || !text) return;
-		tooltip.createDiv({ cls: "graph-insight-tooltip-preview", text });
+	private appendNotePreview(nodeId: number, words: number): Promise<void> {
+		return this.tooltipActions.appendNotePreview(nodeId, words);
 	}
 
 	/** First `words` words of the note body (frontmatter stripped). */
-	private async notePreview(nodeId: number, words: number): Promise<string | null> {
-		const node = this.model?.nodes[nodeId];
-		if (!node) return null;
-		const file = this.app.vault.getAbstractFileByPath(node.path);
-		if (!(file instanceof TFile)) return null;
-		let raw = "";
-		try {
-			raw = await this.app.vault.cachedRead(file);
-		} catch {
-			return null;
-		}
-		const body = stripMarkdown(stripFrontmatter(raw))
-			.replace(/\s+/g, " ")
-			.trim();
-		if (!body) return null;
-		return body.split(" ").slice(0, words).join(" ");
+	private notePreview(nodeId: number, words: number): Promise<string | null> {
+		return this.tooltipActions.notePreview(nodeId, words);
 	}
 
 	private handleNodeClick(nodeId: number, event: PointerEvent): void {

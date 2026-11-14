@@ -165,3 +165,9 @@ Mac по-прежнему заблокирован. Нативные прове�
 - Moved six Changes actions into ChangesController. Live state accessors and GraphView callbacks preserve generation checks, await boundaries and existing method overrides. Lifecycle/reset ownership remains in GraphView.
 - AST comparison of method bodies passes after accounting for dependency forwarding and comment-only separator normalization. Existing tests unchanged.
 - verify: 912 tests / 124 files PASS, typecheck/lint PASS with no warnings; build PASS. Logs: /tmp/hardening-d5-verify.log and /tmp/hardening-d5-build.log.
+
+## D6: tooltip extraction, 2026-11-14
+
+- Moved tooltip, delayed preview and timer cleanup into TooltipController. Shared tooltip fields remain in GraphView for Explore; callbacks keep notePreview overrides and generation/element identity checks intact.
+- All four method bodies structurally match after dependency forwarding and comment normalization. Existing tests unchanged.
+- verify: 912 tests / 124 files PASS, typecheck/lint PASS with no warnings; build PASS. Logs: /tmp/hardening-d6-verify.log and /tmp/hardening-d6-build.log.
