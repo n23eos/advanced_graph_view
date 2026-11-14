@@ -57,6 +57,9 @@ interface NoteSpec {
 	text?: string;
 }
 
+const LINKED_ATTACHMENT_PATH = "Attachments/Graph Explorer.png";
+const UNLINKED_ATTACHMENT_PATH = "Attachments/Loose Reference.pdf";
+
 const NOTE_NAMES = [
 	["Atlas/Home.md", ["atlas", "hub"]],
 	["Atlas/Ideas Index.md", ["atlas", "ideas"]],
@@ -113,6 +116,7 @@ function syntheticNotes(): NoteSpec[] {
 		if (path.startsWith("People/")) links.add("Atlas/People Index.md");
 		if (path.startsWith("Daily/")) links.add("Atlas/Home.md");
 		if (path.includes("Graph")) links.add("Projects/Graph Explorer.md");
+		if (path === "Projects/Graph Explorer.md") links.add(LINKED_ATTACHMENT_PATH);
 		links.delete(path);
 		return {
 			path,
@@ -139,11 +143,16 @@ class Events {
 function createHost(mode: VaultMode, host: HTMLElement, report: (message: string) => void) {
 	const specs = mode === "normal" ? syntheticNotes() : [];
 	const now = Date.now();
-	const files = specs.map((note, index) => new TFile(note.path, {
+	const noteFiles = specs.map((note, index) => new TFile(note.path, {
 		ctime: now - (index + 3) * 18 * 24 * 60 * 60 * 1000,
 		mtime: now - (index % 11) * 4 * 24 * 60 * 60 * 1000,
 		size: 700 + index * 173,
 	}));
+	const attachmentFiles = mode === "normal" ? [
+		new TFile(LINKED_ATTACHMENT_PATH, { ctime: now - 50_000, mtime: now - 20_000, size: 24_000 }),
+		new TFile(UNLINKED_ATTACHMENT_PATH, { ctime: now - 40_000, mtime: now - 10_000, size: 18_000 }),
+	] : [];
+	const files = [...noteFiles, ...attachmentFiles];
 	const fileByPath = new Map(files.map((file) => [file.path, file]));
 	const specByPath = new Map(specs.map((note) => [note.path, note]));
 	const vaultEvents = new Events();
@@ -160,7 +169,8 @@ function createHost(mode: VaultMode, host: HTMLElement, report: (message: string
 	const vault = {
 		on: (name: string, callback: (...args: any[]) => void) => vaultEvents.on(name, callback),
 		offref: (ref: { off(): void }) => ref.off(),
-		getMarkdownFiles: () => files,
+		getFiles: () => files,
+		getMarkdownFiles: () => noteFiles,
 		getAbstractFileByPath: (path: string) => fileByPath.get(path) ?? null,
 		cachedRead: async (file: TFile) => specByPath.get(file.path)?.text ?? "",
 		create: async () => null,
@@ -169,6 +179,21 @@ function createHost(mode: VaultMode, host: HTMLElement, report: (message: string
 	const metadataCache = {
 		resolvedLinks,
 		unresolvedLinks,
+		getFirstLinkpathDest: (linkpath: string, sourcePath: string) => {
+			const normalized = linkpath.replace(/\\/g, "/").replace(/^\/+/, "");
+			const sourceFolder = sourcePath.includes("/") ? sourcePath.slice(0, sourcePath.lastIndexOf("/")) : "";
+			const candidates = [
+				normalized,
+				`${normalized}.md`,
+				sourceFolder ? `${sourceFolder}/${normalized}` : normalized,
+				sourceFolder ? `${sourceFolder}/${normalized}.md` : `${normalized}.md`,
+			];
+			for (const candidate of candidates) {
+				const file = fileByPath.get(candidate);
+				if (file) return file;
+			}
+			return files.find((file) => file.basename === normalized || file.basename === normalized.replace(/\.md$/i, "")) ?? null;
+		},
 		getFileCache: (file: TFile) => ({
 			tags: (specByPath.get(file.path)?.tags ?? []).map((tag) => ({ tag: `#${tag}` })),
 			frontmatter: { status: file.path.startsWith("Projects/") ? "active" : "reference" },
@@ -209,6 +234,7 @@ function createHost(mode: VaultMode, host: HTMLElement, report: (message: string
 	settings.panelMode = "simple";
 	settings.onboardingState = "dismissed";
 	settings.viewPresets = structuredClone(DEFAULT_VIEW_PRESETS);
+	settings.graphScope = { attachments: false, unresolved: false };
 	const plugin: any = {
 		settings,
 		usageLog: {},
@@ -267,7 +293,52 @@ async function mount(mode: VaultMode, restoredState?: Record<string, unknown>, r
 	if (restoredState) await current.view.setState(restoredState, { history: false });
 	await current.view.onOpen();
 	current.view.onResize();
-	report(mode === "normal" ? "42 synthetic notes" : "Empty synthetic vault");
+	syncGraphScopeControls();
+	reportGraphScope();
+}
+
+function graphScopeControls(): HTMLInputElement[] {
+	return ["scope-attachments", "scope-unresolved"]
+		.map((id) => document.getElementById(id))
+		.filter((element): element is HTMLInputElement => element instanceof HTMLInputElement);
+}
+
+function syncGraphScopeControls(): void {
+	const scope = current?.plugin.settings.graphScope ?? { attachments: false, unresolved: false };
+	const attachments = document.getElementById("scope-attachments") as HTMLInputElement | null;
+	const unresolved = document.getElementById("scope-unresolved") as HTMLInputElement | null;
+	if (attachments) attachments.checked = scope.attachments;
+	if (unresolved) unresolved.checked = scope.unresolved;
+}
+
+function expectedNodeCount(): number {
+	if (vaultMode === "empty") return 0;
+	const scope = current?.plugin.settings.graphScope ?? { attachments: false, unresolved: false };
+	return 43 + (scope.attachments ? 1 : 0) + (scope.unresolved ? 2 : 0);
+}
+
+function reportGraphScope(): void {
+	const scope = current?.plugin.settings.graphScope ?? { attachments: false, unresolved: false };
+	report(
+		`Graph scope: attachments=${scope.attachments}, unresolved=${scope.unresolved}. `
+		+ `Fixture expected: ${expectedNodeCount()} nodes`
+	);
+}
+
+async function updateGraphScope(key: "attachments" | "unresolved", checked: boolean): Promise<void> {
+	if (!current) return;
+	const controls = graphScopeControls();
+	for (const control of controls) control.disabled = true;
+	try {
+		current.plugin.settings = {
+			...current.plugin.settings,
+			graphScope: { ...current.plugin.settings.graphScope, [key]: checked },
+		};
+		await current.view.reloadFromSettings();
+		reportGraphScope();
+	} finally {
+		for (const control of controls) control.disabled = false;
+	}
 }
 
 function selectButtons(attribute: string, value: string): void {
@@ -304,6 +375,16 @@ document.querySelectorAll<HTMLButtonElement>("button[data-vault]").forEach((butt
 		selectButtons("data-vault", vaultMode);
 		void mount(vaultMode).catch(showError);
 	});
+});
+
+document.getElementById("scope-attachments")?.addEventListener("change", (event) => {
+	const checkbox = event.currentTarget as HTMLInputElement;
+	void updateGraphScope("attachments", checkbox.checked).catch(showError);
+});
+
+document.getElementById("scope-unresolved")?.addEventListener("change", (event) => {
+	const checkbox = event.currentTarget as HTMLInputElement;
+	void updateGraphScope("unresolved", checkbox.checked).catch(showError);
 });
 
 document.getElementById("workspace-reopen")?.addEventListener("click", () => {

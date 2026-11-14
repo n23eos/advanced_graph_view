@@ -3,6 +3,17 @@ import type { Translation } from "../types";
 /** Polski. Składnia wyszukiwania (path:, tag:, opened:>10) nie jest tłumaczona —
  *  to słowa kluczowe zapytania, nie tekst interfejsu. */
 export const pl: Translation = {
+	"settings.allAttachments": "Wszystkie załączniki",
+	"settings.allAttachments.desc": "Dodaj niepołączone załączniki. Połączone załączniki pozostają widoczne po wyłączeniu.",
+	"settings.unresolvedNodes": "Brakujące cele linków",
+	"settings.unresolvedNodes.desc": "Pokaż brakujące cele. Otwarcie pokazuje notatkę źródłową.",
+	"nodes.missing": "Brak: {target} (źródło: {source})",
+	"nodes.titleFlat": "Mapa tematyczna: {count} węzłów",
+	"nodes.central": "Centralne węzły",
+	"localGraph.mdTitleNode": "Graf lokalny: {node} (głębokość {depth})",
+	"nodes.total": "Węzły",
+	"nodes.openSource": "Otwórz notatkę źródłową",
+
 	"panel.title": "Advanced Graph View",
 	"panel.section.presets": "Ustawienia widoku",
 	"panel.section.appearance": "Wygląd",

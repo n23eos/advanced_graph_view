@@ -1,3 +1,4 @@
+import { displayGraphPath } from "../data/graphNodes";
 /**
  * F-10: the "What changed?" panel inside the graph view. Pure DOM — the host
  * computes the data (worker for big graphs) and owns the masks; the panel
@@ -185,6 +186,7 @@ export class ChangesPanel {
 }
 
 function displayName(path: string): string {
+	if (path.includes("\0")) return displayGraphPath(path);
 	const base = path.slice(path.lastIndexOf("/") + 1);
 	return base.replace(/\.md$/, "");
 }

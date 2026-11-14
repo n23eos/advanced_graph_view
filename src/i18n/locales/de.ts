@@ -4,6 +4,17 @@ import type { Translation } from "../types";
  *  Abfrage-Schlüsselwörter, kein Oberflächentext. Labels absichtlich kurz
  *  gehalten: das Panel hat feste Breite. */
 export const de: Translation = {
+	"settings.allAttachments": "Alle Anhänge",
+	"settings.allAttachments.desc": "Unverknüpfte Anhänge hinzufügen. Verknüpfte Anhänge bleiben auch ausgeschaltet sichtbar.",
+	"settings.unresolvedNodes": "Fehlende Linkziele",
+	"settings.unresolvedNodes.desc": "Fehlende Ziele anzeigen. Beim Öffnen wird die Quellnotiz geöffnet.",
+	"nodes.missing": "Fehlt: {target} (Quelle: {source})",
+	"nodes.titleFlat": "Themenkarte: {count} Knoten",
+	"nodes.central": "Zentrale Knoten",
+	"localGraph.mdTitleNode": "Lokaler Graph: {node} (Tiefe {depth})",
+	"nodes.total": "Knoten",
+	"nodes.openSource": "Quellnotiz öffnen",
+
 	"panel.title": "Advanced Graph View",
 	"panel.section.presets": "Ansichts-Presets",
 	"panel.section.appearance": "Darstellung",

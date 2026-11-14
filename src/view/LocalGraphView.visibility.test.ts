@@ -71,7 +71,7 @@ function setup() {
 		workspace: { on: vi.fn(() => ({})), offref: vi.fn(), getActiveFile: () => null },
 		metadataCache: { on: vi.fn(() => ({})), offref: vi.fn() },
 	};
-	const plugin = { settings: { localGraph: { depth: 2, view3d: true }, panel: {} } };
+	const plugin = { settings: { graphScope: { attachments: false, unresolved: false }, localGraph: { depth: 2, view3d: true }, panel: {} } };
 	const view = new LocalGraphView(
 		{ app } as unknown as WorkspaceLeaf,
 		plugin as ConstructorParameters<typeof LocalGraphView>[1]

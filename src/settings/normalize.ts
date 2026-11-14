@@ -1,3 +1,4 @@
+import { normalizeGraphScope } from "../data/graphScope";
 /**
  * Turns whatever an older version (or a hand-edited file) left in data.json
  * into the current GraphInsightSettings shape. Pure, so every migration path
@@ -123,6 +124,7 @@ export function normalizeSettings(raw: unknown, now: number = Date.now()): Graph
 		...DEFAULT_SETTINGS,
 		...rest,
 		onboardingState,
+		graphScope: normalizeGraphScope(saved.graphScope),
 		renderScale: saved.renderScale === "high" ? "high" : "standard",
 		physicsDefaultsVersion: typeof saved.physicsDefaultsVersion === "number" && Number.isFinite(saved.physicsDefaultsVersion)
 			? saved.physicsDefaultsVersion : 0,

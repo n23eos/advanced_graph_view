@@ -1,3 +1,4 @@
+import { nodeDisplayPath } from "../data/graphNodes";
 import { FuzzySuggestModal, type App } from "obsidian";
 import type { GraphNode } from "../data/GraphStore";
 import { t } from "../i18n";
@@ -16,7 +17,7 @@ export class ExploreNoteModal extends FuzzySuggestModal<GraphNode> {
 	}
 
 	getItems(): GraphNode[] { return this.items(); }
-	getItemText(node: GraphNode): string { return node.path; }
+	getItemText(node: GraphNode): string { return nodeDisplayPath(node); }
 	onChooseItem(node: GraphNode): void { this.choose(node.path); }
 	onClose(): void {
 		super.onClose();

@@ -1,3 +1,6 @@
+import { watchAttachmentInventory } from "./attachmentInventory";
+import { isAttachmentNode } from "../data/graphNodes";
+import { buildVaultGraph } from "../data/vaultGraph";
 import { NativeHoverPreview } from "./nativeHoverPreview";
 import { ExploreBindings } from "./exploreBindings";
 import { TooltipController } from "./tooltip";
@@ -23,7 +26,7 @@ import {
 import { buildAdjacency, computeDistances, focusFalloff, shortestPath, type Adjacency } from "../analysis/focus";
 import { nameClusters, type ClusterContent } from "../analysis/clusterNames";
 import { computeOverlayMask, countOverlayMatches } from "../analysis/overlays";
-import { buildGraphModel, sameGraphModel, type GraphModel } from "../data/GraphStore";
+import { sameGraphModel, type GraphModel } from "../data/GraphStore";
 import { consumeRenames, recordRename, remapPinnedPaths, resolvePreviousPath } from "./renamedPaths";
 import { buildNeighborSeed, type SeedPosition } from "./neighborSeed";
 import { carryMetrics, diffFacts } from "./factsRefresh";
@@ -567,7 +570,8 @@ export class GraphInsightView extends ItemView {
 	}
 
 	private nativePreviewPath(nodeId: number | null): string | null {
-		const path = nodeId === null ? undefined : this.model?.nodes[nodeId]?.path;
+		const node = nodeId === null ? undefined : this.model?.nodes[nodeId];
+		const path = node?.kind === "unresolved" ? undefined : node?.path;
 		const file = path ? this.app.vault.getAbstractFileByPath(path) : null;
 		return file instanceof TFile ? file.path : null;
 	}
@@ -823,6 +827,10 @@ export class GraphInsightView extends ItemView {
 		const onKeyDown = (event: KeyboardEvent) => this.handleKeyDown(event);
 		viewDocument.addEventListener("keydown", onKeyDown, { capture: true });
 		this.openEventCleanups.push(() => viewDocument.removeEventListener("keydown", onKeyDown, { capture: true }));
+
+		if (this.plugin.settings.graphScope.attachments) {
+			this.openEventCleanups.push(watchAttachmentInventory(this.app.vault, () => this.rebuildDebounced()));
+		}
 
 		await this.rebuildGraph();
 		if (this.closing || this.openGeneration !== openGeneration) return;
@@ -1350,7 +1358,7 @@ export class GraphInsightView extends ItemView {
 		if (this.timelineCutoff !== null) {
 			for (let i = 0; i < count; i++) {
 				const ts = this.timelineMode === "created" ? this.facts[i].ctime : this.facts[i].mtime;
-				if (ts >= this.timelineCutoff) hide(i);
+				if (this.facts[i].kind !== "unresolved" && ts >= this.timelineCutoff) hide(i);
 			}
 		}
 		for (const id of this.hiddenNodes) hide(id);
@@ -1598,8 +1606,7 @@ export class GraphInsightView extends ItemView {
 			return;
 		}
 		const files = this.app.vault.getMarkdownFiles();
-		const cache = this.app.metadataCache;
-		const model = buildGraphModel(files.map((f) => f.path), cache.resolvedLinks, cache.unresolvedLinks);
+		const model = buildVaultGraph(this.app, this.plugin.settings.graphScope);
 
 		if (this.rebuilding) {
 			this.rebuildPending = true;
@@ -2011,23 +2018,28 @@ export class GraphInsightView extends ItemView {
 	}
 
 	private buildFacts(model: GraphModel, files: TFile[]): NodeFacts[] {
-		const byPath = new Map(files.map((f) => [f.path, f]));
+		const byPath = new Map((model.scope ? this.app.vault.getFiles() : files).map((f) => [f.path, f]));
 		const now = Date.now();
 		const log = this.plugin.usageLog;
 
 		return model.nodes.map((node) => {
-			const file = byPath.get(node.path);
-			const fileCache = file ? this.app.metadataCache.getFileCache(file) : null;
+			let file = byPath.get(node.path);
+			if (!file && isAttachmentNode(node)) {
+				const candidate = this.app.vault.getAbstractFileByPath(node.path);
+				if (candidate instanceof TFile) file = candidate;
+			}
+			const fileCache = file && !isAttachmentNode(node) && node.kind !== "unresolved" ? this.app.metadataCache.getFileCache(file) : null;
 			const tags = fileCache ? (getAllTags(fileCache) ?? []).map((t) => t.replace(/^#/, "")) : [];
 			return {
 				path: node.path,
+				...(node.kind ? { kind: node.kind } : {}),
 				folder: file?.parent?.path ?? "",
 				tags,
 				inCount: node.inCount,
 				outCount: node.outCount,
 				unresolvedCount: node.unresolvedCount,
-				ctime: file?.stat.ctime ?? now,
-				mtime: file?.stat.mtime ?? now,
+				ctime: node.kind === "unresolved" ? 0 : file?.stat.ctime ?? now,
+				mtime: node.kind === "unresolved" ? 0 : file?.stat.mtime ?? now,
 				size: file?.stat.size ?? 0,
 				opensTotal: log[node.path]?.total ?? 0,
 				opens7: countRecentOpens(log, node.path, 7, now),
@@ -2498,7 +2510,7 @@ export class GraphInsightView extends ItemView {
 
 	private refreshTimelineData(): void {
 		if (!this.timeline) return;
-		const times = this.facts.map((f) => (this.timelineMode === "created" ? f.ctime : f.mtime));
+		const times = this.facts.filter(f => f.kind !== "unresolved").map((f) => (this.timelineMode === "created" ? f.ctime : f.mtime));
 		this.timeline.setTimestamps(times);
 	}
 

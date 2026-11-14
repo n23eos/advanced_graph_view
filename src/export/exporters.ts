@@ -5,7 +5,8 @@ export function graphToJson(model: GraphModel): string {
 	return JSON.stringify(
 		{
 			nodes: model.nodes.map((node) => ({
-				path: node.path,
+				path: node.unresolved ? null : node.path,
+				...(node.kind ? { id: node.path, kind: node.kind, ...node.unresolved } : {}),
 				name: node.name,
 				inCount: node.inCount,
 				outCount: node.outCount,
@@ -31,7 +32,9 @@ function escapeXml(value: string): string {
 
 export function graphToGexf(model: GraphModel): string {
 	const nodes = model.nodes
-		.map((node) => `      <node id="${node.id}" label="${escapeXml(node.name)}" />`)
+		.map((node) => node.kind
+			? `      <node id="${node.id}" label="${escapeXml(node.name)}"><attvalues><attvalue for="kind" value="${node.kind}" /></attvalues></node>`
+			: `      <node id="${node.id}" label="${escapeXml(node.name)}" />`)
 		.join("\n");
 	const edges = model.edges
 		.map((edge, index) =>
@@ -41,7 +44,7 @@ export function graphToGexf(model: GraphModel): string {
 	return `<?xml version="1.0" encoding="UTF-8"?>
 <gexf xmlns="http://gexf.net/1.3" version="1.3">
   <graph defaultedgetype="directed">
-    <nodes>
+${model.nodes.some(node => node.kind) ? '    <attributes class="node"><attribute id="kind" title="kind" type="string" /></attributes>\n' : ""}    <nodes>
 ${nodes}
     </nodes>
     <edges>

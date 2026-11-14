@@ -1,4 +1,5 @@
-import { TFile, type App, type TAbstractFile, type View, type WorkspaceLeaf } from "obsidian";
+import { graphNodeFile } from "../data/vaultGraph";
+import { type TFile, type App, type TAbstractFile, type View, type WorkspaceLeaf } from "obsidian";
 import type { GraphModel } from "../data/GraphStore";
 import { chooseCompanionAction } from "./companionPane";
 
@@ -64,10 +65,8 @@ export class NoteNavigation {
 	}
 
 	nodeFile(nodeId: number): TFile | null {
-		const path = this.model?.nodes[nodeId]?.path;
-		if (!path) return null;
-		const file = this.app.vault.getAbstractFileByPath(path);
-		return file instanceof TFile ? file : null;
+		const node = this.model?.nodes[nodeId];
+		return node ? graphNodeFile(this.app, node) : null;
 	}
 
 	fileExplorer(): { leaf: WorkspaceLeaf; view: FileExplorerView } | null {

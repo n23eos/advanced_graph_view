@@ -1,9 +1,12 @@
+import { sameGraphScope, type GraphScope } from "./graphScope";
 /**
  * Pure graph model builder. Independent from the Obsidian API so it can be
  * unit-tested; GraphView feeds it data from app.metadataCache.
  */
 
 export interface GraphNode {
+	kind?: "note" | "attachment" | "unresolved";
+	unresolved?: { sourcePath: string; linkpath: string };
 	id: number;
 	path: string;
 	name: string;
@@ -19,6 +22,7 @@ export interface GraphEdge {
 }
 
 export interface GraphModel {
+	scope?: GraphScope;
 	nodes: GraphNode[];
 	edges: GraphEdge[];
 	pathToId: Map<string, number>;
@@ -29,11 +33,12 @@ export type LinkMap = Record<string, Record<string, number>>;
 
 /** Same node ids, link topology and counts consumed by the graph view. */
 export function sameGraphModel(a: GraphModel, b: GraphModel): boolean {
+	if (!sameGraphScope(a.scope, b.scope)) return false;
 	if (a.nodes.length !== b.nodes.length || a.edges.length !== b.edges.length) return false;
 	for (let i = 0; i < a.nodes.length; i++) {
 		const left = a.nodes[i];
 		const right = b.nodes[i];
-		if (left.path !== right.path || left.inCount !== right.inCount ||
+		if (left.kind !== right.kind || left.path !== right.path || left.inCount !== right.inCount ||
 			left.outCount !== right.outCount || left.unresolvedCount !== right.unresolvedCount) return false;
 	}
 	for (let i = 0; i < a.edges.length; i++) {
@@ -67,10 +72,18 @@ function basenameWithoutExtension(path: string): string {
 	return dot > 0 ? base.slice(0, dot) : base;
 }
 
+export interface GraphBuildOptions {
+	scope: GraphScope;
+	attachmentPaths: readonly string[];
+	sourcePaths: ReadonlySet<string>;
+	resolveTarget?: (linkpath: string, sourcePath: string) => string | null;
+}
+
 export function buildGraphModel(
 	files: readonly string[],
 	resolvedLinks: LinkMap,
-	unresolvedLinks: LinkMap
+	unresolvedLinks: LinkMap,
+	options?: GraphBuildOptions
 ): GraphModel {
 	const pathToId = new Map<string, number>();
 	const nodes: GraphNode[] = [];
@@ -117,5 +130,38 @@ export function buildGraphModel(
 		nodes[source].unresolvedCount = count;
 	}
 
-	return { nodes, edges, pathToId };
+	if (!options || (!options.scope.attachments && !options.scope.unresolved)) return { nodes, edges, pathToId };
+	const attachments = new Set(options.attachmentPaths);
+	if (options.scope.attachments) for (const path of options.attachmentPaths) addNode(path);
+	for (const node of nodes) node.kind = attachments.has(node.path) ? "attachment" : "note";
+	if (options.scope.unresolved) {
+		const legacyPairs = new Set(edges.map(edge => `${edge.source}:${edge.target}`));
+		const addedPairs = new Map<string, GraphEdge>();
+		for (const [sourcePath, targets] of Object.entries(unresolvedLinks)) {
+			if (!options.sourcePaths.has(sourcePath)) continue;
+			const source = pathToId.get(sourcePath)!;
+			for (const [linkpath, weight] of Object.entries(targets)) {
+				const resolved = options.resolveTarget?.(linkpath, sourcePath);
+				const path = resolved ?? `\0unresolved:${JSON.stringify([sourcePath, linkpath])}`;
+				const target = addNode(path);
+				const node = nodes[target];
+				if (resolved) node.kind = attachments.has(path) ? "attachment" : "note";
+				else {
+					node.kind = "unresolved";
+					node.unresolved = { sourcePath, linkpath };
+					node.name = linkpath;
+				}
+				const pair = `${source}:${target}`;
+				if (source === target || legacyPairs.has(pair)) continue;
+				const existing = addedPairs.get(pair);
+				if (existing) { existing.weight += weight; continue; }
+				const edge = { source, target, weight };
+				addedPairs.set(pair, edge);
+				edges.push(edge);
+				nodes[source].outCount++;
+				nodes[target].inCount++;
+			}
+		}
+	}
+	return { nodes, edges, pathToId, scope: { ...options.scope } };
 }

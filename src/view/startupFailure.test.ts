@@ -158,6 +158,7 @@ describe("graph startup failure", () => {
 		startup.init = () => Promise.reject(new Error("WebGL unavailable"));
 		const plugin = {
 			settings: {
+				graphScope: { attachments: false, unresolved: false },
 				localGraph: { depth: 2, view3d: true },
 				panel: {},
 			},
@@ -176,6 +177,7 @@ describe("graph startup failure", () => {
 		startup.init = () => new Promise<void>((resolve) => { finish = resolve; });
 		const plugin = {
 			settings: {
+				graphScope: { attachments: false, unresolved: false },
 				localGraph: { depth: 2, view3d: true },
 				panel: {},
 			},
@@ -203,6 +205,7 @@ describe("graph startup failure", () => {
 		};
 		const plugin = {
 			settings: {
+				graphScope: { attachments: false, unresolved: false },
 				localGraph: { depth: 2, view3d: true },
 				panel: {},
 			},

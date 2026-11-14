@@ -3,6 +3,17 @@ import type { Translation } from "../types";
 /** 한국어. 검색 문법(path:, tag:, opened:>10)은 번역하지 않습니다. 쿼리
  *  키워드이지 UI 텍스트가 아니기 때문입니다. */
 export const ko: Translation = {
+	"settings.allAttachments": "모든 첨부 파일",
+	"settings.allAttachments.desc": "연결되지 않은 첨부 파일을 추가합니다. 연결된 첨부 파일은 꺼도 표시됩니다.",
+	"settings.unresolvedNodes": "존재하지 않는 링크 대상",
+	"settings.unresolvedNodes.desc": "없는 링크 대상을 표시합니다. 열면 원본 노트가 표시됩니다.",
+	"nodes.missing": "없음: {target} (원본: {source})",
+	"nodes.titleFlat": "주제 지도: 노드 {count}개",
+	"nodes.central": "중심 노드",
+	"localGraph.mdTitleNode": "로컬 그래프: {node} (깊이 {depth})",
+	"nodes.total": "노드",
+	"nodes.openSource": "원본 노트 열기",
+
 	"panel.title": "Advanced Graph View",
 	"panel.section.presets": "보기 프리셋",
 	"panel.section.appearance": "모양",

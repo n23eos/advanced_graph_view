@@ -450,11 +450,12 @@ export default class GraphInsightPlugin extends Plugin {
 			const leaves = [
 				...this.app.workspace.getLeavesOfType(GRAPH_INSIGHT_VIEW_TYPE),
 				...this.app.workspace.getLeavesOfType(LOCAL_GRAPH_VIEW_TYPE),
+				...this.app.workspace.getLeavesOfType(INSIGHTS_VIEW_TYPE),
 			];
 			let failed = false;
 			let firstError: unknown;
 			for (const { view } of leaves) {
-				if (!(view instanceof GraphInsightView || view instanceof LocalGraphView)) continue;
+				if (!(view instanceof GraphInsightView || view instanceof LocalGraphView || view instanceof InsightsView)) continue;
 				try {
 					await view.reloadFromSettings();
 				} catch (error) {
@@ -531,7 +532,7 @@ export default class GraphInsightPlugin extends Plugin {
 		await this.ensureSnapshots();
 		if (generation !== this.snapshotGeneration || this.snapshotReset || this.snapshotCapture) return;
 		const now = Date.now();
-		if (!shouldCapture(this.snapshotStore, now)) return;
+		if (!shouldCapture(this.snapshotStore, now, model.scope)) return;
 		const capture = (async () => {
 			const next = applyRetention(
 				{ version: 1, snapshots: [...this.snapshotStore.snapshots, buildSnapshot(model, metrics, now)] },

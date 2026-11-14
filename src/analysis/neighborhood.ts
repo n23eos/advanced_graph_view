@@ -59,7 +59,7 @@ export function buildNeighborhood(model: GraphModel, rootId: number, maxDepth: n
 	for (const node of kept) pathToId.set(node.path, node.id);
 
 	return {
-		model: { nodes: kept, edges, pathToId },
+		model: { nodes: kept, edges, pathToId, ...(model.scope ? { scope: model.scope } : {}) },
 		depths,
 		parents,
 		rootId: toSub[rootId],

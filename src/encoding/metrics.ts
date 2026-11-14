@@ -4,6 +4,7 @@
  */
 
 export interface NodeFacts {
+	kind?: "note" | "attachment" | "unresolved";
 	path: string;
 	folder: string;
 	tags: string[];
@@ -67,6 +68,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export function computeMetric(metric: MetricId, facts: NodeFacts, now: number): number | string {
 	const propertyKey = propertyKeyFromMetric(metric);
 	if (propertyKey !== null) return facts.properties?.[propertyKey]?.[0] ?? "";
+	if (facts.kind === "unresolved" && (metric === "recency-edit" || metric === "age-created")) return 0;
 	switch (metric) {
 		case "opens-total": return facts.opensTotal;
 		case "opens-90": return facts.opens90;

@@ -3,6 +3,17 @@ import type { Translation } from "../types";
 /** Français. La syntaxe de recherche (path:, tag:, opened:>10) reste telle
  *  quelle — ce sont des mots-clés de requête, pas du texte d'interface. */
 export const fr: Translation = {
+	"settings.allAttachments": "Toutes les pièces jointes",
+	"settings.allAttachments.desc": "Ajouter les pièces jointes sans lien. Les pièces liées restent visibles lorsque cette option est désactivée.",
+	"settings.unresolvedNodes": "Cibles de liens manquantes",
+	"settings.unresolvedNodes.desc": "Afficher les cibles manquantes. Leur ouverture affiche la note source.",
+	"nodes.missing": "Manquant : {target} (source : {source})",
+	"nodes.titleFlat": "Carte thématique : {count} nœuds",
+	"nodes.central": "Nœuds centraux",
+	"localGraph.mdTitleNode": "Graphe local : {node} (profondeur {depth})",
+	"nodes.total": "Nœuds",
+	"nodes.openSource": "Ouvrir la note source",
+
 	"panel.title": "Advanced Graph View",
 	"panel.section.presets": "Préréglages de vue",
 	"panel.section.appearance": "Apparence",

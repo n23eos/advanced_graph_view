@@ -290,16 +290,20 @@ function termMatches(
 			return compare(actual, term.condition);
 		}
 		case "edited-days": {
+			if (facts.kind === "unresolved") return false;
 			const daysAgo = (now - facts.mtime) / DAY_MS;
 			return compare(daysAgo, { comparator: term.comparator, value: term.days });
 		}
 		case "created-days": {
+			if (facts.kind === "unresolved") return false;
 			const daysAgo = (now - facts.ctime) / DAY_MS;
 			return compare(daysAgo, { comparator: term.comparator, value: term.days });
 		}
 		case "edited-date":
+			if (facts.kind === "unresolved") return false;
 			return compare(facts.mtime, { comparator: term.comparator, value: term.ts });
 		case "created-date":
+			if (facts.kind === "unresolved") return false;
 			return compare(facts.ctime, { comparator: term.comparator, value: term.ts });
 	}
 }

@@ -1,3 +1,4 @@
+import { nodeDisplayPath, nodeMarkdown } from "../data/graphNodes";
 import { Menu, Notice } from "obsidian";
 import type { GraphModel } from "../data/GraphStore";
 import { t, type TranslationKey } from "../i18n";
@@ -48,10 +49,10 @@ export class GraphMenus<TaskId extends string> {
 		if (!this.model) return;
 		const node = this.model.nodes[nodeId];
 		const menu = new Menu();
-		menu.addItem((item) => item.setTitle(t("menu.open")).setIcon("file-text").onClick(() => this.deps.openNode(nodeId, false)));
+		menu.addItem((item) => item.setTitle(t(node.kind === "unresolved" ? "nodes.openSource" : "menu.open")).setIcon("file-text").onClick(() => this.deps.openNode(nodeId, false)));
 		menu.addItem((item) => item.setTitle(t("menu.openNewTab")).setIcon("file-plus").onClick(() => this.deps.openNode(nodeId, true)));
 		menu.addItem((item) => item.setTitle(t("menu.openRight")).setIcon("separator-vertical").onClick(() => this.deps.openNodeInSplit(nodeId)));
-		if (this.deps.canRevealNode()) {
+		if (node.kind !== "unresolved" && this.deps.canRevealNode()) {
 			menu.addItem((item) => item.setTitle(t("menu.reveal")).setIcon("folder-open").onClick(() => this.deps.revealNode(nodeId)));
 		}
 		menu.addItem((item) => item.setTitle(t("menu.focus")).setIcon("target").onClick(() => this.deps.enterFocus(nodeId)));
@@ -69,10 +70,10 @@ export class GraphMenus<TaskId extends string> {
 		menu.addSeparator();
 		menu.addItem((item) => item.setTitle(t("menu.copyLink")).setIcon("link").onClick(async () => {
 			// Write-only: paste-ready Obsidian wikilink for the note.
-			await this.deps.writeClipboard(`[[${node.name}]]`);
+			await this.deps.writeClipboard(nodeMarkdown(node));
 			new Notice(t("notice.copiedLink", { name: node.name }));
 		}));
-		menu.addItem((item) => item.setTitle(t("menu.path", { path: node.path })).setDisabled(true));
+		menu.addItem((item) => item.setTitle(t("menu.path", { path: nodeDisplayPath(node) })).setDisabled(true));
 		menu.showAtMouseEvent(event);
 	}
 
@@ -99,7 +100,7 @@ export class GraphMenus<TaskId extends string> {
 			.onClick(() => this.deps.setSelectionPinned(nodeIds, !allPinned)));
 		menu.addItem((item) => item.setTitle(t("menu.copyPaths")).setIcon("copy").onClick(async () => {
 			// Write-only, and only from this explicit menu action - the plugin never reads the clipboard.
-			const paths = nodeIds.map((id) => this.model!.nodes[id].path).join("\n");
+			const paths = nodeIds.map((id) => nodeDisplayPath(this.model!.nodes[id])).join("\n");
 			await this.deps.writeClipboard(paths);
 			new Notice(t("notice.copiedPaths", { count: nodeIds.length }));
 		}));

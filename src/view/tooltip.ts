@@ -1,3 +1,4 @@
+import { nodeDisplayPath } from "../data/graphNodes";
 import { TFile, type App } from "obsidian";
 import type { GraphModel } from "../data/GraphStore";
 import type { NodeFacts } from "../encoding/metrics";
@@ -63,7 +64,7 @@ export class TooltipController {
 		const node = this.model.nodes[nodeId];
 		const facts = this.facts[nodeId];
 		this.tooltip.empty();
-		this.tooltip.createDiv({ cls: "graph-insight-tooltip-title", text: node.name });
+		this.tooltip.createDiv({ cls: "graph-insight-tooltip-title", text: node.kind === "unresolved" ? nodeDisplayPath(node) : node.name });
 		if (facts) {
 			const meta = this.tooltip.createDiv({ cls: "graph-insight-tooltip-meta" });
 			meta.createDiv({
@@ -72,7 +73,7 @@ export class TooltipController {
 			meta.createDiv({
 				text: t("tooltip.links", { inbound: facts.inCount, outbound: facts.outCount }),
 			});
-			meta.createDiv({
+			if (node.kind !== "unresolved") meta.createDiv({
 				text: t("tooltip.edited", { date: new Date(facts.mtime).toLocaleDateString() }),
 			});
 			const channels = this.plugin.settings.panel.channels;
@@ -115,9 +116,9 @@ export class TooltipController {
 
 	async notePreview(nodeId: number, words: number): Promise<string | null> {
 		const node = this.model?.nodes[nodeId];
-		if (!node) return null;
+		if (!node || node.kind === "unresolved" || node.path.includes("\0")) return null;
 		const file = this.app.vault.getAbstractFileByPath(node.path);
-		if (!(file instanceof TFile)) return null;
+		if (!(file instanceof TFile) || file.extension !== "md") return null;
 		let raw = "";
 		try {
 			raw = await this.app.vault.cachedRead(file);

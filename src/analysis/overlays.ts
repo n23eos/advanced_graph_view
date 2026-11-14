@@ -21,6 +21,7 @@ export function computeOverlayMask(model: GraphModel, toggles: OverlayToggles): 
 	if (!toggles.orphans && !toggles.deadEnds && !toggles.broken) return null;
 	const mask = new Uint8Array(model.nodes.length);
 	for (const node of model.nodes) {
+		if (node.kind && node.kind !== "note") continue;
 		const isMatch =
 			(toggles.orphans && node.inCount === 0) ||
 			(toggles.deadEnds && node.outCount === 0) ||
@@ -35,6 +36,7 @@ export function countOverlayMatches(model: GraphModel): OverlayCounts {
 	let deadEnds = 0;
 	let broken = 0;
 	for (const node of model.nodes) {
+		if (node.kind && node.kind !== "note") continue;
 		if (node.inCount === 0) orphans++;
 		if (node.outCount === 0) deadEnds++;
 		if (node.unresolvedCount > 0) broken++;

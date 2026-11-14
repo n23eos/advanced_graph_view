@@ -1,3 +1,4 @@
+import { nodeSourcePath } from "../data/graphNodes";
 import { Notice, TFile, type App } from "obsidian";
 import type { GraphModel } from "../data/GraphStore";
 import type { GraphRenderer } from "../render/GraphRenderer";
@@ -80,7 +81,7 @@ export class ExportActions {
 			{
 				name: root ? `${t("topicmap.modalTitle")} \u2014 ${root.name}` : t("topicmap.modalTitle"),
 				// §13.4: default next to the root note; vault root for lasso.
-				folder: root ? root.path.slice(0, Math.max(root.path.lastIndexOf("/"), 0)) : "",
+				folder: root ? nodeSourcePath(root).slice(0, Math.max(nodeSourcePath(root).lastIndexOf("/"), 0)) : "",
 				depth: Math.min(Math.max(this.focusDepth, 1), 4),
 				includeDirections: true,
 				includeMetrics: true,

@@ -1,3 +1,6 @@
+import { watchAttachmentInventory } from "./attachmentInventory";
+import { nodeDisplayPath } from "../data/graphNodes";
+import { buildVaultGraph, graphNodeFile } from "../data/vaultGraph";
 /**
  * Local 3D graph pane: the BFS neighborhood of the active note, rendered with
  * the same GraphRenderer/LayoutClient pair as the main view but with none of
@@ -14,7 +17,7 @@ import {
 	type EventRef,
 	type WorkspaceLeaf,
 } from "obsidian";
-import { buildGraphModel, type GraphModel } from "../data/GraphStore";
+import { type GraphModel } from "../data/GraphStore";
 import { buildNeighborhood, type Neighborhood } from "../analysis/neighborhood";
 import { focusFalloff } from "../analysis/focus";
 import { localGraphMarkdown } from "../export/localGraphMarkdown";
@@ -58,6 +61,7 @@ export class LocalGraphView extends ItemView {
 	private openGeneration = 0;
 	private fileOpenEvent: EventRef | null = null;
 	private metadataResolvedEvent: EventRef | null = null;
+	private stopAttachmentInventory: (() => void) | null = null;
 	private refreshOnResolve: Debouncer<[], void> | null = null;
 	private reopenRequested = false;
 	private reopenPromise: Promise<void> | null = null;
@@ -188,6 +192,9 @@ export class LocalGraphView extends ItemView {
 			true
 		);
 		this.metadataResolvedEvent = this.app.metadataCache.on("resolved", this.refreshOnResolve);
+		if (this.plugin.settings.graphScope.attachments) {
+			this.stopAttachmentInventory = watchAttachmentInventory(this.app.vault, () => this.refreshOnResolve?.());
+		}
 
 		const active = this.app.workspace.getActiveFile();
 		const rootPath = active?.extension === "md" ? active.path : this.rootPath;
@@ -247,6 +254,8 @@ export class LocalGraphView extends ItemView {
 	}
 
 	private clearOpenListeners(): void {
+		this.stopAttachmentInventory?.();
+		this.stopAttachmentInventory = null;
 		this.stopWindowMigration?.();
 		this.stopWindowMigration = null;
 		this.contentEl.removeEventListener("pointerdown", this.cancelAutoFit);
@@ -320,8 +329,9 @@ export class LocalGraphView extends ItemView {
 			return;
 		}
 		const depth = this.neighborhood!.depths[node.id];
+		const label = node.kind === "unresolved" ? nodeDisplayPath(node) : node.name;
 		this.tooltip.setText(
-			depth === 0 ? node.name : `${node.name} — ${t("localGraph.mdLevel", { depth: String(depth) })}`
+			depth === 0 ? label : `${label} \u2014 ${t("localGraph.mdLevel", { depth: String(depth) })}`
 		);
 		const bounds = this.contentEl.getBoundingClientRect();
 		this.tooltip.style.left = `${clientX - bounds.left + 12}px`;
@@ -338,9 +348,7 @@ export class LocalGraphView extends ItemView {
 	private refresh(path: string): void {
 		if (!this.renderer || !this.layout) return;
 		if (!this.vaultModel) {
-			const cache = this.app.metadataCache;
-			const files = this.app.vault.getMarkdownFiles().map((f) => f.path);
-			this.vaultModel = buildGraphModel(files, cache.resolvedLinks, cache.unresolvedLinks);
+			this.vaultModel = buildVaultGraph(this.app, this.plugin.settings.graphScope);
 		}
 		const model = this.vaultModel;
 		const rootId = model.pathToId.get(path);
@@ -411,9 +419,9 @@ export class LocalGraphView extends ItemView {
 	 *  called from a sidebar can hand back the sidebar itself and replace the
 	 *  graph with the note. */
 	private openNode(nodeId: number, newTab = false): void {
-		const path = this.neighborhood?.model.nodes[nodeId]?.path;
-		if (!path) return;
-		const file = this.app.vault.getAbstractFileByPath(path);
+		const node = this.neighborhood?.model.nodes[nodeId];
+		if (!node) return;
+		const file = graphNodeFile(this.app, node);
 		if (!(file instanceof TFile)) return;
 		const recent = this.app.workspace.getMostRecentLeaf();
 		const reusable = !newTab && recent !== null && recent !== this.leaf ? recent : null;

@@ -1,3 +1,4 @@
+import { isAttachmentNode, nodeMarkdown } from "../data/graphNodes";
 /**
  * F-12: Markdown topic map for a selection of notes. Reuses the local-graph
  * BFS shape for rooted sources (focus/explore) and renders a flat list for
@@ -35,6 +36,7 @@ interface Row {
 export function topicMapMarkdown(input: TopicMapInput, options: TopicMapOptions): string {
 	const { model, selected } = normalize(input);
 	const inSelection = new Set(selected);
+	const mixed = selected.some(id => model.nodes[id].kind === "unresolved" || isAttachmentNode(model.nodes[id]));
 	const internal = model.edges.filter(
 		(edge) => inSelection.has(edge.source) && inSelection.has(edge.target)
 	);
@@ -62,7 +64,7 @@ export function topicMapMarkdown(input: TopicMapInput, options: TopicMapOptions)
 		`# ${title(input)}`,
 		"",
 		`## ${t("topicmap.mdOverview")}`,
-		`- ${t("topicmap.mdNotes", { count: String(selected.length) })}`,
+		`- ${mixed ? `${t("nodes.total")}: ${selected.length}` : t("topicmap.mdNotes", { count: String(selected.length) })}`,
 		`- ${t("topicmap.mdEdges", { count: String(internal.length) })}`,
 	];
 
@@ -71,10 +73,10 @@ export function topicMapMarkdown(input: TopicMapInput, options: TopicMapOptions)
 			.sort((a, b) => b.inbound + b.outbound - (a.inbound + a.outbound) || compare(a.name, b.name))
 			.slice(0, 5);
 		if (central.length > 0) {
-			lines.push("", `## ${t("topicmap.mdCentral")}`);
+			lines.push("", `## ${t(mixed ? "nodes.central" : "topicmap.mdCentral")}`);
 			for (const row of central) {
 				lines.push(
-					`- [[${row.name}]] — ${t("topicmap.mdInOut", {
+					`- ${nodeMarkdown(model.nodes[row.id])} \u2014 ${t("topicmap.mdInOut", {
 						inbound: String(row.inbound),
 						outbound: String(row.outbound),
 					})}`
@@ -86,17 +88,17 @@ export function topicMapMarkdown(input: TopicMapInput, options: TopicMapOptions)
 	if (input.kind === "rooted") {
 		lines.push(...ringSections(input.neighborhood, options, compare));
 	} else {
-		lines.push("", `## ${t("topicmap.mdSelection")}`);
+		lines.push("", `## ${t(mixed ? "nodes.total" : "topicmap.mdSelection")}`);
 		const flat = [...rows.values()].sort((a, b) => compare(a.name, b.name));
-		for (const row of flat) lines.push(`- [[${row.name}]]`);
+		for (const row of flat) lines.push(`- ${nodeMarkdown(model.nodes[row.id])}`);
 	}
 
 	if (options.includeInternalLinks) {
 		lines.push("", `## ${t("topicmap.mdInternal")}`);
 		const links = internal
-			.map((edge) => ({ from: model.nodes[edge.source].name, to: model.nodes[edge.target].name }))
+			.map((edge) => ({ from: nodeMarkdown(model.nodes[edge.source]), to: nodeMarkdown(model.nodes[edge.target]) }))
 			.sort((a, b) => compare(a.from, b.from) || compare(a.to, b.to));
-		for (const link of links) lines.push(`- [[${link.from}]] → [[${link.to}]]`);
+		for (const link of links) lines.push(`- ${link.from} → ${link.to}`);
 	}
 
 	return lines.join("\n") + "\n";
@@ -113,9 +115,10 @@ function normalize(input: TopicMapInput): { model: GraphModel; selected: number[
 function title(input: TopicMapInput): string {
 	if (input.kind === "rooted") {
 		const root = input.neighborhood.model.nodes[input.neighborhood.rootId];
-		return t("topicmap.mdTitle", { name: `[[${root.name}]]` });
+		return t("topicmap.mdTitle", { name: nodeMarkdown(root) });
 	}
-	return t("topicmap.mdTitleFlat", { count: String(new Set(input.nodeIds).size) });
+	const mixed = input.nodeIds.some(id => input.model.nodes[id].kind === "unresolved" || isAttachmentNode(input.model.nodes[id]));
+	return t(mixed ? "nodes.titleFlat" : "topicmap.mdTitleFlat", { count: String(new Set(input.nodeIds).size) });
 }
 
 function maxDepth(neighborhood: Neighborhood): number {
@@ -154,14 +157,14 @@ function ringSections(
 		for (const node of ring) {
 			if (depth === 1) {
 				const prefix = options.includeDirections ? `${arrow(node.id)} ` : "";
-				lines.push(`- ${prefix}[[${node.name}]]`);
+				lines.push(`- ${prefix}${nodeMarkdown(node)}`);
 				continue;
 			}
 			const parent = model.nodes[parents[node.id]];
 			lines.push(
 				parent
-					? `- [[${node.name}]] (${t("topicmap.mdVia")} [[${parent.name}]])`
-					: `- [[${node.name}]]`
+					? `- ${nodeMarkdown(node)} (${t("topicmap.mdVia")} ${nodeMarkdown(parent)})`
+					: `- ${nodeMarkdown(node)}`
 			);
 		}
 	}

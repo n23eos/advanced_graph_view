@@ -1,3 +1,4 @@
+import { isGraphScope, sameGraphScope, type GraphScope } from "./graphScope";
 /**
  * F-10: periodic topology snapshots the "What changed?" panel diffs against.
  * Pure data + policy — persistence lives in PluginDataStore, capture timing
@@ -8,6 +9,7 @@ import type { GraphModel } from "./GraphStore";
 import type { GraphMetrics } from "../workers/MetricsClient";
 
 export interface GraphSnapshot {
+	scope?: GraphScope;
 	version: 1;
 	capturedAt: number;
 	paths: string[];
@@ -43,6 +45,7 @@ export function buildSnapshot(
 	return {
 		version: 1,
 		capturedAt,
+		...(model.scope ? { scope: { ...model.scope } } : {}),
 		paths: model.nodes.map((node) => node.path),
 		edges: model.edges.map((edge) => [edge.source, edge.target]),
 		pagerank: Array.from(metrics.pagerank),
@@ -51,17 +54,17 @@ export function buildSnapshot(
 }
 
 /** At most one snapshot per 24 h, and only after metrics succeeded. */
-export function shouldCapture(store: SnapshotStore, now: number): boolean {
-	const latest = store.snapshots[store.snapshots.length - 1];
+export function shouldCapture(store: SnapshotStore, now: number, scope?: GraphScope): boolean {
+	const latest = closestSnapshotBefore(store, Infinity, scope);
 	return !latest || now - latest.capturedAt >= CAPTURE_MIN_INTERVAL_MS;
 }
 
 /** The snapshot the diff runs against: the newest one captured no later
  *  than the period start; null means the history does not reach that far. */
-export function closestSnapshotBefore(store: SnapshotStore, periodStart: number): GraphSnapshot | null {
+export function closestSnapshotBefore(store: SnapshotStore, periodStart: number, scope?: GraphScope): GraphSnapshot | null {
 	let best: GraphSnapshot | null = null;
 	for (const snapshot of store.snapshots) {
-		if (snapshot.capturedAt <= periodStart && (!best || snapshot.capturedAt > best.capturedAt)) {
+		if (sameGraphScope(snapshot.scope, scope) && snapshot.capturedAt <= periodStart && (!best || snapshot.capturedAt > best.capturedAt)) {
 			best = snapshot;
 		}
 	}
@@ -81,12 +84,15 @@ export function applyRetention(store: SnapshotStore, now: number): SnapshotStore
 	const byBucket = new Map<string, GraphSnapshot>();
 	for (const snapshot of sorted) {
 		const age = now - snapshot.capturedAt;
+		const scopeKey = `${snapshot.scope?.attachments === true}:${snapshot.scope?.unresolved === true}`;
+		byBucket.set(`baseline:${scopeKey}`, snapshot);
 		let key: string | null = null;
 		if (age <= WEEKLY_KEEP * WEEK_MS) key = `w${Math.floor(age / WEEK_MS)}`;
 		else if (age <= WEEKLY_KEEP * WEEK_MS + MONTHLY_KEEP * MONTH_MS) {
 			key = `m${Math.floor((age - WEEKLY_KEEP * WEEK_MS) / MONTH_MS)}`;
 		}
 		if (key === null) continue;
+		key = `${scopeKey}:${key}`;
 		const kept = byBucket.get(key);
 		if (!kept || snapshot.capturedAt > kept.capturedAt) byBucket.set(key, snapshot);
 	}
@@ -110,6 +116,7 @@ export function normalizeSnapshotStore(raw: unknown): SnapshotStore | null {
 	const snapshots = rows.filter((row): row is GraphSnapshot => {
 		if (typeof row !== "object" || row === null) return false;
 		const snapshot = row as Partial<GraphSnapshot>;
+		if (snapshot.scope !== undefined && !isGraphScope(snapshot.scope)) return false;
 		if (
 			snapshot.version !== 1 ||
 			typeof snapshot.capturedAt !== "number" ||

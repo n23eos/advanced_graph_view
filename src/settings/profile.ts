@@ -1,3 +1,4 @@
+import { normalizeGraphScope } from "../data/graphScope";
 /**
  * Settings profile: the part of the configuration that is worth moving between
  * vaults or machines. Usage history, saved positions and first-run state stay
@@ -11,6 +12,7 @@ import { PANEL_MODES, type PanelMode, type PanelState } from "../ui/ControlPanel
 export const PROFILE_VERSION = 1;
 
 export interface SettingsProfile {
+	graphScope?: GraphInsightSettings["graphScope"];
 	physicsDefaultsVersion?: number;
 	version: number;
 	panel: PanelState;
@@ -27,6 +29,7 @@ export interface SettingsProfile {
 export function buildProfile(settings: GraphInsightSettings): SettingsProfile {
 	return {
 		version: PROFILE_VERSION,
+		graphScope: settings.graphScope,
 		physicsDefaultsVersion: settings.physicsDefaultsVersion,
 		panel: settings.panel,
 		panelMode: settings.panelMode,
@@ -55,6 +58,7 @@ export function mergeProfile(
 
 	return migratePhysicsDefaults({
 		...current,
+		graphScope: profile.graphScope === undefined ? current.graphScope : normalizeGraphScope(profile.graphScope),
 		physicsDefaultsVersion: isObject(profile.panel)
 			? normalizeSettings(profile).physicsDefaultsVersion : current.physicsDefaultsVersion,
 		// normalizePanel/normalizeSearchPresets accept profiles written by

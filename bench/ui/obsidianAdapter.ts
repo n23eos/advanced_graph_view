@@ -39,16 +39,24 @@ export class TFile {
 	path: string;
 	name: string;
 	basename: string;
-	extension = "md";
+	extension: string;
 	parent: { path: string };
 	stat: { ctime: number; mtime: number; size: number };
 	constructor(path: string, stat: { ctime: number; mtime: number; size: number }) {
 		this.path = path;
 		this.name = path.split("/").pop() ?? path;
-		this.basename = this.name.replace(/\.md$/i, "");
+		const extensionIndex = this.name.lastIndexOf(".");
+		this.extension = extensionIndex > 0 ? this.name.slice(extensionIndex + 1).toLowerCase() : "";
+		this.basename = extensionIndex > 0 ? this.name.slice(0, extensionIndex) : this.name;
 		this.parent = { path: path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "" };
 		this.stat = stat;
 	}
+}
+
+export function parseLinktext(linktext: string): { path: string; subpath: string } {
+	const subpathIndex = linktext.search(/[#^]/);
+	if (subpathIndex < 0) return { path: linktext, subpath: "" };
+	return { path: linktext.slice(0, subpathIndex), subpath: linktext.slice(subpathIndex) };
 }
 
 export class ItemView {

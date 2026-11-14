@@ -49,7 +49,7 @@ function makeView(bodies: Record<string, string>, read?: (file: { path: string }
 		metadataCache: { resolvedLinks: {}, unresolvedLinks: {} },
 	};
 	const leaf = { app } as unknown as WorkspaceLeaf;
-	const plugin = { flushSettings: vi.fn(async () => {}) };
+	const plugin = { settings: { graphScope: { attachments: false, unresolved: false } }, flushSettings: vi.fn(async () => {}) };
 	const view = new GraphInsightView(
 		leaf,
 		plugin as unknown as ConstructorParameters<typeof GraphInsightView>[1]

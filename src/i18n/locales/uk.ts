@@ -3,6 +3,17 @@ import type { Translation } from "../types";
 /** Українська. Синтаксис пошуку (path:, tag:, opened:>10) не перекладається —
  *  це ключові слова запиту, а не текст інтерфейсу. */
 export const uk: Translation = {
+	"settings.allAttachments": "Усі вкладення",
+	"settings.allAttachments.desc": "Додавати непов’язані вкладення. Пов’язані вкладення залишаються видимими.",
+	"settings.unresolvedNodes": "Відсутні цілі посилань",
+	"settings.unresolvedNodes.desc": "Показувати відсутні цілі. Відкриття показує вихідну нотатку.",
+	"nodes.missing": "Відсутнє: {target} (джерело: {source})",
+	"nodes.titleFlat": "Карта теми: {count} вузлів",
+	"nodes.central": "Центральні вузли",
+	"localGraph.mdTitleNode": "Локальний граф: {node} (глибина {depth})",
+	"nodes.total": "Вузли",
+	"nodes.openSource": "Відкрити вихідну нотатку",
+
 	"panel.title": "Advanced Graph View",
 	"panel.section.presets": "Пресети вигляду",
 	"panel.section.appearance": "Вигляд",

@@ -15,6 +15,8 @@ import type GraphInsightPlugin from "../main";
 
 /** Keys addressed by the declarative settings API. */
 type SettingKey =
+	| "allAttachments"
+	| "unresolvedNodes"
 	| "renderScaleHigh"
 	| "openDwellSeconds"
 	| "hoverPreviewEnabled"
@@ -36,6 +38,8 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 				type: "group",
 				heading: t("settings.group.rendering"),
 				items: [
+					{ name: t("settings.allAttachments"), desc: t("settings.allAttachments.desc"), control: { type: "toggle", key: "allAttachments" } },
+					{ name: t("settings.unresolvedNodes"), desc: t("settings.unresolvedNodes.desc"), control: { type: "toggle", key: "unresolvedNodes" } },
 					{
 						name: t("settings.renderScale"),
 						desc: t("settings.renderScale.desc"),
@@ -229,6 +233,8 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 
 	getControlValue(key: string): unknown {
 		switch (key as SettingKey) {
+			case "allAttachments": return this.plugin.settings.graphScope.attachments;
+			case "unresolvedNodes": return this.plugin.settings.graphScope.unresolved;
 			case "renderScaleHigh":
 				return this.plugin.settings.renderScale === "high";
 			case "openDwellSeconds":
@@ -244,6 +250,15 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 
 	async setControlValue(key: string, value: unknown): Promise<void> {
 		switch (key as SettingKey) {
+			case "allAttachments":
+			case "unresolvedNodes":
+				this.plugin.settings = { ...this.plugin.settings, graphScope: {
+					...this.plugin.settings.graphScope,
+					[key === "allAttachments" ? "attachments" : "unresolved"]: value === true,
+				} };
+				await this.plugin.saveData(this.plugin.settings);
+				await this.plugin.reloadGraphViews();
+				return;
 			case "renderScaleHigh":
 				this.plugin.settings = {
 					...this.plugin.settings,

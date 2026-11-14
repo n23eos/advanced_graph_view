@@ -3,6 +3,17 @@ import type { Translation } from "../types";
 /** 简体中文。搜索语法（path:、tag:、opened:>10）保持原样 —— 它们是查询关键字，
  *  不是界面文本。 */
 export const zh: Translation = {
+	"settings.allAttachments": "所有附件",
+	"settings.allAttachments.desc": "添加未链接的附件。关闭后，已链接的附件仍然显示。",
+	"settings.unresolvedNodes": "缺失的链接目标",
+	"settings.unresolvedNodes.desc": "显示缺失的目标。打开时会显示来源笔记。",
+	"nodes.missing": "缺失：{target}（来源：{source}）",
+	"nodes.titleFlat": "主题图：{count} 个节点",
+	"nodes.central": "中心节点",
+	"localGraph.mdTitleNode": "局部图：{node}（深度 {depth}）",
+	"nodes.total": "节点",
+	"nodes.openSource": "打开来源笔记",
+
 	"panel.title": "Advanced Graph View",
 	"panel.section.presets": "视图预设",
 	"panel.section.appearance": "外观",

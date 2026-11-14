@@ -1,10 +1,13 @@
+import { watchAttachmentInventory } from "./attachmentInventory";
 /**
  * Insights dashboard (right sidebar): vault totals, top notes by opens and
  * PageRank, cooling hubs, 90-day activity spark.
  * Self-contained: builds its own model and runs its own metrics worker.
  */
-import { ItemView, TFile, type WorkspaceLeaf } from "obsidian";
-import { buildGraphModel, type GraphModel } from "../data/GraphStore";
+import { ItemView, type WorkspaceLeaf } from "obsidian";
+import type { GraphModel } from "../data/GraphStore";
+import { buildVaultGraph, graphNodeFile } from "../data/vaultGraph";
+import { nodeDisplayPath } from "../data/graphNodes";
 import { countOverlayMatches } from "../analysis/overlays";
 import { countRecentOpens } from "../data/UsageTracker";
 import { MetricsClient, type GraphMetrics } from "../workers/MetricsClient";
@@ -21,6 +24,7 @@ const COOLING_DAYS = 60;
 export class InsightsView extends ItemView {
 	private metricsClient: MetricsClient | null = null;
 	private model: GraphModel | null = null;
+	private stopAttachmentInventory: (() => void) | null = null;
 
 	constructor(leaf: WorkspaceLeaf, private readonly plugin: GraphInsightPlugin) {
 		super(leaf);
@@ -40,14 +44,25 @@ export class InsightsView extends ItemView {
 
 	async onOpen(): Promise<void> {
 		this.metricsClient = new MetricsClient((metrics) => this.render(metrics));
+		this.syncAttachmentInventory();
 		this.renderSkeleton();
 		this.refresh();
 	}
 
+	async reloadFromSettings(): Promise<void> {
+		this.syncAttachmentInventory();
+		this.renderSkeleton();
+		this.refresh();
+	}
+
+	private syncAttachmentInventory(): void {
+		this.stopAttachmentInventory?.();
+		this.stopAttachmentInventory = this.plugin.settings.graphScope.attachments
+			? watchAttachmentInventory(this.app.vault, () => this.refresh()) : null;
+	}
+
 	private refresh(): void {
-		const cache = this.app.metadataCache;
-		const files = this.app.vault.getMarkdownFiles().map((f) => f.path);
-		this.model = buildGraphModel(files, cache.resolvedLinks, cache.unresolvedLinks);
+		this.model = buildVaultGraph(this.app, this.plugin.settings.graphScope);
 		this.metricsClient?.compute(this.model);
 	}
 
@@ -78,7 +93,7 @@ export class InsightsView extends ItemView {
 			row.createSpan({ cls: "graph-insight-insights-total-value", text: String(value) });
 			row.createSpan({ text: label });
 		};
-		totalRow(t("insights.total.notes"), model.nodes.length);
+		totalRow(t(model.scope ? "nodes.total" : "insights.total.notes"), model.nodes.length);
 		totalRow(t("insights.total.links"), model.edges.length);
 		totalRow(t("insights.total.orphans"), counts.orphans);
 		totalRow(t("insights.total.broken"), counts.broken);
@@ -93,7 +108,7 @@ export class InsightsView extends ItemView {
 			.slice(0, TOP_COUNT);
 		this.renderList(el, t("insights.topOpens"), byOpens.map((x) => ({
 			path: x.node.path,
-			label: x.node.name,
+			label: x.node.kind === "unresolved" ? nodeDisplayPath(x.node) : x.node.name,
 			value: String(x.opens),
 		})));
 
@@ -104,7 +119,7 @@ export class InsightsView extends ItemView {
 			.slice(0, TOP_COUNT);
 		this.renderList(el, t("insights.topPagerank"), byRank.map((x) => ({
 			path: x.node.path,
-			label: x.node.name,
+			label: x.node.kind === "unresolved" ? nodeDisplayPath(x.node) : x.node.name,
 			value: (x.rank * 1000).toFixed(1),
 		})));
 
@@ -124,7 +139,7 @@ export class InsightsView extends ItemView {
 			.slice(0, TOP_COUNT);
 		this.renderList(el, t("insights.cooling", { days: COOLING_DAYS }), cooling.map((x) => ({
 			path: x.node.path,
-			label: x.node.name,
+			label: x.node.kind === "unresolved" ? nodeDisplayPath(x.node) : x.node.name,
 			value: `${Math.floor((now - (files.get(x.node.path)?.stat.mtime ?? now)) / DAY_MS)}d`,
 		})));
 	}
@@ -173,11 +188,15 @@ export class InsightsView extends ItemView {
 	}
 
 	private openPath(path: string): void {
-		const file = this.app.vault.getAbstractFileByPath(path);
-		if (file instanceof TFile) void this.app.workspace.getLeaf(false).openFile(file);
+		const id = this.model?.pathToId.get(path);
+		if (id === undefined || !this.model) return;
+		const file = graphNodeFile(this.app, this.model.nodes[id]);
+		if (file) void this.app.workspace.getLeaf(false).openFile(file);
 	}
 
 	async onClose(): Promise<void> {
+		this.stopAttachmentInventory?.();
+		this.stopAttachmentInventory = null;
 		this.metricsClient?.stop();
 		this.metricsClient = null;
 	}

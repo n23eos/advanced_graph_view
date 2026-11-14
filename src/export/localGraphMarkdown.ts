@@ -1,3 +1,4 @@
+import { isAttachmentNode, nodeMarkdown } from "../data/graphNodes";
 /**
  * Markdown rendering of a note's local neighborhood: one heading per BFS ring,
  * direction arrows on the first ring, and the note each deeper hop was reached
@@ -22,11 +23,14 @@ export function localGraphMarkdown(neighborhood: Neighborhood): string {
 		if (edge.source === rootId) rootOut.add(edge.target);
 		if (edge.target === rootId) rootIn.add(edge.source);
 	}
-	const rootName = model.nodes[rootId].name;
+	const root = model.nodes[rootId];
 	let maxDepth = 0;
 	for (const depth of depths) maxDepth = Math.max(maxDepth, depth);
 
-	const lines = [`# ${t("localGraph.mdTitle", { name: rootName, depth: String(maxDepth) })}`];
+	const title = root.kind || isAttachmentNode(root)
+		? t("localGraph.mdTitleNode", { node: nodeMarkdown(root), depth: String(maxDepth) })
+		: t("localGraph.mdTitle", { name: root.name, depth: String(maxDepth) });
+	const lines = [`# ${title}`];
 
 	for (let depth = 1; depth <= maxDepth; depth++) {
 		const ring = model.nodes
@@ -37,14 +41,14 @@ export function localGraphMarkdown(neighborhood: Neighborhood): string {
 		lines.push("", `## ${t("localGraph.mdLevel", { depth: String(depth) })}`);
 		for (const node of ring) {
 			if (depth === 1) {
-				lines.push(`- ${directionArrow(rootOut, rootIn, node.id)} [[${node.name}]]`);
+				lines.push(`- ${directionArrow(rootOut, rootIn, node.id)} ${nodeMarkdown(node)}`);
 				continue;
 			}
 			const parent = model.nodes[parents[node.id]];
 			lines.push(
 				parent
-					? `- [[${node.name}]] (${t("localGraph.mdVia")} [[${parent.name}]])`
-					: `- [[${node.name}]]`
+					? `- ${nodeMarkdown(node)} (${t("localGraph.mdVia")} ${nodeMarkdown(parent)})`
+					: `- ${nodeMarkdown(node)}`
 			);
 		}
 	}

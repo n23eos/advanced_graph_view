@@ -3,6 +3,17 @@ import type { Translation } from "../types";
 /** 日本語。検索構文（path:、tag:、opened:>10）は翻訳しません。クエリの
  *  キーワードであり、UI テキストではないためです。 */
 export const ja: Translation = {
+	"settings.allAttachments": "すべての添付ファイル",
+	"settings.allAttachments.desc": "リンクのない添付ファイルも追加します。リンク済みの添付ファイルはオフでも表示されます。",
+	"settings.unresolvedNodes": "存在しないリンク先",
+	"settings.unresolvedNodes.desc": "存在しないリンク先を表示します。開くと参照元のノートが表示されます。",
+	"nodes.missing": "未作成: {target}（参照元: {source}）",
+	"nodes.titleFlat": "トピックマップ: {count} ノード",
+	"nodes.central": "中心ノード",
+	"localGraph.mdTitleNode": "ローカルグラフ: {node} (深さ {depth})",
+	"nodes.total": "ノード",
+	"nodes.openSource": "参照元のノートを開く",
+
 	"panel.title": "Advanced Graph View",
 	"panel.section.presets": "ビューのプリセット",
 	"panel.section.appearance": "外観",

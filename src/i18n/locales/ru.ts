@@ -3,6 +3,17 @@ import type { Translation } from "../types";
 /** Русский. Синтаксис поиска (path:, tag:, opened:>10) не переводится — это
  *  ключевые слова запроса, а не текст интерфейса. */
 export const ru: Translation = {
+	"settings.allAttachments": "Все вложения",
+	"settings.allAttachments.desc": "Добавлять несвязанные вложения. Связанные вложения видны и при выключении.",
+	"settings.unresolvedNodes": "Несуществующие цели ссылок",
+	"settings.unresolvedNodes.desc": "Показывать отсутствующие цели. При открытии показывается исходная заметка.",
+	"nodes.missing": "Отсутствует: {target} (источник: {source})",
+	"nodes.titleFlat": "Карта темы: {count} узлов",
+	"nodes.central": "Центральные узлы",
+	"localGraph.mdTitleNode": "Локальный граф: {node} (глубина {depth})",
+	"nodes.total": "Узлы",
+	"nodes.openSource": "Открыть исходную заметку",
+
 	"panel.title": "Advanced Graph View",
 	"panel.section.presets": "Пресеты вида",
 	"panel.section.appearance": "Внешний вид",

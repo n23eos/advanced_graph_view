@@ -6,6 +6,17 @@
  * time — never build a sentence by concatenating translated fragments.
  */
 export const en = {
+	"settings.allAttachments": "All attachments",
+	"settings.allAttachments.desc": "Add unlinked attachments. Linked attachments remain visible when off.",
+	"settings.unresolvedNodes": "Missing link targets",
+	"settings.unresolvedNodes.desc": "Show missing targets. Opening one opens its source note.",
+	"nodes.missing": "Missing: {target} (source: {source})",
+	"nodes.titleFlat": "Topic map: {count} nodes",
+	"nodes.central": "Central nodes",
+	"localGraph.mdTitleNode": "Local graph: {node} (depth {depth})",
+	"nodes.total": "Nodes",
+	"nodes.openSource": "Open source note",
+
 	// ── Panel chrome ──────────────────────────────────────────────────
 	"panel.title": "Advanced Graph View",
 	"panel.section.presets": "View presets",

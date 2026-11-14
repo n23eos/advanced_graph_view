@@ -3,6 +3,17 @@ import type { Translation } from "../types";
 /** Italiano. La sintassi di ricerca (path:, tag:, opened:>10) resta invariata:
  *  sono parole chiave della query, non testo dell'interfaccia. */
 export const it: Translation = {
+	"settings.allAttachments": "Tutti gli allegati",
+	"settings.allAttachments.desc": "Aggiungi allegati senza collegamenti. Quelli collegati restano visibili anche quando disattivato.",
+	"settings.unresolvedNodes": "Destinazioni mancanti",
+	"settings.unresolvedNodes.desc": "Mostra destinazioni mancanti. Aprendole viene mostrata la nota di origine.",
+	"nodes.missing": "Mancante: {target} (origine: {source})",
+	"nodes.titleFlat": "Mappa tematica: {count} nodi",
+	"nodes.central": "Nodi centrali",
+	"localGraph.mdTitleNode": "Grafo locale: {node} (profondità {depth})",
+	"nodes.total": "Nodi",
+	"nodes.openSource": "Apri nota di origine",
+
 	"panel.title": "Advanced Graph View",
 	"panel.section.presets": "Preset di vista",
 	"panel.section.appearance": "Aspetto",

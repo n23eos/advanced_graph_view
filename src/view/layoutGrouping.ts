@@ -46,6 +46,7 @@ export function computeGroups(rule: LayoutRule, facts: readonly NodeFacts[], now
 }
 
 function groupKey(rule: LayoutRule, node: NodeFacts, now: number): string {
+	if (node.kind === "unresolved" && (rule === "age" || rule === "recency")) return "";
 	switch (rule) {
 		case "tags": return node.tags[0] ?? "";
 		case "folders": return node.folder;
@@ -98,6 +99,7 @@ export function depthByAge(facts: readonly NodeFacts[]): Float32Array {
 	let min = Infinity;
 	let max = -Infinity;
 	for (const node of facts) {
+		if (node.kind === "unresolved") continue;
 		if (node.ctime < min) min = node.ctime;
 		if (node.ctime > max) max = node.ctime;
 	}
@@ -105,6 +107,7 @@ export function depthByAge(facts: readonly NodeFacts[]): Float32Array {
 	// range at 1 collapses it to a flat plane instead of dividing by zero.
 	const range = Math.max(max - min, 1);
 	for (let i = 0; i < facts.length; i++) {
+		if (facts[i].kind === "unresolved") continue;
 		depths[i] = ((facts[i].ctime - min) / range - 0.5) * DEPTH_SPREAD;
 	}
 	return depths;

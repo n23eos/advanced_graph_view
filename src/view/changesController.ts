@@ -115,9 +115,9 @@ export class ChangesController {
 		}
 		const now = Date.now();
 		const periodStart = now - this.changesSelection.periodDays * 24 * 60 * 60 * 1000;
-		const snapshot = closestSnapshotBefore(this.plugin.snapshotStore, periodStart);
+		const snapshot = closestSnapshotBefore(this.plugin.snapshotStore, periodStart, this.model.scope);
 
-		const nodes = this.model.nodes.map((node) => ({
+		const nodes = this.model.nodes.filter(node => node.kind !== "unresolved").map((node) => ({
 			path: node.path,
 			ctime: this.facts[node.id]?.ctime ?? 0,
 			mtime: this.facts[node.id]?.mtime ?? 0,

@@ -3,6 +3,17 @@ import type { Translation } from "../types";
 /** Español. La sintaxis de búsqueda (path:, tag:, opened:>10) no se traduce:
  *  son palabras clave de la consulta, no texto de interfaz. */
 export const es: Translation = {
+	"settings.allAttachments": "Todos los adjuntos",
+	"settings.allAttachments.desc": "Añadir adjuntos sin enlaces. Los adjuntos enlazados siguen visibles al desactivar esta opción.",
+	"settings.unresolvedNodes": "Destinos de enlaces ausentes",
+	"settings.unresolvedNodes.desc": "Mostrar destinos ausentes. Al abrirlos se abre la nota de origen.",
+	"nodes.missing": "Ausente: {target} (origen: {source})",
+	"nodes.titleFlat": "Mapa temático: {count} nodos",
+	"nodes.central": "Nodos centrales",
+	"localGraph.mdTitleNode": "Grafo local: {node} (profundidad {depth})",
+	"nodes.total": "Nodos",
+	"nodes.openSource": "Abrir nota de origen",
+
 	"panel.title": "Advanced Graph View",
 	"panel.section.presets": "Ajustes de vista",
 	"panel.section.appearance": "Apariencia",

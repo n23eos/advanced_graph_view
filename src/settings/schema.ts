@@ -1,3 +1,4 @@
+import type { GraphScope } from "../data/graphScope";
 /**
  * Shape of everything the plugin persists, and the values it starts from.
  * Kept free of the Obsidian runtime so settings logic can be unit-tested.
@@ -27,6 +28,7 @@ export interface SearchPreset {
 }
 
 export interface GraphInsightSettings {
+	graphScope: GraphScope;
 	physicsDefaultsVersion: number;
 	renderScale: RenderScale;
 	panel: PanelState;
@@ -76,6 +78,7 @@ export interface HoverPreviewSettings {
 }
 
 export const DEFAULT_SETTINGS: GraphInsightSettings = {
+	graphScope: { attachments: false, unresolved: false },
 	physicsDefaultsVersion: 0,
 	renderScale: "standard",
 	panel: DEFAULT_3D_PANEL,
