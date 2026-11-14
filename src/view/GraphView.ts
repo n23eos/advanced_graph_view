@@ -19,6 +19,7 @@ import { nameClusters, type ClusterContent } from "../analysis/clusterNames";
 import { computeOverlayMask, countOverlayMatches } from "../analysis/overlays";
 import { buildGraphModel, sameGraphModel, type GraphModel } from "../data/GraphStore";
 import { consumeRenames, recordRename, remapPinnedPaths, resolvePreviousPath } from "./renamedPaths";
+import { buildNeighborSeed, type SeedPosition } from "./neighborSeed";
 import { carryMetrics, diffFacts } from "./factsRefresh";
 import { stripFrontmatter, stripMarkdown } from "../data/stripMarkdown";
 import { countRecentOpens } from "../data/UsageTracker";
@@ -2073,28 +2074,24 @@ export class GraphInsightView extends ItemView {
 					.filter((path): path is string => path !== undefined), renamed);
 		if (!previous && !saved) return { seed: undefined, pinnedPaths };
 
-		const seed = new Float32Array(model.nodes.length * 3);
+		const knownPositions = new Map<number, SeedPosition>();
 		for (const node of model.nodes) {
-			let x: number | undefined;
-			let y: number | undefined;
-			let z = 0;
 			if (previous && this.model) {
 				const oldId = this.model.pathToId.get(resolvePreviousPath(node.path, renamed));
 				if (oldId !== undefined) {
-					x = previous[oldId * 3];
-					y = previous[oldId * 3 + 1];
-					z = previous[oldId * 3 + 2];
+					knownPositions.set(node.id, [
+						previous[oldId * 3],
+						previous[oldId * 3 + 1],
+						previous[oldId * 3 + 2],
+					]);
 				}
 			} else if (saved) {
 				const stored = saved.positions[resolvePreviousPath(node.path, renamed)];
 				// Older files stored [x, y]; new ones store [x, y, z].
-				if (stored) [x, y, z = 0] = stored;
+				if (stored) knownPositions.set(node.id, [stored[0], stored[1], stored[2] ?? 0]);
 			}
-			// Newcomers start near origin with a deterministic spread.
-			seed[node.id * 3] = x ?? (node.id % 20) - 10;
-			seed[node.id * 3 + 1] = y ?? ((node.id * 7) % 20) - 10;
-			seed[node.id * 3 + 2] = z;
 		}
+		const seed = buildNeighborSeed(model, knownPositions);
 		return { seed, pinnedPaths };
 	}
 

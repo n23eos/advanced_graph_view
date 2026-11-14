@@ -99,3 +99,5 @@ A8: версия 0.10.2 подготовлена локально отдельн
 ## Этап C
 
 - C1: ручные4DOMзамены, test-only prefer-create-el override, host API stubs createEl/createFragment расширены без изменения assertions. RED lintmaxwarnings0:12warnings. Изолированный final verify/build PASS:876 тестов/110 файлов, lint0errors/0warnings. Stubtype несовместимость исправлена по типамObsidian, globalThis разрешён толькоhoststub. Native UI не менялся.
+
+- C2: новый узел стартует у среднего различных известных соседей с детерминированным xy-сдвигом, z равен среднему. Используются только previous/saved coordinates; без соседа точный прежний fallback, без истории seedundefined и worker seed не меняются. Live/saved rename mapping сохранён. RED integration2FAIL, targeted20PASS; isolated verify/build PASS:883 теста/112 файлов, lint0warnings. Нативно пока не проверено, Mac locked.
