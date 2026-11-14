@@ -171,3 +171,9 @@ Mac по-прежнему заблокирован. Нативные прове�
 - Moved tooltip, delayed preview and timer cleanup into TooltipController. Shared tooltip fields remain in GraphView for Explore; callbacks keep notePreview overrides and generation/element identity checks intact.
 - All four method bodies structurally match after dependency forwarding and comment normalization. Existing tests unchanged.
 - verify: 912 tests / 124 files PASS, typecheck/lint PASS with no warnings; build PASS. Logs: /tmp/hardening-d6-verify.log and /tmp/hardening-d6-build.log.
+
+## D7: Explore bindings extraction, 2026-11-14
+
+- D1-D6 preserved existing tests and behavior. Moved eight Explore method bodies into ExploreBindings with live state access and callbacks; GraphView retains fields, lifecycle, keyboard dispatch and shared breadcrumbs.
+- The constructor callback order, detached versus anchored checks, runtime-only panel override and distinct teardown path are preserved. All eight method bodies structurally match after dependency forwarding/comment normalization. Existing tests unchanged.
+- verify: 912 tests / 124 files PASS, typecheck/lint PASS with no warnings; build PASS. Logs: /tmp/hardening-d7-verify.log and /tmp/hardening-d7-build.log.

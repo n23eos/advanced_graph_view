@@ -1,3 +1,4 @@
+import { ExploreBindings } from "./exploreBindings";
 import { TooltipController } from "./tooltip";
 import { ChangesController } from "./changesController";
 import { ExportActions } from "./exportActions";
@@ -32,9 +33,8 @@ import { categoryColor } from "../encoding/colorScales";
 import { activePreset, isLightTheme } from "../render/theme";
 import { effectiveNodeStyle } from "../render/nodeStyle";
 import type { NodeFacts } from "../encoding/metrics";
-import { ExploreSession } from "../explore/ExploreSession";
-import { DEFAULT_EXPLORE_TUNING } from "../explore/ExploreController";
-import { motionMs, motionSeconds, prefersReducedMotion } from "../render/motion";
+import type { ExploreSession } from "../explore/ExploreSession";
+import { motionMs, prefersReducedMotion } from "../render/motion";
 import { GraphRenderer } from "../render/GraphRenderer";
 import { ControlPanel, type PanelState } from "../ui/ControlPanel";
 import { Legend } from "../ui/Legend";
@@ -61,7 +61,7 @@ import { sortSearchPresets } from "../settings/searchPresets";
 import { SearchBar, type SearchConstraint, type SearchMode } from "../ui/SearchBar";
 import { FilterChips, type FilterSelection } from "../ui/FilterChips";
 import { compileChipFilter } from "../ui/chipFilter";
-import { ExploreNoteModal } from "../ui/ExploreNoteModal";
+import type { ExploreNoteModal } from "../ui/ExploreNoteModal";
 import { PromptModal } from "../ui/PromptModal";
 import { TimelineBar, type TimelineMode } from "../ui/TimelineBar";
 import { CameraWidget } from "../ui/CameraWidget";
@@ -87,6 +87,59 @@ const COLLIDE_BASE_RADIUS = 0;
 const EXPLORE_BACKGROUND_ALPHA = 0.05;
 
 export class GraphInsightView extends ItemView {
+	private exploreBindingsController?: ExploreBindings;
+	private get exploreBindings(): ExploreBindings {
+		return this.exploreBindingsController ??= new ExploreBindings({
+			getApp: () => this.app,
+			getRenderer: () => this.renderer,
+			getModel: () => this.model,
+			getExploreSession: () => this.exploreSession,
+			setExploreSession: (value) => { this.exploreSession = value; },
+			getExploreDetached: () => this.exploreDetached,
+			setExploreDetached: (value) => { this.exploreDetached = value; },
+			getExploreTrail: () => this.exploreTrail,
+			setExploreTrail: (value) => { this.exploreTrail = value; },
+			getExploreOverride: () => this.exploreOverride,
+			setExploreOverride: (value) => { this.exploreOverride = value; },
+			getFocusRootId: () => this.focusRootId,
+			getTooltip: () => this.tooltip,
+			getExploreFocus: () => this.exploreFocus,
+			setExploreFocus: (value) => { this.exploreFocus = value; },
+			getViewWindow: () => this.viewWindow,
+			getCameraWidget: () => this.cameraWidget,
+			getExploreNoteModal: () => this.exploreNoteModal,
+			setExploreNoteModal: (value) => { this.exploreNoteModal = value; },
+			getFocusBar: () => this.focusBar,
+			getRebuildDeferred: () => this.rebuildDeferred,
+			setRebuildDeferred: (value) => { this.rebuildDeferred = value; },
+			getPlugin: () => this.plugin,
+			getTooltipNodeId: () => this.tooltipNodeId,
+			setTooltipNodeId: (value) => { this.tooltipNodeId = value; },
+			getContentEl: () => this.contentEl,
+			getIsExploring: () => this.isExploring,
+			getHiddenMask: () => this.hiddenMask,
+			applyExploreOverride: () => this.applyExploreOverride(),
+			exitFocus: () => this.exitFocus(),
+			clearPreviewTimer: () => this.clearPreviewTimer(),
+			graphAdjacency: () => this.graphAdjacency(),
+			recomputeVisual: () => this.recomputeVisual(),
+			renderExploreBar: () => this.renderExploreBar(),
+			showExploreTarget: (nodeId, clientX, clientY) => this.showExploreTarget(nodeId, clientX, clientY),
+			applyAllPanelState: (state, prev) => this.applyAllPanelState(state, prev),
+			rebuildGraph: () => this.rebuildGraph(),
+			enterExplore: (startId) => this.enterExplore(startId),
+			navigateExploreTo: (nodeId) => this.navigateExploreTo(nodeId),
+			openExploreNotePicker: () => this.openExploreNotePicker(),
+			openNode: (nodeId, newTab) => this.openNode(nodeId, newTab),
+			previousExploreIndex: () => this.previousExploreIndex(),
+			exploreBack: () => this.exploreBack(),
+			detachExplore: () => this.detachExplore(),
+			openTopicMapExport: (source, rootId, flatIds) => this.openTopicMapExport(source, rootId, flatIds),
+			exitExplore: () => this.exitExplore(),
+			renderTrail: (host, trail, go) => this.renderTrail(host, trail, go),
+		});
+	}
+
 	private tooltipController?: TooltipController;
 	private get tooltipActions(): TooltipController {
 		return this.tooltipController ??= new TooltipController({
@@ -1032,48 +1085,8 @@ export class GraphInsightView extends ItemView {
 	 * because a node that drifts while the camera flies towards it means the
 	 * camera lands next to it instead of on it.
 	 */
-	async enterExplore(startId?: number): Promise<void> {
-		if (!this.renderer || !this.model || this.exploreSession) return;
-		const centerId = startId ?? this.renderer.nodeNearestToViewCenter();
-		if (centerId === null) {
-			new Notice(t("notice.exploreNoNode"));
-			return;
-		}
-
-		const reanchoring = this.exploreDetached;
-		// A re-anchor continues the same trip; only a fresh entry starts a
-		// new history (F-11). The trail never survives leaving the mode.
-		if (!reanchoring || !this.exploreTrail) this.exploreTrail = new NavigationTrail("explore");
-		if (!this.exploreOverride) {
-			this.exploreOverride = true;
-			this.applyExploreOverride();
-		}
-		this.exploreDetached = false;
-
-		if (this.focusRootId !== null) this.exitFocus();
-		// Clear any full hover card before showing Explore signposts.
-		this.clearPreviewTimer();
-		this.tooltip?.hide();
-		this.exploreSession = new ExploreSession(
-			this.renderer,
-			this.graphAdjacency(),
-			centerId,
-			{
-				onFocusChanged: (id, neighbors) => {
-					this.exploreFocus = { centerId: id, neighbors };
-					// Every arrival lands in the trail; back/breadcrumb flights
-					// arrive at the already-active crumb, which push() ignores.
-					const node = this.model?.nodes[id];
-					if (node) this.exploreTrail?.push({ path: node.path, label: node.name });
-					this.recomputeVisual();
-					this.renderExploreBar();
-				},
-			},
-			// A reduced-motion user gets the same trip with the flight cut out.
-			{ flightSeconds: motionSeconds(DEFAULT_EXPLORE_TUNING.flightSeconds, this.viewWindow ?? undefined) }
-		);
-		this.cameraWidget?.setExploring(true);
-		if (!reanchoring) new Notice(t("notice.exploreStart"), 5000);
+	enterExplore(startId?: number): Promise<void> {
+		return this.exploreBindings.enterExplore(startId);
 	}
 
 	/**
@@ -1082,15 +1095,7 @@ export class GraphInsightView extends ItemView {
 	 * can start anywhere instead of only where the links reach.
 	 */
 	private detachExplore(): void {
-		if (!this.exploreSession) return;
-		this.exploreSession.stop();
-		this.exploreSession = null;
-		this.exploreFocus = null;
-		this.exploreDetached = true;
-		this.renderExploreBar();
-		this.showExploreTarget(null, 0, 0);
-		this.recomputeVisual();
-		new Notice(t("notice.exploreDetached"), 5000);
+		return this.exploreBindings.detachExplore();
 	}
 
 	/**
@@ -1103,62 +1108,16 @@ export class GraphInsightView extends ItemView {
 	 * explain it. Mode state does not belong in user settings.
 	 */
 	private applyExploreOverride(): void {
-		const saved = this.plugin.settings.panel;
-		const forced: PanelState = {
-			...saved,
-			view3d: { ...saved.view3d, enabled: true },
-			physics: { ...saved.physics, disabled: true },
-		};
-		this.applyAllPanelState(forced);
+		return this.exploreBindings.applyExploreOverride();
 	}
 
-	async exitExplore(): Promise<void> {
-		if (!this.exploreSession && !this.exploreDetached) return;
-		this.exploreNoteModal?.close();
-		this.exploreNoteModal = null;
-		this.exploreSession?.stop();
-		this.exploreSession = null;
-		this.exploreFocus = null;
-		this.exploreTrail = null;
-		this.exploreDetached = false;
-		this.focusBar?.hide();
-		this.cameraWidget?.setExploring(false);
-		this.showExploreTarget(null, 0, 0);
-
-		if (this.exploreOverride) {
-			this.exploreOverride = false;
-			// The saved settings were never touched, so putting them back is
-			// just re-applying them.
-			this.applyAllPanelState(this.plugin.settings.panel);
-		}
-		this.recomputeVisual();
-
-		if (this.rebuildDeferred) {
-			this.rebuildDeferred = false;
-			await this.rebuildGraph();
-		}
+	exitExplore(): Promise<void> {
+		return this.exploreBindings.exitExplore();
 	}
 
 	/** Name the note a link leads to, right at the pointer. */
 	private showExploreTarget(nodeId: number | null, clientX: number, clientY: number): void {
-		if (!this.tooltip || !this.model) return;
-		if (nodeId === null) {
-			this.tooltipNodeId = null;
-			this.tooltip.hide();
-			return;
-		}
-		const rect = this.contentEl.getBoundingClientRect();
-		this.tooltip.style.left = `${clientX - rect.left + 14}px`;
-		this.tooltip.style.top = `${clientY - rect.top + 14}px`;
-		this.tooltip.show();
-		if (nodeId === this.tooltipNodeId) return;
-		this.tooltipNodeId = nodeId;
-		// Just the name: this is a signpost read mid-sweep, not the hover card.
-		this.tooltip.empty();
-		this.tooltip.createDiv({
-			cls: "graph-insight-tooltip-title",
-			text: this.model.nodes[nodeId].name,
-		});
+		return this.exploreBindings.showExploreTarget(nodeId, clientX, clientY);
 	}
 
 	/** True for the whole mode, anchored to a node or not. */
@@ -1168,63 +1127,16 @@ export class GraphInsightView extends ItemView {
 
 	/** All explicit Explore choices use the same flight and route. */
 	private navigateExploreTo(nodeId: number): void {
-		if (!this.isExploring || !this.model?.nodes[nodeId] || this.hiddenMask?.[nodeId] === 1) return;
-		this.renderer?.setSelected(nodeId);
-		if (this.exploreDetached) void this.enterExplore(nodeId);
-		else if (this.exploreSession?.currentId !== nodeId) this.exploreSession?.travelTo(nodeId);
+		return this.exploreBindings.navigateExploreTo(nodeId);
 	}
 
 	private openExploreNotePicker(): void {
-		if (!this.isExploring || !this.model || this.exploreNoteModal) return;
-		const trail = this.exploreTrail;
-		const modal = new ExploreNoteModal(this.app,
-			() => this.model?.nodes.filter((node) => this.hiddenMask?.[node.id] !== 1) ?? [],
-			(path) => {
-				// Resolve paths at selection time; ids and filters may have changed.
-				if (this.exploreTrail !== trail) return;
-				const id = this.model?.pathToId.get(path);
-				if (id !== undefined) this.navigateExploreTo(id);
-			},
-			() => { if (this.exploreNoteModal === modal) this.exploreNoteModal = null; },
-		);
-		this.exploreNoteModal = modal;
-		modal.open();
+		return this.exploreBindings.openExploreNotePicker();
 	}
 
 	/** Reuses the focus bar for anchored and detached navigation. */
 	private renderExploreBar(): void {
-		if (!this.focusBar || !this.model || (!this.exploreFocus && !this.exploreDetached)) return;
-		const focus = this.exploreFocus;
-		this.focusBar.empty();
-		this.focusBar.show();
-		this.focusBar.createSpan({ text: focus
-			? t("explore.status", { name: this.model.nodes[focus.centerId].name, count: focus.neighbors.length })
-			: t("explore.detached.status") });
-		const choose = this.focusBar.createEl("button", { text: t("explore.choose") });
-		choose.addEventListener("click", () => this.openExploreNotePicker());
-		if (focus) {
-			const open = this.focusBar.createEl("button", { text: t("explore.open") });
-			open.setAttribute("aria-label", t("explore.open.hint"));
-			open.addEventListener("click", () => this.openNode(focus.centerId, !this.plugin.settings.openInSidePane));
-		}
-		const back = this.focusBar.createEl("button", { text: t("explore.back") });
-		back.disabled = this.previousExploreIndex() === null;
-		back.addEventListener("click", () => this.exploreBack());
-		if (focus) {
-			const detach = this.focusBar.createEl("button", { text: t("explore.detach") });
-			detach.setAttribute("aria-label", t("explore.detach.hint"));
-			detach.addEventListener("click", () => this.detachExplore());
-			const exportButton = this.focusBar.createEl("button", { text: t("topicmap.modalTitle") });
-			exportButton.setAttribute("aria-label", t("topicmap.export"));
-			exportButton.addEventListener("click", () => {
-				if (this.exploreFocus) this.openTopicMapExport("explore", this.exploreFocus.centerId);
-			});
-		}
-		const exit = this.focusBar.createEl("button", { text: t("explore.exit") });
-		exit.addEventListener("click", () => void this.exitExplore());
-		if (this.exploreTrail && this.exploreTrail.items.length > 1) {
-			this.renderTrail(this.focusBar, this.exploreTrail, (id) => this.navigateExploreTo(id));
-		}
+		return this.exploreBindings.renderExploreBar();
 	}
 
 	private currentFocusDistances(): Int16Array | null {
