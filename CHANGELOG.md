@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.3] - 2026-11-14
+
+### Changed
+
+- Debounce panel settings writes while keeping in-memory changes immediate; flush pending writes on graph close and app quit.
+- Recompute encoding, overlays, bubbles and timeline state only when their panel inputs change.
+- Pause drawing in hidden graph panes and render settled scenes on demand with a 500 ms safety frame.
+- Load snapshot history only when it is needed, preserving existing history before capture.
+- Add optional high-resolution rendering, capped at 2x. Standard 1x remains the default.
+
+### Fixed
+
+- Release per-opening listeners when reloading main and local graphs.
+- Reload all loaded graph views sequentially after settings replacement.
+- Drain pending writes after an active write fails.
+- Preserve visible nodes when exporting PNG from a hidden graph tab.
+
 ## [0.10.2] - 2026-11-14
 
 ### Fixed

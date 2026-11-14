@@ -93,3 +93,5 @@ A8: версия 0.10.2 подготовлена локально отдельн
 - B review follow-up: синхронный throw write нормализован до await, чтобы active не зависал и flush не зацикливался. RED1/5, GREEN5/5; isolated verify/build PASS:876 тестов/110 файлов, lint12.
 
 - B4 review follow-up: PNG выполняет culling и при уже очищенном cullDirty. Регрессия усилена сценарием hidden normal frame -> pause -> export, RED до fix, targeted32PASS. Изолированный verify/build PASS:876 тестов/110 файлов, lint12.
+
+- B7: кандидат0.10.3 подготовлен локально, финальный verify/build PASS:876 тестов/110 файлов, typecheckPASS, lint0 ошибок/12warnings. Повторное независимое review подтвердило закрытие queue sync throw и forced PNG culling (6testsPASS). Native не завершён, Mac заблокирован; CI не запускался, push/merge/release запрещены. Следующий этап C локально поверхB.
