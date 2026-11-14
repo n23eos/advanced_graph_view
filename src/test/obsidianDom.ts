@@ -51,31 +51,35 @@ function attach(el: HTMLElement, info: TestDomElementInfo | string | undefined, 
 	else parent.appendChild(el);
 }
 
-/** Idempotent: safe to call from every test file's setup. */
-export function installObsidianDom(): void {
+/** Idempotent per window: safe to call from every test file's setup. */
+export function installObsidianDom(targetWindow: Window = window): void {
+	const targetGlobal = targetWindow as Window & typeof globalThis;
+	const targetDocument = targetWindow.document;
 	const createGlobalEl = function <K extends keyof HTMLElementTagNameMap>(
 		tag: K,
 		info?: TestDomElementInfo | string,
 		callback?: (el: HTMLElementTagNameMap[K]) => void
 	): HTMLElementTagNameMap[K] {
-		const el = document.createElement(tag);
+		const el = targetDocument.createElement(tag);
 		applyInfo(el, info);
 		attach(el, info);
 		callback?.(el);
 		return el;
 	};
 	const createGlobalFragment = function (callback?: (el: DocumentFragment) => void) {
-		const fragment = document.createDocumentFragment();
+		const fragment = targetDocument.createDocumentFragment();
 		callback?.(fragment);
 		return fragment;
 	};
-	const testGlobal = globalThis;
-	testGlobal.createEl ??= createGlobalEl;
-	testGlobal.createFragment ??= createGlobalFragment;
-	window.createEl ??= testGlobal.createEl;
-	window.createFragment ??= testGlobal.createFragment;
+	targetGlobal.createEl ??= createGlobalEl;
+	targetGlobal.createFragment ??= createGlobalFragment;
+	if (targetWindow === window) {
+		const testGlobal = globalThis;
+		testGlobal.createEl ??= targetGlobal.createEl;
+		testGlobal.createFragment ??= targetGlobal.createFragment;
+	}
 
-	const proto = HTMLElement.prototype;
+	const proto = targetGlobal.HTMLElement.prototype;
 	if (typeof proto.createEl === "function") return;
 
 	proto.createEl = function <K extends keyof HTMLElementTagNameMap>(
@@ -83,7 +87,7 @@ export function installObsidianDom(): void {
 		tag: K,
 		info?: TestDomElementInfo | string
 	): HTMLElementTagNameMap[K] {
-		const el = document.createElement(tag);
+		const el = this.ownerDocument.createElement(tag);
 		applyInfo(el, info);
 		attach(el, info, this);
 		return el;
@@ -108,6 +112,9 @@ export function installObsidianDom(): void {
 	};
 	proto.removeClass = function (this: HTMLElement, ...cls: string[]) {
 		this.classList.remove(...cls);
+	};
+	proto.setCssProps = function (this: HTMLElement, props: Record<string, string>) {
+		for (const [property, value] of Object.entries(props)) this.style.setProperty(property, value);
 	};
 	// Real Obsidian toggles display:none; the shim uses the `hidden` property
 	// so tests assert visibility without inspecting inline styles.

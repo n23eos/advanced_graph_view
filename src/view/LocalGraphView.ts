@@ -42,6 +42,10 @@ const ROOT_SIZE_BOOST = 1.6;
 export class LocalGraphView extends ItemView {
 	private renderer: GraphRenderer | null = null;
 	private stopObservingRendererVisibility: (() => void) | null = null;
+	private stopWindowMigration: (() => void) | null = null;
+	private viewWindow: Window | null = null;
+	private viewDocument: Document | null = null;
+	private resizeFrame: number | null = null;
 	private layout: LayoutClient | null = null;
 	private readonly autoFit = new AutoFitGate();
 	private neighborhood: Neighborhood | null = null;
@@ -55,6 +59,9 @@ export class LocalGraphView extends ItemView {
 	private fileOpenEvent: EventRef | null = null;
 	private metadataResolvedEvent: EventRef | null = null;
 	private refreshOnResolve: Debouncer<[], void> | null = null;
+	private reopenRequested = false;
+	private reopenPromise: Promise<void> | null = null;
+	private closeEpoch = 0;
 	private readonly cancelAutoFit = () => this.autoFit.cancel();
 	/** Full-vault model, rebuilt only when the metadata cache says it changed.
 	 *  Switching notes or depth re-cuts the neighborhood from this. */
@@ -80,6 +87,12 @@ export class LocalGraphView extends ItemView {
 		const openGeneration = ++this.openGeneration;
 		this.closing = false;
 		const container = this.contentEl;
+		const viewDocument = container.ownerDocument;
+		const viewWindow = viewDocument.defaultView ?? (container as HTMLElement & { win?: Window }).win;
+		if (!viewWindow) throw new Error("Local graph host window is unavailable");
+		this.viewDocument = viewDocument;
+		this.viewWindow = viewWindow;
+		this.registerWindowMigration(container);
 		container.empty();
 		container.addClass("graph-insight-container");
 
@@ -131,7 +144,8 @@ export class LocalGraphView extends ItemView {
 		}
 		this.stopObservingRendererVisibility?.();
 		this.stopObservingRendererVisibility = observeRendererVisibility(container, renderer);
-		window.requestAnimationFrame(() => {
+		this.resizeFrame = viewWindow.requestAnimationFrame(() => {
+			if (this.openGeneration === openGeneration) this.resizeFrame = null;
 			if (!this.closing && this.openGeneration === openGeneration && this.renderer === renderer) {
 				renderer.resize();
 			}
@@ -185,27 +199,56 @@ export class LocalGraphView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
+		this.closeEpoch++;
+		this.reopenRequested = false;
+		await this.teardown();
+	}
+
+	private async teardown(): Promise<void> {
 		this.closing = true;
 		this.openGeneration++;
 		this.clearOpenListeners();
 		this.stopObservingRendererVisibility?.();
 		this.stopObservingRendererVisibility = null;
+		if (this.resizeFrame !== null) this.viewWindow?.cancelAnimationFrame(this.resizeFrame);
+		this.resizeFrame = null;
 		this.layout?.stop();
 		this.renderer?.destroy();
 		this.renderer = null;
 		this.layout = null;
+		this.viewWindow = null;
+		this.viewDocument = null;
 	}
 
 	reloadFromSettings(): Promise<void> {
 		return this.reopen();
 	}
 
-	private async reopen(): Promise<void> {
-		await this.onClose();
-		await this.onOpen();
+	private reopen(): Promise<void> {
+		this.reopenRequested = true;
+		if (!this.reopenPromise) {
+			const closeEpoch = this.closeEpoch;
+			this.reopenPromise = this.runQueuedReopens(closeEpoch).finally(() => {
+				this.reopenPromise = null;
+			});
+		}
+		return this.reopenPromise;
+	}
+
+	private async runQueuedReopens(closeEpoch: number): Promise<void> {
+		await Promise.resolve();
+		while (this.reopenRequested && closeEpoch === this.closeEpoch) {
+			this.reopenRequested = false;
+			this.clearOpenListeners();
+			await this.teardown();
+			if (closeEpoch !== this.closeEpoch) return;
+			await this.onOpen();
+		}
 	}
 
 	private clearOpenListeners(): void {
+		this.stopWindowMigration?.();
+		this.stopWindowMigration = null;
 		this.contentEl.removeEventListener("pointerdown", this.cancelAutoFit);
 		this.contentEl.removeEventListener("wheel", this.cancelAutoFit);
 		if (this.fileOpenEvent) this.app.workspace.offref(this.fileOpenEvent);
@@ -214,6 +257,24 @@ export class LocalGraphView extends ItemView {
 		this.fileOpenEvent = null;
 		this.metadataResolvedEvent = null;
 		this.refreshOnResolve = null;
+	}
+
+	private registerWindowMigration(fallback: HTMLElement): void {
+		this.stopWindowMigration?.();
+		const host = (this.containerEl as HTMLElement | undefined) ?? fallback;
+		const subscribe = (host as unknown as {
+			onWindowMigrated?: (listener: (win: Window) => void) => () => void;
+		}).onWindowMigrated;
+		if (typeof subscribe !== "function") {
+			this.stopWindowMigration = null;
+			return;
+		}
+		this.stopWindowMigration = subscribe.call(host, () => {
+			this.clearOpenListeners();
+			void this.reopen().catch((error) => {
+				console.error("Advanced Graph View: local window migration reload failed", error);
+			});
+		});
 	}
 
 	private async retryStartup(generation: number): Promise<void> {
@@ -309,9 +370,9 @@ export class LocalGraphView extends ItemView {
 
 		// Same scheme as the main graph, sampled by ring so distance reads as
 		// color instead of leaving the whole neighborhood one flat grey.
-		const preset = activePreset(this.plugin.settings.panel.colorPreset);
+		const preset = activePreset(this.plugin.settings.panel.colorPreset, this.viewDocument ?? undefined);
 		this.renderer.setVisualStyle(
-			effectiveNodeStyle(this.plugin.settings.panel.nodeStyle, isLightTheme()),
+			effectiveNodeStyle(this.plugin.settings.panel.nodeStyle, isLightTheme(this.viewDocument ?? undefined)),
 			preset.backdrop ?? null
 		);
 		// Size still comes from how linked a note is — a hub neighbor has to

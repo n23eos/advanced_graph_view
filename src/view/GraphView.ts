@@ -113,6 +113,9 @@ const EXPLORE_BACKGROUND_ALPHA = 0.05;
 export class GraphInsightView extends ItemView {
 	private renderer: GraphRenderer | null = null;
 	private stopObservingRendererVisibility: (() => void) | null = null;
+	private viewWindow: Window | null = null;
+	private viewDocument: Document | null = null;
+	private resizeFrame: number | null = null;
 	private layout: LayoutClient | null = null;
 	/** Frames the graph after the first layout and after a preset switch. */
 	private readonly autoFit = new AutoFitGate();
@@ -217,6 +220,9 @@ export class GraphInsightView extends ItemView {
 	private closing = false;
 	private openGeneration = 0;
 	private openEventCleanups: Array<() => void> = [];
+	private reopenRequested = false;
+	private reopenPromise: Promise<void> | null = null;
+	private closeEpoch = 0;
 
 	private savePositionsDebounced = debounce(
 		() => void this.savePositions(),
@@ -246,6 +252,12 @@ export class GraphInsightView extends ItemView {
 		this.closing = false;
 		this.responsiveModeState = "full";
 		const container = this.contentEl;
+		const viewDocument = container.ownerDocument;
+		const viewWindow = viewDocument.defaultView ?? (container as HTMLElement & { win?: Window }).win;
+		if (!viewWindow) throw new Error("Graph host window is unavailable");
+		this.viewDocument = viewDocument;
+		this.viewWindow = viewWindow;
+		this.registerWindowMigration(container);
 		container.empty();
 		container.setAttribute("data-graph-responsive", "full");
 		container.addClass("graph-insight-container");
@@ -327,7 +339,8 @@ export class GraphInsightView extends ItemView {
 		});
 		// The pane may not have its final size during onOpen; resize once the
 		// layout settles so the canvas fills the whole view.
-		window.requestAnimationFrame(() => {
+		this.resizeFrame = viewWindow.requestAnimationFrame(() => {
+			if (this.openGeneration === openGeneration) this.resizeFrame = null;
 			if (!this.closing && this.openGeneration === openGeneration && this.renderer === renderer) {
 				renderer.resize();
 			}
@@ -494,8 +507,8 @@ export class GraphInsightView extends ItemView {
 		// listener runs *after* the app has already acted on Esc — which is
 		// why Esc used to look like it closed the whole view.
 		const onKeyDown = (event: KeyboardEvent) => this.handleKeyDown(event);
-		document.addEventListener("keydown", onKeyDown, { capture: true });
-		this.openEventCleanups.push(() => document.removeEventListener("keydown", onKeyDown, { capture: true }));
+		viewDocument.addEventListener("keydown", onKeyDown, { capture: true });
+		this.openEventCleanups.push(() => viewDocument.removeEventListener("keydown", onKeyDown, { capture: true }));
 
 		await this.rebuildGraph();
 		if (this.closing || this.openGeneration !== openGeneration) return;
@@ -527,6 +540,22 @@ export class GraphInsightView extends ItemView {
 
 	private clearOpenListeners(): void {
 		for (const cleanup of this.openEventCleanups.splice(0)) cleanup();
+	}
+
+	private registerWindowMigration(fallback: HTMLElement): void {
+		const host = (this.containerEl as HTMLElement | undefined) ?? fallback;
+		const subscribe = (host as unknown as {
+			onWindowMigrated?: (listener: (win: Window) => void) => () => void;
+		}).onWindowMigrated;
+		if (typeof subscribe !== "function") return;
+		const stop = subscribe.call(host, () => {
+			// Detach from the old document and window before persistence can await.
+			this.clearOpenListeners();
+			void this.reopen().catch((error) => {
+				console.error("Advanced Graph View: window migration reload failed", error);
+			});
+		});
+		this.openEventCleanups.push(stop);
 	}
 
 	private handleKeyDown(event: KeyboardEvent): void {
@@ -1156,7 +1185,7 @@ export class GraphInsightView extends ItemView {
 				},
 			},
 			// A reduced-motion user gets the same trip with the flight cut out.
-			{ flightSeconds: motionSeconds(DEFAULT_EXPLORE_TUNING.flightSeconds) }
+			{ flightSeconds: motionSeconds(DEFAULT_EXPLORE_TUNING.flightSeconds, this.viewWindow ?? undefined) }
 		);
 		this.cameraWidget?.setExploring(true);
 		if (!reanchoring) new Notice(t("notice.exploreStart"), 5000);
@@ -1338,7 +1367,7 @@ export class GraphInsightView extends ItemView {
 	/** One place that folds search/focus/hidden sets into renderer masks. */
 	private recomputeVisual(): void {
 		if (this.visualFrame !== null) {
-			window.cancelAnimationFrame(this.visualFrame);
+			this.viewWindow?.cancelAnimationFrame(this.visualFrame);
 			this.visualFrame = null;
 		}
 		if (!this.renderer || !this.model) return;
@@ -1463,7 +1492,11 @@ export class GraphInsightView extends ItemView {
 
 	private scheduleVisualRecompute(): void {
 		if (this.visualFrame !== null) return;
-		this.visualFrame = window.requestAnimationFrame(() => {
+		const viewWindow = this.viewWindow;
+		if (!viewWindow) return;
+		const generation = this.openGeneration;
+		this.visualFrame = viewWindow.requestAnimationFrame(() => {
+			if (generation !== this.openGeneration) return;
 			this.visualFrame = null;
 			this.recomputeVisual();
 		});
@@ -1905,9 +1938,39 @@ export class GraphInsightView extends ItemView {
 	}
 
 	/** Tear the whole view down and build it again from saved settings. */
-	private async reopen(): Promise<void> {
-		await this.onClose();
-		await this.onOpen();
+	private reopen(): Promise<void> {
+		this.reopenRequested = true;
+		if (!this.reopenPromise) {
+			const closeEpoch = this.closeEpoch;
+			this.reopenPromise = this.runQueuedReopens(closeEpoch).finally(() => {
+				this.reopenPromise = null;
+			});
+		}
+		return this.reopenPromise;
+	}
+
+	private async runQueuedReopens(closeEpoch: number): Promise<void> {
+		// Coalesce migration notifications already queued by the old window.
+		await Promise.resolve();
+		while (this.reopenRequested && closeEpoch === this.closeEpoch) {
+			this.reopenRequested = false;
+			this.clearOpenListeners();
+			let teardownError: Error | undefined;
+			try {
+				await this.teardown();
+			} catch (error) {
+				teardownError = asError(error);
+			}
+			if (closeEpoch !== this.closeEpoch) return;
+			let openError: Error | undefined;
+			try {
+				await this.onOpen();
+			} catch (error) {
+				openError = asError(error);
+			}
+			if (teardownError !== undefined) throw teardownError;
+			if (openError !== undefined) throw openError;
+		}
 	}
 
 	private async retryStartup(generation: number): Promise<void> {
@@ -2048,7 +2111,7 @@ export class GraphInsightView extends ItemView {
 			return;
 		}
 		// Bubbles follow the active scheme so hulls match their node colors.
-		const palette = activePreset(this.plugin.settings.panel.colorPreset).categories;
+		const palette = activePreset(this.plugin.settings.panel.colorPreset, this.viewDocument ?? undefined).categories;
 		const groups = this.clusterOrder
 			.filter((communityId) => !this.hiddenClusters.has(communityId))
 			.map((communityId) => ({
@@ -2170,10 +2233,11 @@ export class GraphInsightView extends ItemView {
 
 	private applyEncoding(state: PanelState): void {
 		if (!this.renderer || this.facts.length === 0) return;
-		const preset = activePreset(state.colorPreset);
-		this.renderer.setVisualStyle(effectiveNodeStyle(state.nodeStyle, isLightTheme()), preset.backdrop ?? null);
+		const isLight = isLightTheme(this.viewDocument ?? undefined);
+		const preset = activePreset(state.colorPreset, this.viewDocument ?? undefined);
+		this.renderer.setVisualStyle(effectiveNodeStyle(state.nodeStyle, isLight), preset.backdrop ?? null);
 		this.encoding = buildEncoding(
-			this.facts, state.channels, state.colorPreset, Date.now(), isLightTheme()
+			this.facts, state.channels, state.colorPreset, Date.now(), isLight
 		);
 		const sizes = new Float32Array(this.encoding.sizes.length);
 		for (let i = 0; i < sizes.length; i++) sizes[i] = this.encoding.sizes[i] * state.nodeScale;
@@ -2255,9 +2319,13 @@ export class GraphInsightView extends ItemView {
 
 		const preview = this.plugin.settings.hoverPreview;
 		if (preview.enabled) {
+			const viewWindow = this.viewWindow;
+			if (!viewWindow) return;
+			const generation = this.openGeneration;
 			// Only load once the cursor has settled on this node, so sweeping
 			// across a dense cluster doesn't fire a read per node.
-			this.previewTimer = window.setTimeout(() => {
+			this.previewTimer = viewWindow.setTimeout(() => {
+				if (generation !== this.openGeneration) return;
 				this.previewTimer = null;
 				if (nodeId === this.tooltipNodeId) void this.appendNotePreview(nodeId, preview.words);
 			}, Math.max(0, preview.delayMs));
@@ -2266,7 +2334,7 @@ export class GraphInsightView extends ItemView {
 
 	private clearPreviewTimer(): void {
 		if (this.previewTimer !== null) {
-			window.clearTimeout(this.previewTimer);
+			this.viewWindow?.clearTimeout(this.previewTimer);
 			this.previewTimer = null;
 		}
 	}
@@ -2274,9 +2342,12 @@ export class GraphInsightView extends ItemView {
 	/** Read the note body off the main thread and append it to the tooltip,
 	 *  unless the hover moved to another node while the read was pending. */
 	private async appendNotePreview(nodeId: number, words: number): Promise<void> {
+		const generation = this.openGeneration;
+		const tooltip = this.tooltip;
 		const text = await this.notePreview(nodeId, words);
-		if (nodeId !== this.tooltipNodeId || !this.tooltip || !text) return;
-		this.tooltip.createDiv({ cls: "graph-insight-tooltip-preview", text });
+		if (generation !== this.openGeneration || tooltip !== this.tooltip ||
+			nodeId !== this.tooltipNodeId || !tooltip || !text) return;
+		tooltip.createDiv({ cls: "graph-insight-tooltip-preview", text });
 	}
 
 	/** First `words` words of the note body (frontmatter stripped). */
@@ -2352,17 +2423,23 @@ export class GraphInsightView extends ItemView {
 			new Notice(t("notice.pngFailed"));
 			return;
 		}
-		downloadBlob("graph-insight.png", blob);
+		this.downloadBlob("graph-insight.png", blob);
 	}
 
 	exportJsonFile(): void {
 		if (!this.model) return;
-		downloadBlob("graph-insight.json", new Blob([graphToJson(this.model)], { type: "application/json" }));
+		this.downloadBlob("graph-insight.json", new Blob([graphToJson(this.model)], { type: "application/json" }));
 	}
 
 	exportGexfFile(): void {
 		if (!this.model) return;
-		downloadBlob("graph-insight.gexf", new Blob([graphToGexf(this.model)], { type: "application/xml" }));
+		this.downloadBlob("graph-insight.gexf", new Blob([graphToGexf(this.model)], { type: "application/xml" }));
+	}
+
+	private downloadBlob(fileName: string, blob: Blob): void {
+		const doc = this.viewDocument ?? this.contentEl.ownerDocument;
+		const ownerWindow = this.viewWindow ?? doc.defaultView;
+		if (ownerWindow) downloadBlob(fileName, blob, doc, ownerWindow);
 	}
 
 	/** The ONE place panel callbacks are defined — panel is rebuilt from
@@ -2820,21 +2897,24 @@ export class GraphInsightView extends ItemView {
 	}
 
 	private replayTrail(): void {
-		if (this.trailReplayFrame !== null) window.cancelAnimationFrame(this.trailReplayFrame);
+		const viewWindow = this.viewWindow ?? this.renderer?.ownerWindow ?? window;
+		if (this.trailReplayFrame !== null) viewWindow.cancelAnimationFrame(this.trailReplayFrame);
 		this.trailReplayFrame = null;
-		if (prefersReducedMotion()) {
+		if (prefersReducedMotion(viewWindow)) {
 			this.drawTrail(1);
 			return;
 		}
-		const durationMs = motionMs(TRAIL_REPLAY_MS);
-		const start = performance.now();
+		const durationMs = motionMs(TRAIL_REPLAY_MS, viewWindow);
+		const start = viewWindow.performance.now();
+		const generation = this.openGeneration;
 		const step = () => {
-			const progress = Math.min(1, (performance.now() - start) / durationMs);
+			if (generation !== this.openGeneration) return;
+			const progress = Math.min(1, (viewWindow.performance.now() - start) / durationMs);
 			this.drawTrail(progress);
-			if (progress < 1) this.trailReplayFrame = window.requestAnimationFrame(step);
+			if (progress < 1) this.trailReplayFrame = viewWindow.requestAnimationFrame(step);
 			else this.trailReplayFrame = null;
 		};
-		this.trailReplayFrame = window.requestAnimationFrame(step);
+		this.trailReplayFrame = viewWindow.requestAnimationFrame(step);
 	}
 
 	onResize(): void {
@@ -2842,11 +2922,24 @@ export class GraphInsightView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
+		this.closeEpoch++;
+		this.reopenRequested = false;
+		await this.teardown();
+	}
+
+	private async teardown(): Promise<void> {
 		this.closing = true;
 		this.openGeneration++;
 		this.clearOpenListeners();
 		this.stopObservingRendererVisibility?.();
 		this.stopObservingRendererVisibility = null;
+		const viewWindow = this.viewWindow;
+		if (this.resizeFrame !== null) viewWindow?.cancelAnimationFrame(this.resizeFrame);
+		if (this.trailReplayFrame !== null) viewWindow?.cancelAnimationFrame(this.trailReplayFrame);
+		if (this.visualFrame !== null) viewWindow?.cancelAnimationFrame(this.visualFrame);
+		this.resizeFrame = null;
+		this.trailReplayFrame = null;
+		this.visualFrame = null;
 		this.rebuildGeneration++;
 		this.rebuilding = false;
 		this.rebuildPending = false;
@@ -2866,7 +2959,23 @@ export class GraphInsightView extends ItemView {
 		this.exploreSession = null;
 		this.exploreDetached = false;
 		this.exploreOverride = false;
-		await Promise.all([this.savePositions(), this.plugin.flushSettings()]);
+		let persistenceError: Error | undefined;
+		try {
+			const results = await Promise.allSettled([
+				callAsPromise(() => this.savePositions()),
+				callAsPromise(() => this.plugin.flushSettings()),
+			]);
+			const rejected = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
+			if (rejected) {
+				persistenceError = asError(rejected.reason);
+			}
+		} finally {
+			this.finishTeardown();
+		}
+		if (persistenceError) throw persistenceError;
+	}
+
+	private finishTeardown(): void {
 		this.renamed.clear();
 		this.hasLayoutPositions = false;
 		this.layout?.stop();
@@ -2883,8 +2992,6 @@ export class GraphInsightView extends ItemView {
 		this.toolBar = null;
 		this.filterChips?.destroy();
 		this.filterChips = null;
-		if (this.trailReplayFrame !== null) window.cancelAnimationFrame(this.trailReplayFrame);
-		if (this.visualFrame !== null) window.cancelAnimationFrame(this.visualFrame);
 		this.timeline?.destroy();
 		this.timeline = null;
 		this.cameraWidget?.destroy();
@@ -2896,6 +3003,8 @@ export class GraphInsightView extends ItemView {
 		this.renderer?.destroy();
 		this.renderer = null;
 		this.model = null;
+		this.viewWindow = null;
+		this.viewDocument = null;
 	}
 }
 
@@ -2919,11 +3028,25 @@ function leafId(leaf: WorkspaceLeaf): string {
 	return typeof id === "string" ? id : "";
 }
 
-function downloadBlob(fileName: string, blob: Blob): void {
-	const url = URL.createObjectURL(blob);
-	const anchor = createEl("a", { attr: { href: url, download: fileName } });
+function downloadBlob(fileName: string, blob: Blob, doc: Document, ownerWindow: Window): void {
+	const hostUrl = (ownerWindow as Window & typeof window).URL;
+	const url = hostUrl.createObjectURL(blob);
+	const anchor = doc.body.createEl("a", { attr: { href: url, download: fileName } });
 	anchor.click();
-	URL.revokeObjectURL(url);
+	anchor.remove();
+	hostUrl.revokeObjectURL(url);
+}
+
+function callAsPromise<T>(action: () => Promise<T>): Promise<T> {
+	try {
+		return Promise.resolve(action());
+	} catch (error) {
+		return Promise.reject(asError(error));
+	}
+}
+
+function asError(error: unknown): Error {
+	return error instanceof Error ? error : new Error(String(error));
 }
 
 /** Unique tags and folders for search suggestions, sorted by frequency. */

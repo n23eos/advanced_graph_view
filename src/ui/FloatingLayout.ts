@@ -2,13 +2,20 @@
  * Reserve space using the actual floating controls, including wrapped search
  * chips and focus breadcrumbs. The canvas never needs to be rebuilt.
  */
+type WindowWithResizeObserver = Window & { ResizeObserver?: typeof ResizeObserver };
+
 export class FloatingLayout {
 	private observer: ResizeObserver | null = null;
+	private readonly ownerWindow: Window;
 
 	constructor(private readonly host: HTMLElement, private readonly onWidth: (width: number) => void) {
+		const ownerWindow = host.ownerDocument.defaultView;
+		if (!ownerWindow) throw new Error("Floating layout host must belong to a window");
+		this.ownerWindow = ownerWindow;
 		this.update();
-		if (typeof ResizeObserver === "undefined") return;
-		this.observer = new ResizeObserver(() => this.update());
+		const ResizeObserverConstructor = (this.ownerWindow as WindowWithResizeObserver).ResizeObserver;
+		if (!ResizeObserverConstructor) return;
+		this.observer = new ResizeObserverConstructor(() => this.update());
 		this.observer.observe(host);
 		for (const selector of [
 			".graph-insight-topbar", ".graph-insight-toolbar",

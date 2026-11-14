@@ -12,8 +12,13 @@ describe("GraphRenderer startup", () => {
 		const init = vi.spyOn(Application.prototype, "init").mockRejectedValue(new Error("WebGL unavailable"));
 		const destroy = vi.spyOn(Container.prototype, "destroy");
 		const renderer = new GraphRenderer({} as RendererCallbacks);
+		const host = {
+			ownerDocument: { defaultView: { devicePixelRatio: 1, createEl: vi.fn(() => ({})) } },
+			clientWidth: 640,
+			clientHeight: 480,
+		} as unknown as HTMLElement;
 
-		await expect(renderer.init({} as HTMLElement)).rejects.toThrow("WebGL unavailable");
+		await expect(renderer.init(host)).rejects.toThrow("WebGL unavailable");
 
 		expect(init).toHaveBeenCalledWith(expect.objectContaining({ preference: ["webgl"] }));
 		expect(destroy).toHaveBeenCalledOnce();

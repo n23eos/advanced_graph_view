@@ -12,6 +12,7 @@ export class Viewport {
 	private isPanning = false;
 	private lastX = 0;
 	private lastY = 0;
+	private readonly ownerWindow: Window;
 	/** Set while a node drag is in progress so panning does not kick in. */
 	suppressPan = false;
 
@@ -20,10 +21,13 @@ export class Viewport {
 		private readonly canvas: HTMLCanvasElement,
 		private readonly onChanged: () => void
 	) {
+		const ownerWindow = canvas.ownerDocument.defaultView;
+		if (!ownerWindow) throw new Error("Graph viewport requires a document window");
+		this.ownerWindow = ownerWindow;
 		canvas.addEventListener("wheel", this.handleWheel, { passive: false });
 		canvas.addEventListener("pointerdown", this.handlePointerDown);
-		window.addEventListener("pointermove", this.handlePointerMove);
-		window.addEventListener("pointerup", this.handlePointerUp);
+		ownerWindow.addEventListener("pointermove", this.handlePointerMove);
+		ownerWindow.addEventListener("pointerup", this.handlePointerUp);
 	}
 
 	/** Zoom set by the last fitBounds — the "whole graph on screen" baseline.
@@ -111,7 +115,7 @@ export class Viewport {
 	destroy(): void {
 		this.canvas.removeEventListener("wheel", this.handleWheel);
 		this.canvas.removeEventListener("pointerdown", this.handlePointerDown);
-		window.removeEventListener("pointermove", this.handlePointerMove);
-		window.removeEventListener("pointerup", this.handlePointerUp);
+		this.ownerWindow.removeEventListener("pointermove", this.handlePointerMove);
+		this.ownerWindow.removeEventListener("pointerup", this.handlePointerUp);
 	}
 }

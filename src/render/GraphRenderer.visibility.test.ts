@@ -9,6 +9,8 @@ interface VisibilityHarness {
 	smoothing: boolean;
 	destroyed: boolean;
 	contextLost: boolean;
+	_ownerWindow: Window;
+	frame: number | null;
 	reproject: ReturnType<typeof vi.fn>;
 }
 
@@ -16,27 +18,32 @@ function setup() {
 	const renderer = new GraphRenderer({} as RendererCallbacks);
 	const state = renderer as unknown as VisibilityHarness;
 	const ticker = { start: vi.fn(), stop: vi.fn() };
+	const frameWindow = { requestAnimationFrame: vi.fn(() => 1), cancelAnimationFrame: vi.fn() };
+	state._ownerWindow = frameWindow as unknown as Window;
 	state.app = { ticker };
 	state.reproject = vi.fn();
-	return { renderer, state, ticker };
+	return { renderer, state, ticker, frameWindow };
 }
 
 describe("GraphRenderer visibility", () => {
 	afterEach(() => vi.restoreAllMocks());
 
-	test("pauses its ticker and resumes with a fresh projection", () => {
-		const { renderer, state, ticker } = setup();
+	test("pauses its host frame loop and resumes with a fresh projection", () => {
+		const { renderer, state, ticker, frameWindow } = setup();
+		state.frame = 1;
 		renderer.updatePositions(new Float32Array([1, 2, 3]));
 		state.reproject.mockClear();
 
 		renderer.pause();
 		expect(ticker.stop).toHaveBeenCalledOnce();
 		expect(ticker.start).not.toHaveBeenCalled();
+		expect(frameWindow.cancelAnimationFrame).toHaveBeenCalledExactlyOnceWith(1);
 
 		renderer.resume();
 		expect(state.reproject).toHaveBeenCalledOnce();
-		expect(ticker.start).toHaveBeenCalledOnce();
-		expect(state.reproject.mock.invocationCallOrder[0]).toBeLessThan(ticker.start.mock.invocationCallOrder[0]);
+		expect(frameWindow.requestAnimationFrame).toHaveBeenCalledOnce();
+		expect(ticker.start).not.toHaveBeenCalled();
+		expect(state.reproject.mock.invocationCallOrder[0]).toBeLessThan(frameWindow.requestAnimationFrame.mock.invocationCallOrder[0]);
 	});
 
 	test("adopts a pending smoothing target on pause so persistence sees the latest frame", () => {

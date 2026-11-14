@@ -27,8 +27,14 @@ export class FilterChips {
 	private folders: string[] = [];
 	private selection: FilterSelection = { tags: new Set(), folders: new Set() };
 	private filterFrame: number | null = null;
+	private readonly ownerDocument: Document;
+	private readonly ownerWindow: Window;
 
 	constructor(host: HTMLElement, private readonly callbacks: FilterChipsCallbacks) {
+		this.ownerDocument = host.ownerDocument;
+		const ownerWindow = this.ownerDocument.defaultView;
+		if (!ownerWindow) throw new Error("Filter chips host must belong to a window");
+		this.ownerWindow = ownerWindow;
 		this.root = host.createDiv({ cls: "graph-insight-filters" });
 		this.menuId = `graph-insight-filter-menu-${FilterChips.nextId++}`;
 		this.tagButton = this.makeButton(t("filters.tags"));
@@ -47,7 +53,7 @@ export class FilterChips {
 		});
 
 		// Click outside closes the dropdown.
-		document.addEventListener("click", this.handleOutsideClick, true);
+		this.ownerDocument.addEventListener("click", this.handleOutsideClick, true);
 	}
 
 	private makeButton(label: string): HTMLButtonElement {
@@ -109,7 +115,7 @@ export class FilterChips {
 
 	private closeMenu(restoreFocus = false): void {
 		const trigger = this.openKind === "tags" ? this.tagButton : this.folderButton;
-		if (this.filterFrame !== null) window.cancelAnimationFrame(this.filterFrame);
+		if (this.filterFrame !== null) this.ownerWindow.cancelAnimationFrame(this.filterFrame);
 		this.filterFrame = null;
 		this.openKind = null;
 		this.menu.hide();
@@ -118,7 +124,7 @@ export class FilterChips {
 	}
 
 	private renderMenu(kind: "tags" | "folders"): void {
-		if (this.filterFrame !== null) window.cancelAnimationFrame(this.filterFrame);
+		if (this.filterFrame !== null) this.ownerWindow.cancelAnimationFrame(this.filterFrame);
 		this.filterFrame = null;
 		this.menu.empty();
 		const selected = kind === "tags" ? this.selection.tags : this.selection.folders;
@@ -139,8 +145,8 @@ export class FilterChips {
 		});
 		search.setAttribute("aria-label", kind === "tags" ? t("filters.vaultTags") : t("filters.vaultFolders"));
 		search.addEventListener("input", () => {
-			if (this.filterFrame !== null) window.cancelAnimationFrame(this.filterFrame);
-			this.filterFrame = window.requestAnimationFrame(() => {
+			if (this.filterFrame !== null) this.ownerWindow.cancelAnimationFrame(this.filterFrame);
+			this.filterFrame = this.ownerWindow.requestAnimationFrame(() => {
 				this.filterFrame = null;
 				this.renderList(kind, search.value);
 			});
@@ -214,8 +220,8 @@ export class FilterChips {
 	}
 
 	destroy(): void {
-		if (this.filterFrame !== null) window.cancelAnimationFrame(this.filterFrame);
-		document.removeEventListener("click", this.handleOutsideClick, true);
+		if (this.filterFrame !== null) this.ownerWindow.cancelAnimationFrame(this.filterFrame);
+		this.ownerDocument.removeEventListener("click", this.handleOutsideClick, true);
 		this.root.remove();
 	}
 }

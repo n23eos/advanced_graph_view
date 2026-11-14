@@ -6,13 +6,13 @@
 import { resolvePreset, type ScalePreset } from "../encoding/colorScales";
 import { adaptPresetToTheme } from "../encoding/themeContrast";
 
-export function isLightTheme(): boolean {
-	return document.body.classList.contains("theme-light");
+export function isLightTheme(doc: Document = document): boolean {
+	return doc.body.classList.contains("theme-light");
 }
 
 /** The scheme as it is actually drawn right now, theme adaptation included.
  *  Everything that paints scheme colors — nodes, legend, cluster bubbles —
  *  must go through this, or they drift apart on a light theme. */
-export function activePreset(presetId: string): ScalePreset {
-	return adaptPresetToTheme(resolvePreset(presetId), isLightTheme());
+export function activePreset(presetId: string, doc: Document = document): ScalePreset {
+	return adaptPresetToTheme(resolvePreset(presetId), isLightTheme(doc));
 }

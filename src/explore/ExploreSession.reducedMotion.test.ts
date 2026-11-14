@@ -21,6 +21,7 @@ function setup(reducedMotion: boolean) {
 	let cameraPosition: Vec3 = { x: 0, y: 0, z: 0 };
 	const placeCamera = vi.fn((position: Vec3, _pivot: Vec3) => { cameraPosition = position; });
 	const renderer = {
+		ownerWindow: window,
 		get cameraPosition() { return cameraPosition; },
 		camera: { forward: () => [0, 0, 1] },
 		nodePosition: (id: number) => nodes[id] ?? null,

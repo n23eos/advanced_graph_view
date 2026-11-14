@@ -43,6 +43,8 @@ export class ExploreSession {
 	private frame: number | null = null;
 	private lastTimestamp: number | null = null;
 	private tween: CameraTween | null = null;
+	private readonly ownerWindow: Window;
+	private stopped = false;
 
 	constructor(
 		private readonly renderer: GraphRenderer,
@@ -51,6 +53,7 @@ export class ExploreSession {
 		private readonly callbacks: ExploreSessionCallbacks,
 		private readonly tuning: ExploreTuning = DEFAULT_EXPLORE_TUNING
 	) {
+		this.ownerWindow = renderer.ownerWindow;
 		this.controller = new ExploreController(startId, tuning);
 		// Entering is itself a hop: the camera flies to the start node rather
 		// than cutting to it, so the mode begins with the same motion it uses
@@ -60,7 +63,7 @@ export class ExploreSession {
 		this.flyTo(startId, false);
 		this.publishFocus();
 		this.drawOverlay();
-		this.frame = window.requestAnimationFrame(this.step);
+		this.frame = this.ownerWindow.requestAnimationFrame(this.step);
 	}
 
 	get currentId(): number {
@@ -100,12 +103,15 @@ export class ExploreSession {
 	}
 
 	stop(): void {
-		if (this.frame !== null) window.cancelAnimationFrame(this.frame);
+		this.stopped = true;
+		if (this.frame !== null) this.ownerWindow.cancelAnimationFrame(this.frame);
 		this.frame = null;
 		this.renderer.setExploreOverlay(null);
 	}
 
 	private step = (timestamp: number): void => {
+		if (this.stopped) return;
+		this.frame = null;
 		const previous = this.lastTimestamp;
 		this.lastTimestamp = timestamp;
 		const dt = previous === null ? 0 : Math.min((timestamp - previous) / 1000, MAX_FRAME_SECONDS);
@@ -116,7 +122,7 @@ export class ExploreSession {
 		if (change.arrivedAt !== null) this.publishFocus();
 		this.drawOverlay();
 
-		this.frame = window.requestAnimationFrame(this.step);
+		if (!this.stopped) this.frame = this.ownerWindow.requestAnimationFrame(this.step);
 	};
 
 	/**

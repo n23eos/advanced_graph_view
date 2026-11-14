@@ -16,8 +16,10 @@ function toHex(color: number): string {
 
 export class Legend {
 	private root: HTMLElement;
+	private readonly ownerDocument: Document;
 
 	constructor(host: HTMLElement) {
+		this.ownerDocument = host.ownerDocument;
 		this.root = host.createDiv({ cls: "graph-insight-legend" });
 		this.root.hide();
 	}
@@ -38,7 +40,7 @@ export class Legend {
 	}
 
 	private renderGradient(metric: MetricId, presetId: string): void {
-		const preset = activePreset(presetId);
+		const preset = activePreset(presetId, this.ownerDocument);
 		this.root.createDiv({
 			cls: "graph-insight-legend-title",
 			text: metricLabel(metric),
@@ -51,7 +53,7 @@ export class Legend {
 	}
 
 	private renderCategories(metric: MetricId, categories: string[], presetId: string): void {
-		const palette = activePreset(presetId).categories;
+		const palette = activePreset(presetId, this.ownerDocument).categories;
 		this.root.createDiv({
 			cls: "graph-insight-legend-title",
 			text: metricLabel(metric),

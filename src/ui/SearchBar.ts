@@ -91,8 +91,12 @@ export class SearchBar {
 	private hasCommitted = false;
 	/** Trailing throttle so the aria-live status stays quiet while typing. */
 	private statusTimer: number | null = null;
+	private readonly ownerWindow: Window;
 
 	constructor(host: HTMLElement, private readonly callbacks: SearchCallbacks) {
+		const ownerWindow = host.ownerDocument.defaultView;
+		if (!ownerWindow) throw new Error("Search bar host must belong to a window");
+		this.ownerWindow = ownerWindow;
 		this.root = host.createDiv({ cls: "graph-insight-searchbar" });
 		this.filtersHost = this.root.createDiv({ cls: "graph-insight-searchbar-filters" });
 
@@ -121,14 +125,14 @@ export class SearchBar {
 		});
 		this.input.addEventListener("blur", () => {
 			// Delay so a click on a suggestion lands before the box hides.
-			if (this.blurTimer !== null) window.clearTimeout(this.blurTimer);
-			this.blurTimer = window.setTimeout(() => {
+			if (this.blurTimer !== null) this.ownerWindow.clearTimeout(this.blurTimer);
+			this.blurTimer = this.ownerWindow.setTimeout(() => {
 				this.blurTimer = null;
 				this.dismissSuggestions();
 			}, SUGGEST_HIDE_DELAY_MS);
 		});
 		this.input.addEventListener("focus", () => {
-			if (this.blurTimer !== null) window.clearTimeout(this.blurTimer);
+			if (this.blurTimer !== null) this.ownerWindow.clearTimeout(this.blurTimer);
 			this.blurTimer = null;
 			this.updateSuggestions();
 		});
@@ -303,14 +307,14 @@ export class SearchBar {
 
 	private setStatusText(text: string, immediate: boolean): void {
 		if (this.statusTimer !== null) {
-			window.clearTimeout(this.statusTimer);
+			this.ownerWindow.clearTimeout(this.statusTimer);
 			this.statusTimer = null;
 		}
 		if (immediate) {
 			this.statusEl.setText(text);
 			return;
 		}
-		this.statusTimer = window.setTimeout(() => {
+		this.statusTimer = this.ownerWindow.setTimeout(() => {
 			this.statusTimer = null;
 			this.statusEl.setText(text);
 		}, STATUS_THROTTLE_MS);
@@ -491,11 +495,11 @@ export class SearchBar {
 
 	destroy(): void {
 		if (this.blurTimer !== null) {
-			window.clearTimeout(this.blurTimer);
+			this.ownerWindow.clearTimeout(this.blurTimer);
 			this.blurTimer = null;
 		}
 		if (this.statusTimer !== null) {
-			window.clearTimeout(this.statusTimer);
+			this.ownerWindow.clearTimeout(this.statusTimer);
 			this.statusTimer = null;
 		}
 		this.root.remove();

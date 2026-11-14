@@ -107,10 +107,10 @@ interface ThemeColors {
 
 /** Resolved inside `parent`, so container-scoped variable overrides (the
  *  graph's own light/dark theme) win over the Obsidian body theme. */
-function cssColorToNumber(value: string, parent: HTMLElement): number {
+function cssColorToNumber(value: string, parent: HTMLElement, ownerWindow: Window): number {
 	const probe = parent.createDiv();
 	probe.style.color = value;
-	const rgb = getComputedStyle(probe).color.match(/\d+/g);
+	const rgb = ownerWindow.getComputedStyle(probe).color.match(/\d+/g);
 	probe.remove();
 	if (!rgb) return 0x888888;
 	return (Number(rgb[0]) << 16) | (Number(rgb[1]) << 8) | Number(rgb[2]);
@@ -148,14 +148,14 @@ function drawArrowHead(
 	g.stroke({ color, alpha, width: 1.5 });
 }
 
-function readThemeColors(host: HTMLElement): ThemeColors {
-	const styles = getComputedStyle(host);
+function readThemeColors(host: HTMLElement, ownerWindow: Window): ThemeColors {
+	const styles = ownerWindow.getComputedStyle(host);
 	const read = (name: string, fallback: string) => styles.getPropertyValue(name).trim() || fallback;
 	return {
-		node: cssColorToNumber(read("--graph-node", "var(--text-muted)"), host),
-		nodeSelected: cssColorToNumber(read("--interactive-accent", "#7c3aed"), host),
-		edge: cssColorToNumber(read("--graph-line", "var(--background-modifier-border)"), host),
-		label: cssColorToNumber(read("--text-muted", "#888888"), host),
+		node: cssColorToNumber(read("--graph-node", "var(--text-muted)"), host, ownerWindow),
+		nodeSelected: cssColorToNumber(read("--interactive-accent", "#7c3aed"), host, ownerWindow),
+		edge: cssColorToNumber(read("--graph-line", "var(--background-modifier-border)"), host, ownerWindow),
+		label: cssColorToNumber(read("--text-muted", "#888888"), host, ownerWindow),
 	};
 }
 
@@ -170,6 +170,10 @@ export class GraphRenderer {
 	private paused = false;
 	private needsRender = true;
 	private lastRenderAt = -Infinity;
+	private _ownerWindow: Window | null = null;
+	private frame: number | null = null;
+	private frameGeneration = 0;
+	private frameNow = () => performance.now();
 	private world = new Container();
 	private edgeMesh: EdgeMesh | null = null;
 	private hullGraphics = new Graphics();
@@ -244,6 +248,7 @@ export class GraphRenderer {
 		if (this.destroyed || this.app === null) return;
 		event.preventDefault();
 		this.contextLost = true;
+		this.stopFrames();
 		console.error("Advanced Graph View: WebGL context lost");
 		this.callbacks.onContextLost();
 	};
@@ -252,13 +257,27 @@ export class GraphRenderer {
 
 	constructor(private readonly callbacks: RendererCallbacks) {}
 
+	/** The window that owns this renderer, retained until it is destroyed. */
+	get ownerWindow(): Window {
+		if (!this._ownerWindow) throw new Error("Graph renderer has no document window");
+		return this._ownerWindow;
+	}
+
 	async init(host: HTMLElement, renderScale: RenderScale = "standard"): Promise<void> {
+		const ownerWindow = host.ownerDocument.defaultView;
+		if (!ownerWindow) throw new Error("Graph renderer requires a document window");
+		this._ownerWindow = ownerWindow;
+		this.frameNow = () => ownerWindow.performance.now();
 		this.host = host;
+		const canvas = ownerWindow.createEl("canvas");
 		const app = new Application();
 		try {
 			await app.init({
-				...renderResolution(renderScale, host.ownerDocument?.defaultView?.devicePixelRatio ?? 1),
-				resizeTo: host,
+				...renderResolution(renderScale, ownerWindow.devicePixelRatio),
+				canvas,
+				width: Math.max(host.clientWidth, 1),
+				height: Math.max(host.clientHeight, 1),
+				autoStart: false,
 				antialias: false, // MSAA on 30k edge lines costs several ms/frame; glow sprites hide the aliasing
 				backgroundAlpha: 0,
 				// An array is an allowlist in Pixi 8. A string is only a preference
@@ -287,10 +306,11 @@ export class GraphRenderer {
 		// view is told to start over rather than left with a blank canvas.
 		app.canvas.addEventListener("webglcontextlost", this.handleContextLost);
 
-		this.colors = readThemeColors(host);
+		this.colors = readThemeColors(host, ownerWindow);
 		this.labelHalo = cssColorToNumber(
-			getComputedStyle(host).getPropertyValue("--background-primary").trim() || "#1e1e1e",
-			host
+			ownerWindow.getComputedStyle(host).getPropertyValue("--background-primary").trim() || "#1e1e1e",
+			host,
+			ownerWindow
 		);
 		this.nodeTexture = createNodeTexture(app.renderer);
 		this.starTexture = createStarTexture(app.renderer);
@@ -318,32 +338,55 @@ export class GraphRenderer {
 		// in Viewport never sees the event.
 		app.canvas.addEventListener(
 			"wheel",
-			(event: WheelEvent) => {
-				if (!this.camera.enabled) return;
-				event.preventDefault();
-				event.stopImmediatePropagation();
-				this.camera.fly(-event.deltaY * 1.5);
-				this.reproject();
-			},
+			this.handleWheel,
 			{ capture: true, passive: false }
 		);
 		app.canvas.addEventListener("pointerdown", this.handlePointerDown);
 		app.canvas.addEventListener("contextmenu", this.handleContextMenu);
 		// Move/up live on window so a drag keeps tracking outside the canvas.
-		window.addEventListener("pointermove", this.handlePointerMove);
-		window.addEventListener("pointerup", this.handlePointerUp);
+		ownerWindow.addEventListener("pointermove", this.handlePointerMove);
+		ownerWindow.addEventListener("pointerup", this.handlePointerUp);
+		ownerWindow.addEventListener("resize", this.handleWindowResize);
 
 		// TickerPlugin registers this exact function/context pair in Pixi 8.
 		// Keep the ticker for scene updates, but own the decision to draw.
 		// eslint-disable-next-line @typescript-eslint/unbound-method -- The explicit app context matches Pixi's registration.
 		app.ticker.remove(app.render, app);
 		app.ticker.add(() => this.renderFrame());
-		if (this.paused) app.ticker.stop();
+		this.scheduleFrame();
 	}
+
+	private scheduleFrame(): void {
+		if (!this.app || !this._ownerWindow || this.destroyed || this.contextLost || this.paused || this.frame !== null) return;
+		const generation = this.frameGeneration;
+		this.frame = this._ownerWindow.requestAnimationFrame((timestamp) => {
+			if (generation !== this.frameGeneration) return;
+			this.frame = null;
+			if (!this.app || this.destroyed || this.contextLost || this.paused) return;
+			this.app.ticker.update(timestamp);
+			this.scheduleFrame();
+		});
+	}
+
+	private stopFrames(): void {
+		this.frameGeneration++;
+		if (this.frame !== null) this._ownerWindow?.cancelAnimationFrame(this.frame);
+		this.frame = null;
+	}
+
+	private readonly handleWindowResize = (): void => this.resize();
+	private readonly handleWheel = (event: WheelEvent): void => {
+		if (!this.camera.enabled) return;
+		event.preventDefault();
+		event.stopImmediatePropagation();
+		this.camera.fly(-event.deltaY * 1.5);
+		this.reproject();
+	};
 
 	pause(): void {
 		if (this.destroyed) return;
 		this.paused = true;
+		this.stopFrames();
 		// Persist the latest worker frame even if smoothing had not reached it
 		// when the pane was hidden. Projection can wait until the pane returns.
 		if (this.smoothing && this.targetPositions3) {
@@ -359,7 +402,7 @@ export class GraphRenderer {
 		const wasPaused = this.paused;
 		this.paused = false;
 		if (wasPaused) this.reproject();
-		this.app?.ticker.start();
+		this.scheduleFrame();
 	}
 
 	setModel(model: GraphModel): void {
@@ -567,14 +610,11 @@ export class GraphRenderer {
 		this.zoomToNodes(ids);
 	}
 
-	/** Obsidian resizes panes without firing window.resize — Pixi's resizeTo
-	 *  never notices, leaving a small canvas in a corner. Called from the
-	 *  view's onResize. */
+	/** Resize from the host pane, without Pixi's global-window ResizePlugin. */
 	resize(): void {
-		if (!this.app) return;
-		const host = this.app.resizeTo;
+		if (!this.app || !this.host) return;
+		const host = this.host;
 		if (
-			host instanceof HTMLElement &&
 			!isMeaningfulResize(
 				host.clientWidth,
 				host.clientHeight,
@@ -585,7 +625,7 @@ export class GraphRenderer {
 			return;
 		}
 		this.invalidate();
-		this.app.resize();
+		this.app.renderer.resize(host.clientWidth, host.clientHeight);
 		if (this.camera.enabled && this.viewport) {
 			this.world.scale.set(1);
 			this.viewport.centerOn(0, 0, this.app.canvas.clientWidth, this.app.canvas.clientHeight);
@@ -1068,7 +1108,7 @@ export class GraphRenderer {
 		// smoothing snap and the last deferred-label pass.
 		if (this.smoothing || this.positionsDirty || this.edgesDirty || this.cullDirty) this.invalidate();
 		this.updateScene(force);
-		const now = performance.now();
+		const now = this.frameNow();
 		if (force || !RENDER_ON_DEMAND || this.needsRender || now - this.lastRenderAt >= MAX_IDLE_RENDER_MS) {
 			this.app.render();
 			this.needsRender = false;
@@ -1123,7 +1163,7 @@ export class GraphRenderer {
 			this.redrawPins();
 		}
 		if (this.cullDirty || force) {
-			const now = performance.now();
+			const now = this.frameNow();
 			// Culling correctness can lag a frame or two; don't let it eat
 			// the budget on every single frame of a running simulation.
 			if (force || now - this.lastCullAt >= CULL_MIN_INTERVAL_MS) {
@@ -1350,10 +1390,11 @@ export class GraphRenderer {
 		if (!this.host) return;
 		this.invalidate();
 		this.cullDirty = true;
-		this.colors = readThemeColors(this.host);
+		this.colors = readThemeColors(this.host, this.ownerWindow);
 		this.labelHalo = cssColorToNumber(
-			getComputedStyle(this.host).getPropertyValue("--background-primary").trim() || "#1e1e1e",
-			this.host
+			this.ownerWindow.getComputedStyle(this.host).getPropertyValue("--background-primary").trim() || "#1e1e1e",
+			this.host,
+			this.ownerWindow
 		);
 		for (const label of this.labels.values()) label.destroy();
 		this.labels.clear();
@@ -1397,7 +1438,7 @@ export class GraphRenderer {
 				style: {
 					fill: this.colors.label,
 					fontSize: this.labelFontSize,
-					fontFamily: getComputedStyle(document.body).getPropertyValue("--font-interface") || "sans-serif",
+					fontFamily: this.ownerWindow.getComputedStyle(this.ownerWindow.document.body).getPropertyValue("--font-interface") || "sans-serif",
 					// Halo in the theme background color keeps text readable
 					// on top of edges and glowing nodes.
 					stroke: { color: this.labelHalo, width: Math.max(1.5, this.labelFontSize / 6) },
@@ -1450,7 +1491,7 @@ export class GraphRenderer {
 	private clickDispatcher = new ClickDispatcher({
 		onClick: (nodeId, event) => this.callbacks.onNodeClick(nodeId, event),
 		onDoubleClick: (nodeId) => this.callbacks.onNodeDoubleClick(nodeId),
-	});
+	}, undefined, () => this.ownerWindow);
 	private orbiting = false;
 	private orbitLastX = 0;
 	private orbitLastY = 0;
@@ -1784,6 +1825,7 @@ export class GraphRenderer {
 	destroy(): void {
 		if (this.destroyed) return;
 		this.destroyed = true;
+		this.stopFrames();
 		this.clickDispatcher.cancel();
 		this.viewport?.destroy();
 		this.viewport = null;
@@ -1796,9 +1838,12 @@ export class GraphRenderer {
 			app.canvas.removeEventListener("webglcontextlost", this.handleContextLost);
 			app.canvas.removeEventListener("pointerdown", this.handlePointerDown);
 			app.canvas.removeEventListener("contextmenu", this.handleContextMenu);
-			window.removeEventListener("pointermove", this.handlePointerMove);
-			window.removeEventListener("pointerup", this.handlePointerUp);
+			app.canvas.removeEventListener("wheel", this.handleWheel, { capture: true });
+			this._ownerWindow?.removeEventListener("pointermove", this.handlePointerMove);
+			this._ownerWindow?.removeEventListener("pointerup", this.handlePointerUp);
+			this._ownerWindow?.removeEventListener("resize", this.handleWindowResize);
 			app.destroy({ removeView: true }, { children: true, texture: true });
 		}
+		this._ownerWindow = null;
 	}
 }

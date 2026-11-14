@@ -6,6 +6,7 @@ import { installObsidianDom } from "../test/obsidianDom";
 import { GraphRenderer, type RendererCallbacks } from "./GraphRenderer";
 
 interface RenderHarness {
+	_ownerWindow: Window;
 	app: unknown;
 	model: GraphModel | null;
 	positions: Float32Array | null;
@@ -45,6 +46,7 @@ afterEach(() => { vi.restoreAllMocks(); document.body.empty(); });
 function setup() {
 	const renderer = new GraphRenderer({ onNodeHover: vi.fn() } as unknown as RendererCallbacks);
 	const state = renderer as unknown as RenderHarness;
+	state._ownerWindow = window;
 	const canvas = document.body.createEl("canvas");
 	Object.defineProperties(canvas, { clientWidth: { value: 800 }, clientHeight: { value: 600 } });
 	const render = vi.fn();

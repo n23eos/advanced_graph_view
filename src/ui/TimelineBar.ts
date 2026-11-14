@@ -30,8 +30,14 @@ export class TimelineBar {
 	private histogram: MonthHistogram = { counts: [], startYear: 0, startMonth: 0 };
 	private playTimer: number | null = null;
 	private mode: TimelineMode = "created";
+	private readonly ownerDocument: Document;
+	private readonly ownerWindow: Window;
 
 	constructor(host: HTMLElement, private readonly callbacks: TimelineCallbacks) {
+		this.ownerDocument = host.ownerDocument;
+		const ownerWindow = this.ownerDocument.defaultView;
+		if (!ownerWindow) throw new Error("Timeline host must belong to a window");
+		this.ownerWindow = ownerWindow;
 		this.root = host.createDiv({ cls: "graph-insight-timeline" });
 
 		this.playButton = this.root.createEl("button", { cls: "graph-insight-timeline-play" });
@@ -131,7 +137,7 @@ export class TimelineBar {
 		setIcon(this.playButton, "pause");
 		this.playButton.setAttribute("aria-label", t("timeline.pause"));
 		this.playButton.setAttribute("aria-pressed", "true");
-		this.playTimer = window.setInterval(() => {
+		this.playTimer = this.ownerWindow.setInterval(() => {
 			const next = this.currentIndex() + 1;
 			if (next >= this.histogram.counts.length) {
 				this.stopPlay();
@@ -145,7 +151,7 @@ export class TimelineBar {
 
 	private stopPlay(): void {
 		if (this.playTimer !== null) {
-			window.clearInterval(this.playTimer);
+			this.ownerWindow.clearInterval(this.playTimer);
 			this.playTimer = null;
 		}
 		setIcon(this.playButton, "play");
@@ -164,7 +170,8 @@ export class TimelineBar {
 		if (counts.length === 0) return;
 		const max = Math.max(...counts, 1);
 		const barWidth = width / counts.length;
-		const accent = getComputedStyle(document.body).getPropertyValue("--interactive-accent").trim() || "#7c3aed";
+		const accent = this.ownerWindow.getComputedStyle(this.ownerDocument.body)
+			.getPropertyValue("--interactive-accent").trim() || "#7c3aed";
 		context.fillStyle = accent;
 		context.globalAlpha = 0.55;
 		for (let i = 0; i < counts.length; i++) {

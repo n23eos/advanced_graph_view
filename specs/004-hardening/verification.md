@@ -107,3 +107,24 @@ A и B завершены локально. Кандидат 0.10.3: ef01500. В
 - C4: fundingUrl скопирован точно из README: https://ko-fi.com/n23eos. JSON и соответствие ссылке проверены; verify/build PASS: 890 тестов / 115 файлов, lint 0 ошибок / 0 предупреждений.
 
 - Независимое ревью C1-C4: существенных замечаний нет. 31 целевой тест / 6 файлов PASS, diff --check и точное совпадение fundingUrl с README PASS. Нативная проверка не выполнялась. C5 ожидает согласования расширения области правок по 0.4; D/E ещё не начаты.
+
+## Продолжение по разрешению владельца
+
+2026-11-14 владелец разрешил весь оставшийся объём, коммиты, push и установку в Raincoat; запретил публикацию релиза. Дополнительного согласования C5 больше не требуется. Теги не создаются, поскольку они запускают Release workflow.
+
+Push A/B/C выполнен. CI PASS для точных голов:
+- A: 472d1ca, run43599239646.
+- B: ef01500, run43599239535.
+- C1-C4: 3d0a867, run43599239978.
+
+Mac по-прежнему заблокирован. Нативные проверки не выдаются за завершённые.
+
+## C5: owner windows and migration, 2026-11-14
+
+- Captured host document/window for GraphRenderer, Viewport, ExploreSession, main/local view, visibility observers and UI components. Canvas creation, theme/legend, keyboard, pointer events, resize, RAF, timers and downloads use the owning window. Cleanup retains the original window after DOM migration.
+- Pixi 8.19 runs with autoStart false; the host RAF calls public ticker.update. The automatic render listener remains removed. Pause/resume, demand invalidation, forced PNG draw and the 500 ms safety frame remain covered. No global Pixi DOM adapter changes.
+- Migration subscriptions are released per opening. Reopens serialize and coalesce; a host-close epoch cancels queued reopening. Failed synchronous/asynchronous persistence still completes teardown; migration catches reload rejection. Stale preview/RAF callbacks cannot update a replacement view.
+- RED confirmed for new two-window and lifecycle regressions. Existing API fixtures were extended. B3 ticker.start implementation assertions now check the equivalent owner RAF lifecycle without removing behavior coverage. Original baseline assertions were not weakened.
+- Independent review found close/reopen resurrection, incomplete teardown on failed persistence and a legend palette mismatch. Each has regression coverage and is fixed.
+- Full npm run verify: 912 tests / 124 files PASS; typecheck PASS; lint 0 errors, 0 warnings. npm run build PASS. Logs: /tmp/hardening-c5-final-verify.log and /tmp/hardening-c5-final-build.log. jsdom emits its existing canvas getContext diagnostic; no tests failed.
+- Native popout, real GPU and migration interaction: not verified. CUA still reports the Mac locked. No native acceptance is inferred from iframe tests.

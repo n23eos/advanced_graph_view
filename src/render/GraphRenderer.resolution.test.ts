@@ -11,7 +11,11 @@ describe("renderer resolution initialization", () => {
 		["high", 1.5, 1.5, true],
 	] as const)("%s uses host pixel ratio %s as resolution %s", async (scale, ratio, resolution, autoDensity) => {
 		const init = vi.spyOn(Application.prototype, "init").mockRejectedValue(new Error("stop after options"));
-		const host = { ownerDocument: { defaultView: { devicePixelRatio: ratio } } } as unknown as HTMLElement;
+		const host = {
+			ownerDocument: { defaultView: { devicePixelRatio: ratio, createEl: vi.fn(() => ({})) } },
+			clientWidth: 640,
+			clientHeight: 480,
+		} as unknown as HTMLElement;
 		const renderer = new GraphRenderer({} as RendererCallbacks);
 		await expect(renderer.init(host, scale)).rejects.toThrow("stop after options");
 		expect(init).toHaveBeenCalledWith(expect.objectContaining({ resolution, autoDensity }));
