@@ -1,9 +1,11 @@
-# Advanced Graph View 0.11.1
+# Advanced Graph View 0.11.2
 
 Unpublished candidate. No tag or release is authorized.
 
-Cmd/Ctrl hover requests Obsidian's native note preview in the main graph and Explore. Existing graph tooltips remain. Preview targets use full paths, are resolved again after layout motion, and are cleaned up when a pane hides or closes. Page Preview must be enabled. Modifier activation remains required.
+Use prop:key=value to filter notes by frontmatter and select Property: key in the Color control. Scalar values and lists are supported, matching is case-insensitive, and missing values retain the default tint. Property changes update the graph without restarting layout. Existing default colors and presets remain unchanged.
 
-This candidate also includes per-tab workspace camera/query restoration. Integrated verification: 959 tests / 131 files, lint zero warnings, typecheck and production build pass. Independent reviews closed lifecycle findings.
+This candidate includes workspace camera/query restoration and Cmd/Ctrl native hover integration. Final integrated verification: 983 tests / 139 files, lint zero warnings, typecheck and production build pass. Independent review closed the hidden-node count reset after property options change.
 
-Real native popup/core-graph comparison, app restart and popout acceptance remain unverified while macOS is locked. Requires Obsidian 1.13.0 or later; desktop only.
+Browser QA confirmed property color in both panel modes, prop:status=active showing 8/42 notes, and restoration into a fresh view; narrow/light layout inspected. Native Obsidian restart, hover popup and popout acceptance remain unverified while macOS is locked.
+
+Requires Obsidian 1.13.0 or later; desktop only.

@@ -169,7 +169,10 @@ function createHost(mode: VaultMode, host: HTMLElement, report: (message: string
 	const metadataCache = {
 		resolvedLinks,
 		unresolvedLinks,
-		getFileCache: (file: TFile) => ({ tags: (specByPath.get(file.path)?.tags ?? []).map((tag) => ({ tag: `#${tag}` })) }),
+		getFileCache: (file: TFile) => ({
+			tags: (specByPath.get(file.path)?.tags ?? []).map((tag) => ({ tag: `#${tag}` })),
+			frontmatter: { status: file.path.startsWith("Projects/") ? "active" : "reference" },
+		}),
 		on: (name: string, callback: (...args: any[]) => void) => metadataEvents.on(name, callback),
 		offref: (ref: { off(): void }) => ref.off(),
 	};
@@ -178,6 +181,7 @@ function createHost(mode: VaultMode, host: HTMLElement, report: (message: string
 	const leaf: any = { id: "ui-harness-leaf", contentEl: host };
 	leaf.openFile = async (file: TFile) => { report(`Opened ${file.path} in harness host`); workspaceEvents.emit("file-open", file); };
 	const workspace = {
+		trigger: (name: string, payload: { linktext?: string }) => report(`${name}: ${payload.linktext ?? ""}`),
 		on: (name: string, callback: (...args: any[]) => void) => workspaceEvents.on(name, callback),
 		offref: (ref: { off(): void }) => ref.off(),
 		requestSaveLayout: () => {

@@ -200,3 +200,8 @@ Mac по-прежнему заблокирован. Нативные прове�
 ## E2: native hover integration, 2026-11-14
 
 - specs/006-native-hover, per-view native preview lifecycle, stationary hit-test and hidden-leaf cleanup. Integrated E1/E2 verify: 959 tests / 131 files, lint zero, typecheck/build PASS. Independent review closed. Native popup comparison unverified because Mac is locked.
+
+## E3: frontmatter properties, 2026-11-14
+
+- specs/007-frontmatter-properties, property filter/color/live refresh with defaults preserved. Integrated E1-E3 verify: 983 tests / 139 files, lint zero, typecheck/build PASS. Independent review closed; browser property color/query and workspace restoration pass. Native editing unverified.
+- E1 exact head 0a4445f CI 43606035489 success.

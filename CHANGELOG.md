@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.2] - 2026-11-14
+
+### Added
+
+- Filter nodes by frontmatter with prop:key=value, including lists, negation and quoted values.
+- Color nodes by scalar frontmatter properties in simple and expert panels.
+- Refresh property values and choices without restarting graph layout.
+
 ## [0.11.1] - 2026-11-14
 
 ### Added
