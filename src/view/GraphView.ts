@@ -635,7 +635,8 @@ export class GraphInsightView extends ItemView {
 				// Released node keeps its spot (temporary fixation) — otherwise
 				// the warm simulation immediately drags it back to its links,
 				// which feels like the node is glued in place. Context menu →
-				// «Открепить» releases it.
+				// «Открепить» releases it. Its neighbours drift over and gather
+				// around it (see towForce.ts).
 				this.pinnedNodes.add(nodeId);
 				this.layout?.dragEnd();
 				this.savePositionsDebounced();

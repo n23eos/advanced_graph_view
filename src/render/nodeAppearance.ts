@@ -91,6 +91,41 @@ export function emphasisBoost(isHovered: boolean, isHighlighted: boolean): numbe
 	return 1;
 }
 
+/**
+ * Same boost, but part-way through the hover transition. `hoverMix` is linear
+ * progress 0..1; the size eases out, so the node swells quickly and lands
+ * softly instead of snapping between two sizes.
+ */
+export function emphasisBoostAt(hoverMix: number, isHighlighted: boolean): number {
+	const rest = emphasisBoost(false, isHighlighted);
+	if (!(hoverMix > 0)) return rest;
+	if (hoverMix >= 1) return HOVER_SIZE_BOOST;
+	const eased = 1 - (1 - hoverMix) ** 3;
+	return rest + (HOVER_SIZE_BOOST - rest) * eased;
+}
+
+/** How long the hover swell and the link highlight take to fade in or out. */
+export const HOVER_FADE_MS = 150;
+/** Opacity of the hovered node's links once fully faded in. */
+export const HOVER_LINK_ALPHA = 0.85;
+/** Hovered links are never thinner than this on screen (px). */
+export const HOVER_LINK_MIN_PX = 1.2;
+/** Past this many links the highlight is skipped: a mega-hub would redraw
+ *  thousands of lines every frame of a drag for one solid accent-colored fan. */
+export const HOVER_LINK_LIMIT = 600;
+
+/**
+ * Moves a 0..1 transition one frame toward `target`. Linear in time, so the
+ * fade lasts `durationMs` however uneven the frame rate is.
+ */
+export function stepFade(current: number, target: number, elapsedMs: number, durationMs: number): number {
+	if (durationMs <= 0 || elapsedMs >= durationMs) return target;
+	const step = Math.max(0, elapsedMs) / durationMs;
+	return current < target
+		? Math.min(target, current + step)
+		: Math.max(target, current - step);
+}
+
 export interface NodeAlphaInput {
 	/** Encoded glow/intensity for the node, 0..1. */
 	glow: number;

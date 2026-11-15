@@ -18,8 +18,13 @@ import { EdgeMesh } from "./EdgeMesh";
 import { DEAD_ZONE_PX, MAX_AIM_ANGLE, pickAimedNeighbor } from "../explore/aiming";
 import { HOVER_RADIUS_PX, pickNodeAt } from "./hitTest";
 import {
-	emphasisBoost,
+	emphasisBoostAt,
 	fogFactor,
+	stepFade,
+	HOVER_FADE_MS,
+	HOVER_LINK_ALPHA,
+	HOVER_LINK_LIMIT,
+	HOVER_LINK_MIN_PX,
 	labelDepthAlpha,
 	mergeHiddenMask,
 	nodeAlpha,
@@ -33,6 +38,7 @@ import { createNodeTexture, createRingTexture, createStarTexture, STAR_SIZE_FACT
 import type { NodeStyle } from "./nodeStyle";
 import { overlapsAny, type LabelBox } from "./labelCollision";
 import { SMOOTH_FACTOR, easePositions } from "./positionSmoothing";
+import { motionMs } from "./motion";
 import { Camera3D } from "./projection";
 import { Viewport } from "./Viewport";
 import { isMeaningfulResize } from "./resizeGate";
@@ -180,6 +186,8 @@ export class GraphRenderer {
 	private world = new Container();
 	private edgeMesh: EdgeMesh | null = null;
 	private hullGraphics = new Graphics();
+	/** The hovered node's own links, redrawn in the accent color. */
+	private hoverLinkGraphics = new Graphics();
 	private trailGraphics = new Graphics();
 	private trailNodeIds: number[] = [];
 	private trailProgress = 1;
@@ -244,6 +252,14 @@ export class GraphRenderer {
 	private hoveredId: number | null = null;
 	/** Neighbors of the hovered node (undirected), for hover emphasis. */
 	private hoverNeighbors = new Set<number>();
+	/** Hover transition progress (0..1, linear) for every node still swelling
+	 *  or shrinking. Settled nodes are not in the map. */
+	private hoverMix = new Map<number, number>();
+	/** Whose links the highlight is drawn for. Outlives `hoveredId` by the
+	 *  length of the fade-out. */
+	private hoverLinks: { id: number; neighbors: number[] } | null = null;
+	private hoverLinkFade = 0;
+	private hoverAnimatedAt = 0;
 	private selectedId: number | null = null;
 	/** Set once the GPU context is gone; every draw call after that is a no-op. */
 	private contextLost = false;
@@ -363,6 +379,8 @@ export class GraphRenderer {
 		this.ringTexture = createRingTexture(app.renderer);
 		this.world.addChild(
 			this.hullGraphics,
+			// setModel slots the edge mesh in at index 1, i.e. beneath this.
+			this.hoverLinkGraphics,
 			this.nodeLayer,
 			this.pinGraphics,
 			this.labelLayer,
@@ -420,6 +438,8 @@ export class GraphRenderer {
 	private readonly handleWindowResize = (): void => this.resize();
 	private handleViewportChanged(): void {
 		this.cullDirty = true;
+		// Its width is held constant on screen, so it tracks the zoom.
+		if (this.hoverLinks) this.redrawHoverLinks();
 		this.invalidate();
 		this.callbacks.onCameraChanged?.();
 	}
@@ -463,6 +483,11 @@ export class GraphRenderer {
 		this.targetPositions3 = null;
 		this.smoothing = false;
 		this.hasWorkerFrame = false;
+		// Node ids belong to the old model; drop every half-played transition.
+		this.hoverMix.clear();
+		this.hoverLinks = null;
+		this.hoverLinkFade = 0;
+		this.hoverLinkGraphics.clear();
 		this.positions = new Float32Array(model.nodes.length * 2);
 		this.depthScales = new Float32Array(model.nodes.length);
 		this.radii = new Float32Array(model.nodes.length);
@@ -794,16 +819,101 @@ export class GraphRenderer {
 		return base * zoomSizeCompensation(base, this.viewport.scale);
 	}
 
+	/** Hover / highlight size multiplier for one node, mid-transition included. */
+	private sizeBoost(i: number): number {
+		return emphasisBoostAt(
+			this.hoverMix.get(i) ?? 0,
+			this.highlightMask !== null && this.highlightMask[i] === 1
+		);
+	}
+
+	/**
+	 * Called whenever `hoveredId` changes. Queues the size transition for the
+	 * newly hovered node (the one being left is already in the map and simply
+	 * runs backwards) and retargets the link highlight.
+	 */
+	private beginHoverTransition(): void {
+		this.hoverAnimatedAt = this.frameNow();
+		const id = this.hoveredId;
+		if (id === null) return;
+		if (!this.hoverMix.has(id)) this.hoverMix.set(id, 0);
+		this.hoverLinks = this.hoverNeighbors.size <= HOVER_LINK_LIMIT
+			? { id, neighbors: [...this.hoverNeighbors] }
+			: null;
+		if (!this.hoverLinks) this.hoverLinkFade = 0;
+	}
+
+	/** Advances the hover swell and the link highlight by one frame. */
+	private advanceHoverTransition(): void {
+		const linkTarget = this.hoveredId !== null && this.hoverLinks?.id === this.hoveredId ? 1 : 0;
+		if (this.hoverMix.size === 0 && this.hoverLinkFade === linkTarget) return;
+
+		const now = this.frameNow();
+		const elapsed = now - this.hoverAnimatedAt;
+		this.hoverAnimatedAt = now;
+		const duration = motionMs(HOVER_FADE_MS, this._ownerWindow ?? undefined);
+
+		for (const [id, mix] of this.hoverMix) {
+			const target = id === this.hoveredId ? 1 : 0;
+			const next = stepFade(mix, target, elapsed, duration);
+			// A node resting at full hover stays in the map: that entry is what
+			// keeps it enlarged. Only a finished fade-out is forgotten.
+			if (next === 0 && target === 0) this.hoverMix.delete(id);
+			else this.hoverMix.set(id, next);
+			if (next === mix) continue;
+			const sprite = this.sprites[id];
+			if (sprite && this.radii) {
+				const depth = this.camera.enabled && this.depthScales ? this.depthScales[id] : 1;
+				sprite.setSize(this.spriteDiameter(id, depth, this.sizeBoost(id)));
+			}
+			this.invalidate();
+		}
+
+		if (this.hoverLinkFade !== linkTarget) {
+			this.hoverLinkFade = stepFade(this.hoverLinkFade, linkTarget, elapsed, duration);
+			if (this.hoverLinkFade === 0 && linkTarget === 0) this.hoverLinks = null;
+			this.redrawHoverLinks();
+			this.invalidate();
+		}
+	}
+
+	/** The hovered node's links in the accent color, on top of the edge mesh —
+	 *  what the node is connected to reads at a glance, and while it is being
+	 *  dragged the highlighted links show the tow. */
+	private redrawHoverLinks(): void {
+		const g = this.hoverLinkGraphics;
+		g.clear();
+		const links = this.hoverLinks;
+		if (!links || this.hoverLinkFade <= 0 || !this.positions || !this.colors || !this.edgesVisible) return;
+		const hidden = this.hiddenMask;
+		const depths = this.camera.enabled ? this.depthScales : null;
+		const { id } = links;
+		if ((hidden && hidden[id] === 1) || (depths && depths[id] <= 0)) return;
+
+		const x = this.positions[id * 2];
+		const y = this.positions[id * 2 + 1];
+		let drawn = false;
+		for (const other of links.neighbors) {
+			if ((hidden && hidden[other] === 1) || (depths && depths[other] <= 0)) continue;
+			g.moveTo(x, y);
+			g.lineTo(this.positions[other * 2], this.positions[other * 2 + 1]);
+			drawn = true;
+		}
+		if (!drawn) return;
+		const scale = this.viewport?.scale ?? 1;
+		g.stroke({
+			color: this.colors.nodeSelected,
+			alpha: HOVER_LINK_ALPHA * this.hoverLinkFade,
+			width: Math.max(this.edgeWidth * 2, HOVER_LINK_MIN_PX / Math.max(scale, 1e-6)),
+		});
+	}
+
 	/** Blow up the hovered sprite and lift it above the crowd. */
 	private applyHoverSize(): void {
 		if (!this.radii) return;
 		for (let i = 0; i < this.sprites.length; i++) {
 			const depth = this.camera.enabled && this.depthScales ? this.depthScales[i] : 1;
-			const boost = emphasisBoost(
-				i === this.hoveredId,
-				this.highlightMask !== null && this.highlightMask[i] === 1
-			);
-			this.sprites[i].setSize(this.spriteDiameter(i, depth, boost));
+			this.sprites[i].setSize(this.spriteDiameter(i, depth, this.sizeBoost(i)));
 		}
 		if (this.hoveredId !== null) {
 			// zIndex only matters when the layer is sorted (3D mode).
@@ -990,6 +1100,7 @@ export class GraphRenderer {
 		if (overlay && this.hoveredId !== null) {
 			this.hoveredId = null;
 			this.updateHoverNeighbors();
+			this.beginHoverTransition();
 			this.applyNodeTints();
 			this.applyNodeAlpha();
 			this.applyHoverSize();
@@ -1184,6 +1295,8 @@ export class GraphRenderer {
 		// Close part of the gap to the worker's latest frame. Once the graph is
 		// settled `smoothing` goes false and the projection stops re-running,
 		// so an idle canvas costs nothing.
+		this.advanceHoverTransition();
+
 		if (this.smoothing && this.positions3 && this.targetPositions3) {
 			this.smoothing = easePositions(
 				this.positions3,
@@ -1200,11 +1313,7 @@ export class GraphRenderer {
 				sprite.position.set(this.positions[i * 2], this.positions[i * 2 + 1]);
 				if (threeD) {
 					const depth = threeD[i];
-					const boost = emphasisBoost(
-						i === this.hoveredId,
-						this.highlightMask !== null && this.highlightMask[i] === 1
-					);
-					sprite.setSize(this.spriteDiameter(i, depth, boost));
+					sprite.setSize(this.spriteDiameter(i, depth, this.sizeBoost(i)));
 					sprite.zIndex = i === this.hoveredId ? Number.MAX_SAFE_INTEGER : depth;
 				}
 			}
@@ -1214,6 +1323,7 @@ export class GraphRenderer {
 		if (this.edgesDirty) {
 			this.edgesDirty = false;
 			this.edgeMesh?.updatePositions(this.positions, this.camera.enabled ? this.depthScales : null);
+			this.redrawHoverLinks();
 			this.redrawTrail();
 			this.redrawExplore();
 			this.redrawPath();
@@ -1652,6 +1762,7 @@ export class GraphRenderer {
 			this.cullDirty = true;
 			this.hoveredId = nodeId;
 			this.updateHoverNeighbors();
+			this.beginHoverTransition();
 			this.applyNodeTints();
 			this.applyNodeAlpha();
 			this.applyHoverSize();

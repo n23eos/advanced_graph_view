@@ -38,7 +38,11 @@ interface RenderHarness {
 	finishLasso(event: PointerEvent): void;
 }
 
-beforeAll(() => installObsidianDom());
+beforeAll(() => {
+	installObsidianDom();
+	// jsdom has no matchMedia; the hover transition asks it about reduced motion.
+	window.matchMedia = ((query: string) => ({ matches: false, media: query })) as unknown as typeof window.matchMedia;
+});
 let now = 1_000;
 const harnessRenderers = new Set<GraphRenderer>();
 beforeEach(() => { now = 1_000; vi.spyOn(performance, "now").mockImplementation(() => now); });
@@ -269,6 +273,53 @@ describe("visual mutation invalidation", () => {
 		expect(state.sprites[0].tint).toBe(0xff0000);
 		expect(cull).toHaveBeenCalledOnce();
 		expect(render).toHaveBeenCalledOnce();
+	});
+
+	test("the hovered node swells over a few frames, then the canvas goes idle again", () => {
+		const { state, render, settle } = setup();
+		settle();
+		const restingSize = 10; // radius 5, drawn as a diameter
+		vi.spyOn(state, "findNodeAt").mockReturnValue(0);
+		state.handlePointerMove({ clientX: 10, clientY: 20 } as PointerEvent);
+		state.renderFrame();
+		expect(state.sprites[0].width).toBeCloseTo(restingSize, 5);
+
+		now += 60;
+		state.renderFrame();
+		const midway = state.sprites[0].width;
+		expect(midway).toBeGreaterThan(restingSize);
+		expect(midway).toBeLessThan(restingSize * 1.9);
+
+		now += 200;
+		state.renderFrame();
+		expect(state.sprites[0].width).toBeCloseTo(restingSize * 1.9, 5);
+
+		render.mockClear();
+		now += 16;
+		state.renderFrame();
+		expect(render).not.toHaveBeenCalled();
+	});
+
+	test("leaving a node shrinks it back instead of snapping", () => {
+		const { state, settle } = setup();
+		settle();
+		const restingSize = 10; // radius 5, drawn as a diameter
+		const findNodeAt = vi.spyOn(state, "findNodeAt").mockReturnValue(0);
+		state.handlePointerMove({ clientX: 10, clientY: 20 } as PointerEvent);
+		now += 400;
+		state.renderFrame();
+
+		findNodeAt.mockReturnValue(null);
+		state.handlePointerMove({ clientX: 300, clientY: 300 } as PointerEvent);
+		state.renderFrame();
+		expect(state.sprites[0].width).toBeCloseTo(restingSize * 1.9, 5);
+		now += 60;
+		state.renderFrame();
+		expect(state.sprites[0].width).toBeGreaterThan(restingSize);
+		expect(state.sprites[0].width).toBeLessThan(restingSize * 1.9);
+		now += 200;
+		state.renderFrame();
+		expect(state.sprites[0].width).toBeCloseTo(restingSize, 5);
 	});
 
 	test("renders lasso movement and the clearing of an unfinished polygon", () => {

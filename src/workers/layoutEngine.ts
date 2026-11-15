@@ -15,6 +15,7 @@ import {
 } from "d3-force-3d";
 import { computeLayoutSeed } from "./layoutSeed";
 import { createSpringForce, type SpringLink } from "./springForce";
+import { createTowForce } from "./towForce";
 import { nextTickDelay } from "./tickPacing";
 import { SETTLED_THETA, repulsionTheta } from "./repulsionAccuracy";
 
@@ -144,9 +145,10 @@ const ALPHA_MIN = 0.01;
 const FRAME_INTERVAL_MS = 33;
 const DRAG_INTERVAL_MS = 16;
 // Dragging keeps the real physics running (like Obsidian): the grabbed node is
-// pinned to the pointer, links tow its neighbors, and the tow propagates hop by
-// hop. Forces are left at their settle values (no boost, no centering change),
-// so re-warming returns to the same equilibrium — the graph doesn't contract.
+// pinned to the pointer and its neighbourhood is hauled along by a dedicated
+// tow force (see towForce.ts), hop by hop. The layout's own forces are left at
+// their settle values (no boost, no centering change), so re-warming returns
+// to the same equilibrium — the graph doesn't contract.
 // Only a gentle warmth is added, ramped via alphaTarget, so grabbing a settled
 // graph never jerks it.
 const DRAG_ALPHA_TARGET = 0.3;
@@ -180,9 +182,26 @@ function scaledCentering(base: number, nodeCount: number): number {
 	return base * Math.sqrt(1500 / Math.max(nodeCount, 1500));
 }
 
+/** A full physics tick slower than this cannot animate a drag: at 60 Hz the
+ *  budget is 16 ms, and the worker also has to drain pointer messages. */
+const LIGHT_DRAG_ABOVE_MS = 10;
+
+export interface LayoutEngineOptions {
+	/** Milliseconds, monotonic. Injected so tests can drive time-based motion. */
+	clock?: () => number;
+	/** Full-tick cost above which a drag runs on the tow force alone.
+	 *  Tests pass -1 to force that path on a tiny graph. */
+	lightDragAboveMs?: number;
+}
+
 export function createLayoutEngine(
-	post: (message: EngineOutMessage, transfer?: Transferable[]) => void
+	post: (message: EngineOutMessage, transfer?: Transferable[]) => void,
+	options: LayoutEngineOptions = {}
 ): LayoutEngine {
+	const clock = options.clock ?? now;
+	const lightDragAboveMs = options.lightDragAboveMs ?? LIGHT_DRAG_ABOVE_MS;
+	/** What the last full physics tick cost; decides whether a drag can afford them. */
+	let lastFullTickMs = 0;
 	let simulation: Simulation3D<SimNode> | null = null;
 	let nodes: SimNode[] = [];
 	let params: PhysicsParams = {
@@ -206,6 +225,10 @@ export function createLayoutEngine(
 	let clusterGroups: Int32Array | null = null;
 	// Hooke springs on the edges; blended against forceLink by `elasticity`.
 	const spring = createSpringForce();
+	// Hauls the grabbed node's neighbourhood along; idle outside a drag.
+	const tow = createTowForce(clock);
+	/** Node currently held by the pointer, or -1. */
+	let draggedId = -1;
 	// true = physics off (the "Отключить физику" toggle): sim never ticks.
 	let physicsDisabled = false;
 	const collision = forceCollide(0).strength(0.7);
@@ -288,16 +311,57 @@ export function createLayoutEngine(
 		if (running) scheduleTick();
 	};
 
+	/**
+	 * A tick that moves only what the gesture is moving: the grabbed node and
+	 * the neighbourhood the tow carries. Costs microseconds where a full tick
+	 * on a 5000-note 3D vault costs ~70 ms, so the drag and the drift after it
+	 * animate at display rate while the rest of the layout holds still. The
+	 * full simulation takes over again once the tow has handed its nodes back.
+	 */
+	const lightStep = () => {
+		if (!simulation) return;
+		const held = nodes[draggedId];
+		if (held) {
+			held.x = held.fx ?? held.x;
+			held.y = held.fy ?? held.y;
+			if (held.z !== undefined) held.z = held.fz ?? held.z;
+		}
+		tow();
+		const positions = snapshotPositions();
+		post({ type: "tick", positions, alpha: simulation.alpha() }, [positions.buffer]);
+	};
+
+	/** The tow has just handed its nodes back. Where the user saw them come
+	 *  to rest is where they stay: any heat left in the layout would let the
+	 *  links reel them back toward where they started, seconds after the
+	 *  gesture ended. Cold, the next tick finds nothing to do and stops. */
+	const afterTow = () => {
+		if (!simulation) return;
+		simulation.alphaTarget(0);
+		simulation.alpha(0);
+	};
+
 	const stepOnce = () => {
 		if (!simulation || !running) return;
+		const towing = tow.active();
+		if ((draggedId >= 0 || towing) && lastFullTickMs > lightDragAboveMs) {
+			lightStep();
+			if (towing && !tow.active()) afterTow();
+			return;
+		}
+		const startedAt = now();
 		// Repulsion accuracy tracks how hot the layout is: cheap while nodes are
 		// still flying, exact by the time they come to rest.
 		(simulation.force("charge") as ReturnType<typeof forceManyBody>)
 			.theta(repulsionTheta(simulation.alpha()));
 		simulation.tick();
+		lastFullTickMs = now() - startedAt;
+		if (towing && !tow.active()) afterTow();
 		const positions = snapshotPositions();
 		post({ type: "tick", positions, alpha: simulation.alpha() }, [positions.buffer]);
-		if (simulation.alpha() < ALPHA_MIN) {
+		// A tow still drifting outlives the cooling: stopping now would leave
+		// its nodes frozen mid-glide, still claimed.
+		if (simulation.alpha() < ALPHA_MIN && !tow.active()) {
 			running = false;
 			stopTimer();
 			const finalPositions = snapshotPositions();
@@ -368,6 +432,9 @@ export function createLayoutEngine(
 		spring.setLinks(springLinks);
 		spring.setDegrees(degrees);
 		applySpringParams();
+		// A rebuild mid-drag drops the tow: its node ids may no longer match.
+		draggedId = -1;
+		tow.setEdges(message.nodeCount, message.edges);
 
 		collision.radius(params.collideRadius ?? 0);
 		simulation = forceSimulation(nodes, dimensions)
@@ -391,6 +458,7 @@ export function createLayoutEngine(
 			.force("z", dimensions === 3 ? forceZ(0).strength(effectiveCentering()) : null)
 			.force("collide", collide)
 			.force("spring", spring)
+			.force("tow", tow)
 			.force("cluster", cluster)
 			.alphaMin(ALPHA_MIN)
 			.velocityDecay(params.velocityDecay)
@@ -489,6 +557,7 @@ export function createLayoutEngine(
 					break;
 				case "drag-start": {
 					const node = nodes[message.id];
+					draggedId = node ? message.id : -1;
 					if (node) {
 						node.fx = node.x ?? 0;
 						node.fy = node.y ?? 0;
@@ -496,15 +565,28 @@ export function createLayoutEngine(
 					}
 					if (physicsDisabled || !simulation) break;
 					// Keep the real sim running: pin the node, add a little warmth
-					// (ramped, so no jerk). Links tow neighbors and the tow spreads
-					// hop by hop. Forces stay at settle values — no contraction.
+					// (ramped, so no jerk), and tether its neighbourhood to it.
+					// Layout forces stay at settle values — no contraction.
+					tow.grab(message.id);
+					// Grabbing a node that is still drifting from the last drop
+					// ends that tow, which frees its nodes — this one included.
+					// Pin it again.
+					if (node) {
+						node.fx = node.x ?? 0;
+						node.fy = node.y ?? 0;
+						if (node.z !== undefined) node.fz = node.z;
+					}
 					simulation.alphaTarget(DRAG_ALPHA_TARGET);
 					if (simulation.alpha() < DRAG_GRAB_ALPHA) simulation.alpha(DRAG_GRAB_ALPHA);
 					// Ease off the friction so the tow reaches past the first hop.
 					simulation.velocityDecay(
 						Math.min(params.velocityDecay, DRAG_VELOCITY_DECAY)
 					);
-					if (!running) startTimer(DRAG_INTERVAL_MS);
+					// Draw the drag at display cadence even if the layout was
+					// still settling at 30 Hz when the node was grabbed.
+					if (!running || (tickInterval !== null && tickInterval !== DRAG_INTERVAL_MS)) {
+						startTimer(DRAG_INTERVAL_MS);
+					}
 					break;
 				}
 				case "drag-move": {
@@ -524,11 +606,16 @@ export function createLayoutEngine(
 					break;
 				}
 				case "drag-end": {
+					draggedId = -1;
 					if (physicsDisabled || !simulation) {
+						tow.release();
 						const positions = snapshotPositions();
 						post({ type: "end", positions }, [positions.buffer]);
 						break;
 					}
+					// The dropped node stays pinned where it is; the tow decides
+					// how its neighbourhood comes to rest (see towForce.ts).
+					tow.release();
 					// Stop warming and let the sim cool where it is — no rebound.
 					simulation.alphaTarget(0);
 					simulation.velocityDecay(params.velocityDecay);

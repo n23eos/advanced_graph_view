@@ -1,13 +1,11 @@
-# Advanced Graph View 0.12.0-beta.1
+# Advanced Graph View 0.12.0-beta.2
 
-Beta release authorized by the owner on 2026-11-14.
+- Dragging a node carries linked neighbours up to three hops away, with gradual trailing motion.
+- Neighbours continue drifting briefly after a drop, then settle around the dropped node.
+- Drag motion updates independently of slower full-graph physics ticks.
+- Hovered nodes resize smoothly and their links fade into the accent color. Link highlighting is skipped above 600 links and when links are hidden.
+- Bottom-right controls avoid overlap with the floating Obsidian status bar.
 
-Optional settings add all attachments and missing link targets to the graph. Both switches start off, preserving the existing default graph, including already-linked attachments. Missing targets open their source note and never create files automatically. Main graph, local graph, Insights, exports and Changes history handle the selected scope. Attachment exports retain full paths and file facts use actual timestamps.
-
-This candidate includes the hardening fixes, reduced idle rendering, owner-window handling, workspace camera/query restoration, Cmd/Ctrl native hover integration and frontmatter property filtering/color.
-
-Verification: 1012 tests / 150 files, lint zero warnings, typecheck and production build pass. Independent review closed. Browser QA confirmed all four node-scope combinations, return to baseline, property filtering and fresh-view restoration; narrow/light and wide/dark screenshots inspected.
-
-Native restart, hover popup, popout and attachment navigation acceptance remain unverified while macOS is locked. Performance limits are recorded in specs/004-hardening/verification.md. This is a beta release for testing; native acceptance remains incomplete.
+This beta includes the previous hardening and optional graph features. Native visual acceptance and large-vault performance validation remain incomplete. Back up your vault before testing.
 
 Requires Obsidian 1.13.0 or later; desktop only.

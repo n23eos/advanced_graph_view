@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0-beta.2] - 2026-11-15
+
+### Changed
+
+- Dragging a node now carries its neighbourhood with it as if through water: linked notes up to three links out drift after it, each ring trailing the one before, with no snapping and no bounce. The motion follows the clock rather than the physics tick, so it is the same in every preset and at any vault size.
+- A dropped node stays put and its neighbours keep drifting for a few seconds until they have gathered around it. The layout then stops there: nothing is reeled back afterwards.
+- On vaults where a physics tick is slower than a display frame, a drag and the drift after it animate at display rate on the tow alone; the full simulation resumes once the neighbourhood has come to rest.
+- The hovered node swells and shrinks smoothly instead of snapping between sizes.
+
+### Added
+
+- The hovered (or dragged) node's links light up in the accent color, fading in and out. Skipped for nodes with more than 600 links and when links are hidden.
+
+### Fixed
+
+- The bottom-right widget is lifted clear of Obsidian's floating status bar instead of hiding its last row underneath it.
+
 ## [0.12.0-beta.1] - 2026-11-14
 
 - Publish the hardening and optional graph features below as a beta for testing. Native acceptance remains incomplete.

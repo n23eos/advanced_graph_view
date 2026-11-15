@@ -682,7 +682,8 @@
 .graph-insight-camera {
 	position: absolute;
 	right: 12px;
-	bottom: 12px;
+	/* Lifted clear of Obsidian's floating status bar (see FloatingLayout). */
+	bottom: calc(12px + var(--graph-corner-inset, 0px));
 	z-index: 11;
 	display: flex;
 	flex-direction: column;

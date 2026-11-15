@@ -10,9 +10,15 @@
 import { describe, expect, test } from "vitest";
 import { createLayoutEngine, type EngineOutMessage, type PhysicsParams } from "./layoutEngine";
 
-function makeEngine() {
+/** The engine's clock advances one drag-cadence frame per tick, so motion
+ *  that follows the wall clock (the spring-back) plays out under `step`. */
+function makeEngine(lightDragAboveMs?: number) {
 	const sent: EngineOutMessage[] = [];
-	const engine = createLayoutEngine((message) => sent.push(message));
+	let now = 0;
+	const engine = createLayoutEngine((message) => {
+		if (message.type === "tick") now += 16;
+		sent.push(message);
+	}, { clock: () => now, lightDragAboveMs });
 	return { engine, sent };
 }
 
@@ -143,43 +149,40 @@ describe("dragging a node", () => {
 		expect(moved[1]).toBeGreaterThan(moved[2]);
 	});
 
-	test("the tow carries past the first hop at the damping presets ship with", () => {
-		// The presets run velocityDecay around 0.55, and at that friction the
-		// far end of a chain used to barely twitch — the graph read as loose
-		// beads rather than one connected thing. drag-start now caps damping
-		// for the duration of the drag. Measured on this fixture: hop three
-		// moved ~139 units before the cap and ~326 after it.
-		const { engine, sent } = makeEngine();
-		engine.handle({
-			type: "init",
-			nodeCount: 4,
-			edges: new Uint32Array([0, 1, 1, 2, 2, 3]),
-			weights: new Float32Array([1, 1, 1]),
-			positions: new Float32Array([0, 0, 0, 40, 0, 0, 80, 0, 0, 120, 0, 0]),
-			paused: true,
-		});
-		engine.handle({ type: "params", params: { ...BASE_PARAMS, velocityDecay: 0.55 } });
-		stepTimes(engine, 600);
-		const before = [2, 3].map((id) => positionOf(sent, id));
+	test("the tow reaches three links out whatever the damping slider says", () => {
+		// The tow is not a simulation force: neither velocityDecay nor link
+		// strength shapes it, so a heavily damped preset drags like any other.
+		const haul = (velocityDecay: number): number[] => {
+			const { engine, sent } = makeEngine();
+			engine.handle({
+				type: "init",
+				nodeCount: 4,
+				edges: new Uint32Array([0, 1, 1, 2, 2, 3]),
+				weights: new Float32Array([1, 1, 1]),
+				positions: new Float32Array([0, 0, 0, 40, 0, 0, 80, 0, 0, 120, 0, 0]),
+				paused: true,
+			});
+			engine.handle({ type: "params", params: { ...BASE_PARAMS, velocityDecay } });
+			stepTimes(engine, 600);
+			const before = [2, 3].map((id) => positionOf(sent, id));
+			engine.handle({ type: "drag-start", id: 0 });
+			engine.handle({ type: "drag-move", id: 0, x: 0, y: 900, z: 0 });
+			stepTimes(engine, 400); // 6.4 s at the drag cadence
+			return [2, 3].map((id, i) => positionOf(sent, id)[1] - before[i][1]);
+		};
 
-		// Act: haul the end of the chain a long way sideways
-		engine.handle({ type: "drag-start", id: 0 });
-		engine.handle({ type: "drag-move", id: 0, x: 0, y: 900, z: 0 });
-		stepTimes(engine, 40);
-
-		// Assert: hops two and three both come along for the ride
-		const moved = [2, 3].map((id, i) => {
-			const now = positionOf(sent, id);
-			return Math.hypot(now[0] - before[i][0], now[1] - before[i][1]);
-		});
-		expect(moved[0]).toBeGreaterThan(350);
-		expect(moved[1]).toBeGreaterThan(250);
+		const loose = haul(0.3);
+		const stiff = haul(0.8);
+		expect(loose[0]).toBeGreaterThan(450);
+		expect(loose[1]).toBeGreaterThan(220);
+		expect(stiff[0]).toBeCloseTo(loose[0], 3);
+		expect(stiff[1]).toBeCloseTo(loose[1], 3);
 	});
 
-	test("releasing hands damping back to the user's setting", () => {
-		// drag-start drops velocityDecay so the tow travels. If drag-end forgot
-		// to put it back, every drag would permanently leave the graph slacker
-		// than the slider says.
+	test("once the tow is done, the layout runs on the user's damping again", () => {
+		// drag-start drops velocityDecay for the drag. If drag-end forgot to put
+		// it back, every drag would permanently leave the graph slacker than
+		// the slider says.
 		const drift = (velocityDecay: number): number => {
 			const { engine, sent } = makeEngine();
 			engine.handle(STAR_INIT);
@@ -190,16 +193,19 @@ describe("dragging a node", () => {
 			engine.handle({ type: "drag-move", id: 0, x: 400, y: 400, z: 0 });
 			stepTimes(engine, 40);
 			engine.handle({ type: "drag-end" });
+			stepTimes(engine, 700); // tow glides out and hands its nodes back
+			engine.handle({ type: "unpin", id: 0 });
+			engine.handle({ type: "reheat", alpha: 0.8 });
 
-			const before = [1, 2, 3].map((id) => positionOf(sent, id));
-			stepTimes(engine, 40);
-			return [1, 2, 3].reduce((total, id, i) => {
+			const before = [0, 1, 2, 3].map((id) => positionOf(sent, id));
+			stepTimes(engine, 10);
+			return [0, 1, 2, 3].reduce((total, id, i) => {
 				const now = positionOf(sent, id);
 				return total + Math.hypot(now[0] - before[i][0], now[1] - before[i][1]);
 			}, 0);
 		};
 
-		// Assert: heavy damping settles the release faster than light damping,
+		// Assert: heavy damping moves less in the same ticks than light damping,
 		// which can only happen if the released sim is using params again.
 		expect(drift(0.8)).toBeLessThan(drift(0.3));
 	});
@@ -250,6 +256,80 @@ describe("dragging a node", () => {
 		expect(y).toBeCloseTo(300, 3);
 	});
 
+	test("releasing keeps the dropped node put while its neighbours gather around it", () => {
+		// Arrange: a settled star, and a flick too quick for the leaves to follow
+		const { engine, sent } = makeEngine();
+		engine.handle(STAR_INIT);
+		settle(engine);
+		const leafBefore = positionOf(sent, 1);
+		engine.handle({ type: "drag-start", id: 0 });
+		engine.handle({ type: "drag-move", id: 0, x: 400, y: 250, z: 0 });
+		stepTimes(engine, 6);
+		const atRelease = positionOf(sent, 1);
+		expect(Math.hypot(atRelease[0] - leafBefore[0], atRelease[1] - leafBefore[1])).toBeLessThan(40);
+
+		// Act
+		engine.handle({ type: "drag-end" });
+		stepTimes(engine, 700);
+
+		// Assert: the hub is where it was dropped, the leaf has come most of the way
+		const hub = positionOf(sent, 0);
+		const leaf = positionOf(sent, 1);
+		expect(hub[0]).toBeCloseTo(400, 3);
+		expect(hub[1]).toBeCloseTo(250, 3);
+		expect(Math.hypot(leaf[0] - leafBefore[0], leaf[1] - leafBefore[1])).toBeGreaterThan(350);
+	});
+
+	test("the layout keeps running until the drift is over, then settles", () => {
+		// Arrange: a cold graph — nothing but the tow would keep the engine ticking
+		const { engine, sent } = makeEngine();
+		engine.handle(STAR_INIT);
+		settle(engine);
+		const leafBefore = positionOf(sent, 1);
+		engine.handle({ type: "drag-start", id: 0 });
+		engine.handle({ type: "drag-move", id: 0, x: 300, y: 0, z: 0 });
+		stepTimes(engine, 1);
+
+		// Act
+		engine.handle({ type: "drag-end" });
+		stepTimes(engine, 1200);
+
+		// Assert
+		expect(positionOf(sent, 1)[0] - leafBefore[0]).toBeGreaterThan(200);
+		expect(sent[sent.length - 1].type).toBe("end");
+	});
+
+	test("once the neighbours have gathered, nothing moves again", () => {
+		// Regression: the layout used to keep a little heat after the tow, and
+		// the links spent the next few seconds reeling some of the neighbours
+		// back toward where they had started.
+		const { engine, sent } = makeEngine();
+		engine.handle(STAR_INIT);
+		engine.handle({ type: "params", params: { ...BASE_PARAMS, linkStrength: 0.9 } });
+		stepTimes(engine, 600);
+		engine.handle({ type: "drag-start", id: 0 });
+		engine.handle({ type: "drag-move", id: 0, x: 500, y: 300, z: 0 });
+		stepTimes(engine, 6);
+		engine.handle({ type: "drag-end" });
+
+		// Run until the engine reports the layout settled
+		let guard = 0;
+		while (sent[sent.length - 1].type !== "end" && guard++ < 2000) engine.handle({ type: "step" });
+		expect(sent[sent.length - 1].type).toBe("end");
+		const settled = Array.from(sent[sent.length - 1].positions);
+		const arrivedAt = sent.length;
+
+		// Everything the tow placed is exactly where the last drift frame put it
+		const lastDrift = Array.from(sent[arrivedAt - 3].positions);
+		for (const id of [0, 1, 2, 3]) {
+			expect(settled[id * 3]).toBeCloseTo(lastDrift[id * 3], 0);
+			expect(settled[id * 3 + 1]).toBeCloseTo(lastDrift[id * 3 + 1], 0);
+		}
+		// ...and the engine has stopped: further steps emit nothing
+		stepTimes(engine, 50);
+		expect(sent.length).toBe(arrivedAt);
+	});
+
 	test("unpin hands the node back to the simulation", () => {
 		// Arrange
 		const { engine, sent } = makeEngine();
@@ -285,6 +365,70 @@ describe("dragging a node", () => {
 		for (const message of sent) {
 			expect(Array.from(message.positions).every(Number.isFinite)).toBe(true);
 		}
+	});
+});
+
+describe("dragging a vault too big to simulate at display rate", () => {
+	/** -1: every full tick counts as too slow, so the drag runs on the tow alone. */
+	const slowVault = () => makeEngine(-1);
+
+	test("the grabbed node tracks the pointer and its neighbours are still towed", () => {
+		// Arrange
+		const { engine, sent } = slowVault();
+		engine.handle(STAR_INIT);
+		settle(engine);
+		const leafBefore = positionOf(sent, 1);
+		const freeBefore = positionOf(sent, 4);
+
+		// Act
+		engine.handle({ type: "drag-start", id: 0 });
+		engine.handle({ type: "drag-move", id: 0, x: 600, y: 0, z: 0 });
+		stepTimes(engine, 60);
+
+		// Assert
+		expect(positionOf(sent, 0)[0]).toBeCloseTo(600, 3);
+		expect(positionOf(sent, 1)[0] - leafBefore[0]).toBeGreaterThan(200);
+		expect(positionOf(sent, 4)).toEqual(freeBefore);
+	});
+
+	test("every step still emits a frame, so the drag is drawn", () => {
+		const { engine, sent } = slowVault();
+		engine.handle(STAR_INIT);
+		settle(engine);
+		engine.handle({ type: "drag-start", id: 0 });
+		const framesBefore = sent.length;
+		engine.handle({ type: "drag-move", id: 0, x: 100, y: 0, z: 0 });
+		stepTimes(engine, 10);
+		expect(sent.length - framesBefore).toBe(10);
+	});
+
+	test("letting go hands the layout back to the full simulation, which then settles", () => {
+		const { engine, sent } = slowVault();
+		engine.handle(STAR_INIT);
+		settle(engine);
+		engine.handle({ type: "drag-start", id: 0 });
+		engine.handle({ type: "drag-move", id: 0, x: 300, y: 0, z: 0 });
+		stepTimes(engine, 30);
+		engine.handle({ type: "drag-end" });
+		stepTimes(engine, 600);
+		expect(sent[sent.length - 1].type).toBe("end");
+		expect(positionOf(sent, 0)[0]).toBeCloseTo(300, 3);
+	});
+
+	test("releasing still gathers the neighbours around the drop", () => {
+		const { engine, sent } = slowVault();
+		engine.handle(STAR_INIT);
+		settle(engine);
+		const leafBefore = positionOf(sent, 1);
+		engine.handle({ type: "drag-start", id: 0 });
+		engine.handle({ type: "drag-move", id: 0, x: 400, y: 250, z: 0 });
+		stepTimes(engine, 6);
+		engine.handle({ type: "drag-end" });
+		stepTimes(engine, 700);
+		const hub = positionOf(sent, 0);
+		const leaf = positionOf(sent, 1);
+		expect(hub[0]).toBeCloseTo(400, 3);
+		expect(Math.hypot(leaf[0] - leafBefore[0], leaf[1] - leafBefore[1])).toBeGreaterThan(350);
 	});
 });
 

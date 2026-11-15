@@ -8,6 +8,8 @@ import {
 	MIN_SIZE_DEPTH,
 	PIN_RING_GAP,
 	emphasisBoost,
+	emphasisBoostAt,
+	stepFade,
 	fogFactor,
 	mergeHiddenMask,
 	nodeAlpha,
@@ -106,6 +108,51 @@ describe("emphasisBoost", () => {
 
 	test("hover wins over highlight", () => {
 		expect(emphasisBoost(true, true)).toBe(HOVER_SIZE_BOOST);
+	});
+});
+
+describe("emphasisBoostAt", () => {
+	test("matches the resting and the fully hovered size at both ends", () => {
+		expect(emphasisBoostAt(0, false)).toBe(1);
+		expect(emphasisBoostAt(0, true)).toBe(HIGHLIGHT_SIZE_BOOST);
+		expect(emphasisBoostAt(1, false)).toBe(HOVER_SIZE_BOOST);
+		expect(emphasisBoostAt(1, true)).toBe(HOVER_SIZE_BOOST);
+	});
+
+	test("eases out: most of the growth happens in the first half", () => {
+		const half = emphasisBoostAt(0.5, false);
+		expect(half).toBeGreaterThan(1 + (HOVER_SIZE_BOOST - 1) * 0.5);
+		expect(half).toBeLessThan(HOVER_SIZE_BOOST);
+	});
+
+	test("a search match grows from its own highlighted size, never dipping below it", () => {
+		expect(emphasisBoostAt(0.1, true)).toBeGreaterThan(HIGHLIGHT_SIZE_BOOST);
+	});
+
+	test("a garbage mix reads as not hovered", () => {
+		expect(emphasisBoostAt(Number.NaN, false)).toBe(1);
+		expect(emphasisBoostAt(-1, false)).toBe(1);
+	});
+});
+
+describe("stepFade", () => {
+	test("advances in proportion to elapsed time, in either direction", () => {
+		expect(stepFade(0, 1, 50, 200)).toBeCloseTo(0.25, 10);
+		expect(stepFade(1, 0, 50, 200)).toBeCloseTo(0.75, 10);
+	});
+
+	test("lands exactly on the target and never passes it", () => {
+		expect(stepFade(0.9, 1, 50, 200)).toBe(1);
+		expect(stepFade(0.1, 0, 50, 200)).toBe(0);
+		expect(stepFade(0.3, 1, 5000, 200)).toBe(1);
+	});
+
+	test("a zero duration is an instant cut (reduced motion)", () => {
+		expect(stepFade(0, 1, 0, 0)).toBe(1);
+	});
+
+	test("a clock that ran backwards does not undo progress", () => {
+		expect(stepFade(0.5, 1, -30, 200)).toBe(0.5);
 	});
 });
 

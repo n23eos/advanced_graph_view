@@ -65,6 +65,7 @@ export class CameraWidget {
 		});
 		this.exploreButton.setAttribute("aria-label", t("camera.explore.hint"));
 		this.exploreButton.addEventListener("click", () => this.callbacks.onToggleExplore());
+
 	}
 
 	/** Light up the button while the mode is running, so it reads as a state
