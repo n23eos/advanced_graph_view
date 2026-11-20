@@ -1,13 +1,11 @@
-# Advanced Graph View 0.12.0-beta.1
+## What's new
 
-Beta release authorized by the owner on 2026-11-14.
+- **See the structure in dense graphs.** Thinner curved links, distinct glow effects for color schemes, and optional folder colors and labels make groups and connections easier to follow.
+- **Read sharper labels.** Text renders at display resolution even at Standard render quality. The label visibility threshold follows projected size in 3D and zoom in 2D. PNG exports include labels.
+- **Follow active connections.** A brief electric pulse travels along links when you hover over a node or begin dragging it. It respects the system's reduced-motion setting.
+- **Move connected nodes with shorter drags.** Direct neighbors start following sooner. This beta uses the graph's existing physics for the motion after release and replaces the separate trailing effect from beta.2.
+- **Find the right controls.** The settings panel adapts to 2D or 3D. In Expert mode, Layout rules sits just below Color scheme.
 
-Optional settings add all attachments and missing link targets to the graph. Both switches start off, preserving the existing default graph, including already-linked attachments. Missing targets open their source note and never create files automatically. Main graph, local graph, Insights, exports and Changes history handle the selected scope. Attachment exports retain full paths and file facts use actual timestamps.
+New graph tabs use the updated styling. Restored tabs keep their saved appearance, and saved presets retain their settings.
 
-This candidate includes the hardening fixes, reduced idle rendering, owner-window handling, workspace camera/query restoration, Cmd/Ctrl native hover integration and frontmatter property filtering/color.
-
-Verification: 1012 tests / 150 files, lint zero warnings, typecheck and production build pass. Independent review closed. Browser QA confirmed all four node-scope combinations, return to baseline, property filtering and fresh-view restoration; narrow/light and wide/dark screenshots inspected.
-
-Native restart, hover popup, popout and attachment navigation acceptance remain unverified while macOS is locked. Performance limits are recorded in specs/004-hardening/verification.md. This is a beta release for testing; native acceptance remains incomplete.
-
-Requires Obsidian 1.13.0 or later; desktop only.
+This desktop beta requires Obsidian 1.13.0 or later. Large graphs can still take time to settle and may drop frames when zooming. Feedback on label readability and drag response in both modes is welcome.
