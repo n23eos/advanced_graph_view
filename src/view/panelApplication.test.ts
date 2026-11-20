@@ -3,6 +3,7 @@ import { describe, expect, test, vi } from "vitest";
 import type { PanelState } from "../ui/ControlPanel";
 import { DEFAULT_SETTINGS } from "../settings/schema";
 import { GraphInsightView } from "./GraphView";
+import { applyGraphAppearance, createGraphAppearance } from "../settings/appearance";
 
 vi.mock("obsidian", async (original) => ({ ...await original<typeof import("obsidian")>(), ItemView: class {} }));
 vi.mock("../render/GraphRenderer", () => ({ GraphRenderer: class {} }));
@@ -30,8 +31,14 @@ function harness() {
 		settings: structuredClone(DEFAULT_SETTINGS),
 		savePanelState: vi.fn((panel: PanelState) => { plugin.settings.panel = panel; return Promise.resolve(); }),
 	};
-	Object.assign(view, effects, { plugin, facts: [], renderer: { setLabelOptions: vi.fn(), setEdgeStyle: vi.fn() } });
-	return { view, effects, plugin };
+	const appearance = createGraphAppearance(plugin.settings.panel, "legacy");
+	Object.assign(view, effects, {
+		plugin,
+		appearance,
+		facts: [],
+		renderer: { setLabelOptions: vi.fn(), setEdgeStyle: vi.fn() },
+	});
+	return { view, effects, plugin, appearance };
 }
 
 describe("selective panel application", () => {
@@ -53,9 +60,10 @@ describe("selective panel application", () => {
 		}
 	});
 	test("panel callbacks compare against the state before synchronous persistence updates it", () => {
-		const { view, effects, plugin } = harness();
+		const { view, effects, plugin, appearance } = harness();
 		view.buildPanel(plugin.settings.panel);
-		const next = { ...plugin.settings.panel, nodeScale: plugin.settings.panel.nodeScale + 1 };
+		const current = applyGraphAppearance(plugin.settings.panel, appearance);
+		const next = { ...current, nodeScale: current.nodeScale + 1 };
 		panelHost.onChange!(next);
 		expect(plugin.settings.panel).toBe(next);
 		expect(effects.applyEncoding).toHaveBeenCalledWith(next);

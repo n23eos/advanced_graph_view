@@ -5,6 +5,7 @@ import type { GraphScope } from "../data/graphScope";
  */
 import type { PanelMode, PanelState } from "../ui/ControlPanel";
 import { DEFAULT_3D_PANEL, type ViewPreset } from "../view/builtinPresets";
+import { createGraphAppearance, type GraphAppearance } from "./appearance";
 
 /** Where the user is in the first-run tour. Replaces the old boolean
  *  `onboardingShown`; `disabled` is "don't show me this again". */
@@ -32,6 +33,8 @@ export interface GraphInsightSettings {
 	physicsDefaultsVersion: number;
 	renderScale: RenderScale;
 	panel: PanelState;
+	/** Default appearance marker used by profiles and newly created leaves. */
+	appearance: GraphAppearance;
 	/** How much of the control panel is on show. Not part of PanelState: it is
 	 *  which controls you see, not what the graph looks like, so a view preset
 	 *  never drags the user back into the panel they did not choose. */
@@ -82,6 +85,7 @@ export const DEFAULT_SETTINGS: GraphInsightSettings = {
 	physicsDefaultsVersion: 0,
 	renderScale: "standard",
 	panel: DEFAULT_3D_PANEL,
+	appearance: createGraphAppearance(DEFAULT_3D_PANEL, "modern"),
 	panelMode: "simple",
 	openDwellSeconds: 5,
 	hoverPreview: { enabled: true, words: 300, delayMs: 350 },

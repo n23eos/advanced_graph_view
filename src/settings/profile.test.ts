@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { DEFAULT_SETTINGS } from "./schema";
 import { PROFILE_VERSION, buildProfile, mergeProfile } from "./profile";
+import { normalizeSettings } from "./normalize";
 
 const settings = {
 	...DEFAULT_SETTINGS,
@@ -35,6 +36,17 @@ describe("mergeProfile", () => {
 		expect(restored?.openDwellSeconds).toBe(12);
 		expect(restored?.hoverPreview).toEqual(settings.hoverPreview);
 		expect(restored?.chipFilter).toEqual(settings.chipFilter);
+		expect(restored?.appearance).toEqual(settings.appearance);
+	});
+
+	test("imports an old profile with legacy rendering rules", () => {
+		const restored = mergeProfile(DEFAULT_SETTINGS, {
+			version: PROFILE_VERSION,
+			panel: { ...settings.panel, nodeScale: 2 },
+		});
+
+		expect(restored?.appearance.mode).toBe("legacy");
+		expect(restored?.appearance.panel.nodeScale).toBe(2);
 	});
 
 	test("rejects anything that is not a profile", () => {
@@ -88,7 +100,7 @@ describe("mergeProfile", () => {
 
 		const restored = mergeProfile(DEFAULT_SETTINGS, partial);
 
-		expect(restored?.panel).toEqual(settings.panel);
+		expect(restored?.panel).toEqual(normalizeSettings({ panel: settings.panel }).panel);
 		expect(restored?.openDwellSeconds).toBe(DEFAULT_SETTINGS.openDwellSeconds);
 	});
 

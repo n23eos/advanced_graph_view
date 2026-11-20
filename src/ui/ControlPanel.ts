@@ -16,6 +16,13 @@ import type { OverlayCounts, OverlayToggles } from "../analysis/overlays";
 import type { PhysicsParams } from "../workers/layoutEngine";
 import { LAYOUT_DENSITIES, applyLayoutDensity, matchLayoutDensity, type LayoutDensity } from "./layoutDensity";
 import { NODE_STYLES, type NodeStyle } from "../render/nodeStyle";
+import {
+	DEFAULT_EDGE_CURVATURE,
+	DEFAULT_FOLDER_APPEARANCE,
+	DEFAULT_GLOW_INTENSITY,
+	DEFAULT_LABEL_APPEARANCE,
+	normalizeFolderOverrides,
+} from "../settings/appearance";
 
 /** "simple" shows a handful of casual controls, "expert" the full panel. */
 export type PanelMode = "simple" | "expert";
@@ -34,6 +41,10 @@ export interface PanelState {
 	physics: PhysicsParams;
 	labels: LabelOptions;
 	edges: EdgeStyleOptions;
+	/** Strength multiplier for the selected glow channel. */
+	glowIntensity?: number;
+	/** Folder grouping and manual color assignments for the overview layer. */
+	folders?: FolderAppearanceOptions;
 	/** Multiplier on node circle radius. */
 	nodeScale: number;
 	view3d: View3DOptions;
@@ -58,12 +69,28 @@ export interface LabelOptions {
 	maxCount: number;
 	/** true: labels shrink with zoom-out and hide when unreadable (scamin). */
 	scaleWithZoom: boolean;
+	/** Hide background labels while keeping hover and action context. */
+	hoverOnly?: boolean;
+	/** Number of high-priority hubs eligible on the overview. */
+	hubs?: number;
+	/** Label opacity transition duration. */
+	fadeMs?: number;
+	/** Ranking used for background label candidates. */
+	rank?: "degree" | "pagerank";
 }
 
 export interface EdgeStyleOptions {
 	show: boolean;
 	width: number;
 	opacity: number;
+	/** Quadratic bend strength. Zero keeps the old straight edge path. */
+	curvature?: number;
+}
+
+export interface FolderAppearanceOptions {
+	enabled: boolean;
+	level: "top" | "parent";
+	overrides: Record<string, string>;
 }
 
 export interface ClusterRow {
@@ -218,8 +245,37 @@ export class ControlPanel {
 		this.physicsSlider(view, t("appearance.nodeSize"), 0.1, 3, 0.05, this.state.nodeScale, (value) => {
 			this.setState({ ...this.state, nodeScale: value });
 		});
+		this.physicsSlider(
+			view,
+			t("appearance.glowIntensity"),
+			0,
+			3,
+			0.05,
+			this.state.glowIntensity ?? DEFAULT_GLOW_INTENSITY,
+			(value) => this.setState({ ...this.state, glowIntensity: value })
+		);
+		const folders = this.effectiveFolders();
+		this.checkboxRow(view, t("folders.enabled"), folders.enabled, (enabled) => {
+			this.setState({ ...this.state, folders: { ...folders, enabled } });
+		});
+		this.channelSelect(
+			view,
+			t("folders.level"),
+			folders.level,
+			{
+				top: t("folders.level.top"),
+				parent: t("folders.level.parent"),
+			},
+			(value) => this.setState({
+				...this.state,
+				folders: { ...folders, level: (value ?? "top") as FolderAppearanceOptions["level"] },
+			}),
+			false
+		);
+		this.folderOverridesRow(view, folders);
 
 		const textSection = this.section("labels", t("panel.section.labels"));
+		const labelAppearance = { ...DEFAULT_LABEL_APPEARANCE, ...this.state.labels };
 		this.checkboxRow(textSection, t("labels.show"), this.state.labels.show, (value) => {
 			this.setState({ ...this.state, labels: { ...this.state.labels, show: value } });
 		});
@@ -235,6 +291,29 @@ export class ControlPanel {
 		this.checkboxRow(textSection, t("labels.scaleWithZoom"), this.state.labels.scaleWithZoom, (value) => {
 			this.setState({ ...this.state, labels: { ...this.state.labels, scaleWithZoom: value } });
 		});
+		this.checkboxRow(textSection, t("labels.hoverOnly"), labelAppearance.hoverOnly, (value) => {
+			this.setState({ ...this.state, labels: { ...this.state.labels, hoverOnly: value } });
+		});
+		this.physicsSlider(textSection, t("labels.hubs"), 0, 64, 1, labelAppearance.hubs, (value) => {
+			this.setState({ ...this.state, labels: { ...this.state.labels, hubs: value } });
+		});
+		this.physicsSlider(textSection, t("labels.fadeMs"), 0, 1000, 25, labelAppearance.fadeMs, (value) => {
+			this.setState({ ...this.state, labels: { ...this.state.labels, fadeMs: value } });
+		});
+		this.channelSelect(
+			textSection,
+			t("labels.rank"),
+			labelAppearance.rank,
+			{
+				degree: t("labels.rank.degree"),
+				pagerank: t("labels.rank.pagerank"),
+			},
+			(value) => this.setState({
+				...this.state,
+				labels: { ...this.state.labels, rank: (value ?? "degree") as LabelOptions["rank"] },
+			}),
+			false
+		);
 
 		const edgeSection = this.section("links", t("panel.section.links"));
 		this.checkboxRow(edgeSection, t("edges.show"), this.state.edges.show, (value) => {
@@ -246,6 +325,15 @@ export class ControlPanel {
 		this.physicsSlider(edgeSection, t("edges.opacity"), 0.02, 1, 0.01, this.state.edges.opacity, (value) => {
 			this.setState({ ...this.state, edges: { ...this.state.edges, opacity: value } });
 		});
+		this.physicsSlider(
+			edgeSection,
+			t("edges.curvature"),
+			0,
+			0.6,
+			0.01,
+			this.state.edges.curvature ?? DEFAULT_EDGE_CURVATURE,
+			(value) => this.setState({ ...this.state, edges: { ...this.state.edges, curvature: value } })
+		);
 
 		const threeD = this.section("threeD", t("panel.section.threeD"));
 		this.checkboxRow(threeD, t("view3d.enabled"), this.state.view3d.enabled, (value) => {
@@ -512,6 +600,36 @@ export class ControlPanel {
 		checkbox.checked = value;
 		labelEl.createSpan({ text: label });
 		checkbox.addEventListener("change", () => onChange(checkbox.checked));
+	}
+
+	private effectiveFolders(): FolderAppearanceOptions {
+		return {
+			...DEFAULT_FOLDER_APPEARANCE,
+			...this.state.folders,
+			overrides: normalizeFolderOverrides(this.state.folders?.overrides),
+		};
+	}
+
+	private folderOverridesRow(parent: HTMLElement, folders: FolderAppearanceOptions): void {
+		const row = parent.createDiv({ cls: "graph-insight-panel-row" });
+		row.createSpan({ cls: "graph-insight-panel-label", text: t("folders.overrides") });
+		const input = row.createEl("input", { type: "text" });
+		input.value = Object.entries(folders.overrides)
+			.map(([folder, color]) => `${folder}=${color}`)
+			.join("; ");
+		input.setAttribute("placeholder", t("folders.overridesHint"));
+		input.addEventListener("change", () => {
+			const parsed: Record<string, string> = {};
+			for (const entry of input.value.split(";")) {
+				const separator = entry.lastIndexOf("=");
+				if (separator < 1) continue;
+				parsed[entry.slice(0, separator).trim()] = entry.slice(separator + 1).trim();
+			}
+			this.setState({
+				...this.state,
+				folders: { ...folders, overrides: normalizeFolderOverrides(parsed) },
+			});
+		});
 	}
 
 	private physicsSlider(

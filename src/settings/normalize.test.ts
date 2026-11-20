@@ -108,10 +108,89 @@ describe("normalizeSettings", () => {
 			const presets = normalizeSettings(raw, NOW).viewPresets;
 			expect(presets[0].panel.layoutRule).toBe("links");
 			expect(presets[1].panel.layoutRule).toBe("folders");
+			expect(presets[0].appearance?.mode).toBe("legacy");
+			expect(presets[1].appearance?.mode).toBe("legacy");
 		});
 	});
 
 	describe("deep merge of older payloads", () => {
+		test("backfills the optional build 3 appearance fields", () => {
+			const panel = normalizeSettings({ panel: { labels: { show: false } } }, NOW).panel;
+
+			expect(panel.labels).toMatchObject({
+				hoverOnly: false,
+				hubs: 8,
+				fadeMs: 200,
+				rank: "degree",
+			});
+			expect(panel.edges.curvature).toBe(0.18);
+			expect(panel.glowIntensity).toBe(1);
+			expect(panel.folders).toEqual({ enabled: true, level: "top", overrides: {} });
+		});
+
+		test("normalizes invalid build 3 appearance values independently", () => {
+			const panel = normalizeSettings({
+				panel: {
+					labels: { hoverOnly: "yes", hubs: 999, fadeMs: -20, rank: "random" },
+					edges: { curvature: Number.NaN },
+					glowIntensity: Infinity,
+					folders: {
+						enabled: "yes",
+						level: "middle",
+						overrides: { Work: "#abcdef", Bad: "red", "": "#fff" },
+					},
+				},
+			}, NOW).panel;
+
+			expect(panel.labels).toMatchObject({
+				hoverOnly: false,
+				hubs: 64,
+				fadeMs: 0,
+				rank: "degree",
+			});
+			expect(panel.edges.curvature).toBe(0.18);
+			expect(panel.glowIntensity).toBe(1);
+			expect(panel.folders).toEqual({
+				enabled: true,
+				level: "top",
+				overrides: { Work: "#abcdef" },
+			});
+		});
+
+		test("marks old full and partial panels as legacy appearances", () => {
+			const full = normalizeSettings({ panel: DEFAULT_3D_PANEL }, NOW);
+			const partial = normalizeSettings({ panel: { nodeScale: 2 } }, NOW);
+
+			expect(full.appearance.mode).toBe("legacy");
+			expect(full.appearance.panel.nodeScale).toBe(DEFAULT_3D_PANEL.nodeScale);
+			expect(partial.appearance.mode).toBe("legacy");
+			expect(partial.appearance.panel.nodeScale).toBe(2);
+			expect(partial.appearance.panel.edges).toEqual({
+				...DEFAULT_SETTINGS.panel.edges,
+				curvature: 0.18,
+			});
+		});
+
+		test("round-trips a versioned modern appearance", () => {
+			const raw = {
+				panel: { nodeScale: 2 },
+				appearance: {
+					version: 1,
+					mode: "modern",
+					panel: { nodeScale: 3, edges: { opacity: 0.7 } },
+				},
+			};
+
+			const settings = normalizeSettings(raw, NOW);
+			expect(settings.appearance.mode).toBe("modern");
+			expect(settings.appearance.panel.nodeScale).toBe(3);
+			expect(settings.appearance.panel.edges).toEqual({
+				...DEFAULT_SETTINGS.panel.edges,
+				opacity: 0.7,
+				curvature: 0.18,
+			});
+		});
+
 		test("legacy palettes keep their previous node style", () => {
 			expect(normalizeSettings({ panel: { colorPreset: "galaxy" } }, NOW).panel.nodeStyle).toBe("glow");
 			expect(normalizeSettings({ panel: { colorPreset: "recency" } }, NOW).panel.nodeStyle).toBe("flat");

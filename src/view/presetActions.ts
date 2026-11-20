@@ -8,6 +8,7 @@ import { SearchPresetManagerModal } from "../ui/SearchPresetManagerModal";
 import { ensureBuiltinPreset, type ViewPreset } from "./builtinPresets";
 import type { BuiltinPresetId } from "./presetNames";
 import { presetDisplayName } from "./presetNames";
+import { createGraphAppearance, type GraphAppearance } from "../settings/appearance";
 
 export type PresetTaskAction =
 	| { readonly id: string }
@@ -25,6 +26,8 @@ export interface PresetActionsDeps {
 	applySearchQuery(query: string): void;
 	getViewPresets(): ViewPreset[];
 	getPanelState(): PanelState;
+	getGraphAppearance(): GraphAppearance;
+	setGraphAppearance(appearance: GraphAppearance): void;
 	saveViewPresets(presets: ViewPreset[]): Promise<void>;
 	setViewPresets(presets: readonly ViewPreset[]): void;
 	setSelectedViewPreset(index: number | null): void;
@@ -106,13 +109,20 @@ export class PresetActions {
 		// The preset brings its own physics, so the reset's Undo no longer applies.
 		this.deps.clearPhysicsUndo();
 		this.deps.requestAutoFit();
+		this.deps.setGraphAppearance(
+			preset.appearance ?? createGraphAppearance(preset.panel, "legacy")
+		);
 		await this.deps.updatePanelState(() => preset.panel);
 		new Notice(t("notice.presetApplied", { name: presetDisplayName(preset) }));
 	}
 
 	async saveViewPreset(name: string): Promise<void> {
 		const existing = this.viewPresets;
-		const snapshot = { name, panel: this.deps.getPanelState() };
+		const snapshot = {
+			name,
+			panel: this.deps.getPanelState(),
+			appearance: this.deps.getGraphAppearance(),
+		};
 		// Same name overwrites: saving twice must not pile up duplicates.
 		const at = existing.findIndex((preset) => preset.name === name);
 		const next = at >= 0

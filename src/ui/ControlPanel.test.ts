@@ -45,6 +45,21 @@ function layoutRuleSelect(host: HTMLElement): HTMLSelectElement {
 	return found;
 }
 
+function rowByLabel(host: HTMLElement, label: string): HTMLElement {
+	const row = Array.from(host.querySelectorAll<HTMLElement>(".graph-insight-panel-row"))
+		.find((candidate) => candidate.textContent?.includes(label));
+	if (!row) throw new Error(`Control row not rendered: ${label}`);
+	return row;
+}
+
+function sliderAfter(row: HTMLElement): HTMLInputElement {
+	const slider = row.nextElementSibling;
+	if (!(slider instanceof HTMLInputElement) || slider.type !== "range") {
+		throw new Error(`Slider not rendered after: ${row.textContent ?? ""}`);
+	}
+	return slider;
+}
+
 describe("layout rule selector (F-05)", () => {
 	test("reflects the persisted PanelState value instead of always showing links", () => {
 		const { host } = build({ ...DEFAULT_3D_PANEL, layoutRule: "tags" });
@@ -91,6 +106,47 @@ describe("node style", () => {
 		select!.value = "ring";
 		select!.dispatchEvent(new Event("change"));
 		expect((onChange.mock.calls[0][0] as PanelState).nodeStyle).toBe("ring");
+	});
+});
+
+describe("build 3 appearance controls", () => {
+	test("shows saved label, edge, folder and glow values", () => {
+		const state = {
+			...DEFAULT_3D_PANEL,
+			glowIntensity: 1.5,
+			labels: {
+				...DEFAULT_3D_PANEL.labels,
+				hoverOnly: true,
+				hubs: 12,
+				fadeMs: 250,
+				rank: "pagerank" as const,
+			},
+			edges: { ...DEFAULT_3D_PANEL.edges, curvature: 0.24 },
+			folders: { enabled: true, level: "parent" as const, overrides: { Work: "#abcdef" } },
+		};
+		const { host } = build(state, "expert");
+
+		expect(sliderAfter(rowByLabel(host, "Glow intensity")).value).toBe("1.5");
+		expect(rowByLabel(host, "Only on hover").querySelector<HTMLInputElement>("input")?.checked).toBe(true);
+		expect(sliderAfter(rowByLabel(host, "Hub labels")).value).toBe("12");
+		expect(sliderAfter(rowByLabel(host, "Fade duration")).value).toBe("250");
+		expect(rowByLabel(host, "Label ranking").querySelector<HTMLSelectElement>("select")?.value).toBe("pagerank");
+		expect(sliderAfter(rowByLabel(host, "Curvature")).value).toBe("0.24");
+		expect(rowByLabel(host, "Show folders").querySelector<HTMLInputElement>("input")?.checked).toBe(true);
+		expect(rowByLabel(host, "Folder level").querySelector<HTMLSelectElement>("select")?.value).toBe("parent");
+		expect(rowByLabel(host, "Color overrides").querySelector<HTMLInputElement>("input")?.value)
+			.toBe("Work=#abcdef");
+	});
+
+	test("reports updated build 3 fields", () => {
+		const onChange = vi.fn();
+		const { host } = build(DEFAULT_3D_PANEL, "expert", { onChange });
+		const curvature = sliderAfter(rowByLabel(host, "Curvature"));
+		curvature.value = "0.3";
+		curvature.dispatchEvent(new Event("input"));
+
+		const changed = onChange.mock.calls.at(-1)?.[0] as PanelState;
+		expect(changed.edges.curvature).toBe(0.3);
 	});
 });
 

@@ -6,6 +6,7 @@
 import type { PanelState } from "../ui/ControlPanel";
 import type { BuiltinPresetId } from "./presetNames";
 import { nodeStyleFromPreset, type NodeStyle } from "../render/nodeStyle";
+import type { GraphAppearance } from "../settings/appearance";
 
 
 export interface ViewPreset {
@@ -17,6 +18,8 @@ export interface ViewPreset {
 	builtinId?: BuiltinPresetId;
 	/** Full panel state snapshot: channels, colors, physics, 3D, layers. */
 	panel: PanelState;
+	/** Absent only on bundled or saved presets from before per-leaf appearance. */
+	appearance?: GraphAppearance;
 }
 
 /** Fixed fields shared by every bundled panel snapshot, so each preset only

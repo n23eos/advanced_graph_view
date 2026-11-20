@@ -81,7 +81,13 @@ import {
 } from "./workspaceState";
 import { t } from "../i18n";
 import type GraphInsightPlugin from "../main";
-import type { ViewPreset } from "./builtinPresets";
+import { DEFAULT_3D_PANEL, type ViewPreset } from "./builtinPresets";
+import {
+	applyGraphAppearance,
+	applyRendererAppearanceFlag,
+	createGraphAppearance,
+	type GraphAppearance,
+} from "../settings/appearance";
 
 export const GRAPH_INSIGHT_VIEW_TYPE = "graph-insight-view";
 
@@ -280,7 +286,12 @@ export class GraphInsightView extends ItemView {
 			setSearchPresets: (presets) => this.searchBar?.setPresets(presets),
 			applySearchQuery: (query) => this.searchBar?.applyQuery(query),
 			getViewPresets: () => this.plugin.settings.viewPresets,
-			getPanelState: () => this.plugin.settings.panel,
+			getPanelState: () => this.effectivePanelState,
+			getGraphAppearance: () => this.currentAppearance,
+			setGraphAppearance: (appearance) => {
+				this.appearance = appearance;
+				this.applyRendererAppearance();
+			},
 			saveViewPresets: (presets) => this.plugin.saveViewPresets(presets),
 			setViewPresets: (presets) => this.panel?.setViewPresets(this.presetRows(presets)),
 			setSelectedViewPreset: (index) => this.panel?.setSelectedPreset(index),
@@ -294,6 +305,7 @@ export class GraphInsightView extends ItemView {
 	}
 
 	private renderer: GraphRenderer | null = null;
+	private appearance: GraphAppearance | null = null;
 	private stopObservingRendererVisibility: (() => void) | null = null;
 	private viewWindow: Window | null = null;
 	private viewDocument: Document | null = null;
@@ -424,6 +436,22 @@ export class GraphInsightView extends ItemView {
 		super(leaf);
 	}
 
+	private get effectivePanelState(): PanelState {
+		return applyGraphAppearance(this.basePanelState, this.currentAppearance);
+	}
+
+	private get basePanelState(): PanelState {
+		return this.plugin.settings?.panel ?? DEFAULT_3D_PANEL;
+	}
+
+	private get currentAppearance(): GraphAppearance {
+		return this.appearance ?? createGraphAppearance(this.basePanelState, "legacy");
+	}
+
+	private applyRendererAppearance(): void {
+		applyRendererAppearanceFlag(this.renderer, this.currentAppearance);
+	}
+
 	getViewType(): string {
 		return GRAPH_INSIGHT_VIEW_TYPE;
 	}
@@ -440,14 +468,30 @@ export class GraphInsightView extends ItemView {
 		const camera = this.pendingWorkspaceCamera?.camera
 			?? this.renderer?.getCameraState()
 			?? this.lastWorkspaceCamera;
-		const state: Record<string, unknown> = { version: 1, hardQuery: this.lastWorkspaceQuery };
+		const state: Record<string, unknown> = {
+			version: 1,
+			hardQuery: this.lastWorkspaceQuery,
+			appearance: this.currentAppearance,
+		};
 		if (camera) state.camera = camera;
 		return state;
 	}
 
 	async setState(state: unknown, _result: ViewStateResult): Promise<void> {
-		const normalized = normalizeGraphViewState(state);
+		const normalized = normalizeGraphViewState(state, this.basePanelState);
 		if (!normalized) return;
+		const previousPanel = this.effectivePanelState;
+		this.appearance = normalized.appearance
+			?? createGraphAppearance(this.basePanelState, "legacy");
+		this.applyRendererAppearance();
+		if (this.panel) {
+			const nextPanel = this.effectivePanelState;
+			this.panel.destroy();
+			this.panel = this.buildPanel(nextPanel);
+			this.panel.setViewPresets(this.presetRows(this.plugin.settings.viewPresets));
+			this.panel.setSelectedPreset(this.activePresetIndex);
+			this.applyAllPanelState(nextPanel, previousPanel);
+		}
 		const revision = ++this.workspaceStateRevision;
 		if (normalized.camera) {
 			this.lastWorkspaceCamera = normalized.camera;
@@ -649,6 +693,7 @@ export class GraphInsightView extends ItemView {
 			onContextLost: () => this.reportContextLost(),
 		});
 		this.renderer = renderer;
+		this.applyRendererAppearance();
 		try {
 			await renderer.init(container, this.plugin.settings.renderScale);
 		} catch (error) {
@@ -700,7 +745,7 @@ export class GraphInsightView extends ItemView {
 				this.receiveLayoutPositions(positions);
 				this.savePositionsDebounced();
 				this.redrawBubbles();
-				if (shouldFitOnSettle(this.autoFit, this.plugin.settings.panel.view3d.enabled)) {
+				if (shouldFitOnSettle(this.autoFit, this.effectivePanelState.view3d.enabled)) {
 					this.renderer?.fitAll();
 				}
 			},
@@ -712,13 +757,14 @@ export class GraphInsightView extends ItemView {
 			() => this.reportWorkerFailure("metrics")
 		);
 
-		this.panel = this.buildPanel(this.plugin.settings.panel);
+		const panelState = this.effectivePanelState;
+		this.panel = this.buildPanel(panelState);
 		this.panel.setViewPresets(this.presetRows(this.plugin.settings.viewPresets));
 		this.legend = new Legend(container);
 		this.cameraWidget = new CameraWidget(
 			container,
-			this.plugin.settings.panel.view3d,
-			this.plugin.settings.panel.physics.freeLayout,
+			panelState.view3d,
+			panelState.physics.freeLayout,
 			{
 				onToggle3D: (enabled) => void this.updatePanelState((state) => ({
 					...state,
@@ -1631,22 +1677,23 @@ export class GraphInsightView extends ItemView {
 			this.model = model;
 			consumeRenames(this.renamed, renamed);
 			this.facts = this.buildFacts(model, files);
-			this.panel?.setPropertyKeys(collectPropertyKeys(this.facts, this.plugin.settings.panel.channels.color));
+			const panelState = this.effectivePanelState;
+			this.panel?.setPropertyKeys(collectPropertyKeys(this.facts, panelState.channels.color));
 			this.metrics = null;
 			this.hasLayoutPositions = false;
 			this.renderer.setModel(model);
-			const view3d = this.plugin.settings.panel.view3d;
+			const view3d = panelState.view3d;
 			const dims = view3d.enabled && view3d.depthSource === "physics" ? 3 : 2;
 			this.layout.start(model, seed, dims);
 			this.restorePins(model, seed, pinnedPaths);
-			this.apply3D(this.plugin.settings.panel, false);
+			this.apply3D(panelState, false);
 			this.applyPendingWorkspaceCamera();
 			this.lastPhysics = "";
-			this.applyPhysics(this.plugin.settings.panel);
+			this.applyPhysics(panelState);
 			// The fresh worker knows nothing about the saved grouping rule, and the
 			// node ids behind this.facts have just changed - recompute from scratch.
 			this.appliedLayoutRule = null;
-			this.applyLayoutRule(this.plugin.settings.panel.layoutRule);
+			this.applyLayoutRule(panelState.layoutRule);
 			// F-10: node ids just changed - the old highlight indices are garbage.
 			// The data itself is path-based; recompute it if the panel is open.
 			this.changesGeneration++;
@@ -1654,18 +1701,17 @@ export class GraphInsightView extends ItemView {
 			this.changesHighlight = null;
 			this.changesData = null;
 			if (this.changesPanel?.isShown) void this.refreshChanges();
-			const panelState = this.plugin.settings.panel;
 			this.renderer.setLabelOptions(
 				panelState.labels.show, panelState.labels.fontSize, panelState.labels.zoomThreshold,
 				panelState.labels.maxCount, panelState.labels.scaleWithZoom
 			);
 			this.renderer.setEdgeStyle(panelState.edges.show, panelState.edges.width, panelState.edges.opacity);
-			this.applyEncoding(this.plugin.settings.panel);
-			this.applyOverlays(this.plugin.settings.panel);
+			this.applyEncoding(panelState);
+			this.applyOverlays(panelState);
 			this.panel?.setOverlayCounts(countOverlayMatches(model));
 			this.metricsClient?.compute(model);
 			this.refreshTimelineData();
-			this.syncTimelineAndTrail(this.plugin.settings.panel);
+			this.syncTimelineAndTrail(panelState);
 			const vocabulary = collectVocabulary(this.facts);
 			this.searchBar?.setVocabulary(...vocabulary);
 			this.filterChips?.setVocabulary(...vocabulary);
@@ -1724,7 +1770,7 @@ export class GraphInsightView extends ItemView {
 	 */
 	private handleThemeChange(): void {
 		this.renderer?.refreshThemeColors();
-		this.applyEncoding(this.plugin.settings.panel);
+		this.applyEncoding(this.effectivePanelState);
 	}
 
 	/**
@@ -1745,7 +1791,8 @@ export class GraphInsightView extends ItemView {
 	}
 
 	/** Settings were replaced wholesale (import or reset) — start over. */
-	reloadFromSettings(): Promise<void> {
+	reloadFromSettings(appearance?: GraphAppearance): Promise<void> {
+		if (appearance) this.appearance = appearance;
 		return this.reopen();
 	}
 
@@ -1855,9 +1902,10 @@ export class GraphInsightView extends ItemView {
 		this.hiddenClusters.clear();
 		this.refreshClusterPanel();
 
-		this.applyEncoding(this.plugin.settings.panel);
+		const panel = this.effectivePanelState;
+		this.applyEncoding(panel);
 		this.redrawBubbles();
-		this.apply3D(this.plugin.settings.panel, false);
+		this.apply3D(panel, false);
 	}
 
 	private refreshClusterPanel(): void {
@@ -1920,12 +1968,13 @@ export class GraphInsightView extends ItemView {
 
 	private redrawBubbles(): void {
 		if (!this.renderer) return;
-		if (!this.plugin.settings.panel.showBubbles || !this.metrics) {
+		const panel = this.effectivePanelState;
+		if (!panel.showBubbles || !this.metrics) {
 			this.renderer.drawClusterHulls(null);
 			return;
 		}
 		// Bubbles follow the active scheme so hulls match their node colors.
-		const palette = activePreset(this.plugin.settings.panel.colorPreset, this.viewDocument ?? undefined).categories;
+		const palette = activePreset(panel.colorPreset, this.viewDocument ?? undefined).categories;
 		const groups = this.clusterOrder
 			.filter((communityId) => !this.hiddenClusters.has(communityId))
 			.map((communityId) => ({
@@ -2003,7 +2052,7 @@ export class GraphInsightView extends ItemView {
 		if (!changed) return;
 		this.facts = next;
 		this.tooltipNodeId = null;
-		const panel = this.plugin.settings.panel;
+		const panel = this.effectivePanelState;
 		this.panel?.setPropertyKeys(collectPropertyKeys(this.facts, panel.channels.color));
 		if (this.model) this.panel?.setOverlayCounts(countOverlayMatches(this.model));
 		this.applyEncoding(panel);
@@ -2180,9 +2229,12 @@ export class GraphInsightView extends ItemView {
 				// A manual tweak diverges from the preset, so it's no longer "applied".
 				this.activePresetIndex = null;
 				// Any hand-made physics change invalidates the reset's Undo (F-07).
-				const prev = this.plugin.settings.panel;
+				const prev = this.effectivePanelState;
 				if (next.physics !== prev.physics) this.physicsUndo = null;
-				void this.plugin.savePanelState(next);
+				this.appearance = createGraphAppearance(next, this.currentAppearance.mode);
+				this.applyRendererAppearance();
+				void this.plugin.savePanelState(next, this.appearance);
+				this.scheduleWorkspaceSave();
 				this.applyAllPanelState(next, prev);
 			},
 			onPhysicsReset: () => void this.resetPhysics(),
@@ -2301,10 +2353,11 @@ export class GraphInsightView extends ItemView {
 			this.activePresetIndex !== null
 				? settings.viewPresets[this.activePresetIndex] ?? null
 				: null;
-		const baseline = recommendedPhysics(active, settings.panel.view3d.enabled);
-		const diff = physicsDiff(settings.panel.physics, baseline);
+		const panel = this.effectivePanelState;
+		const baseline = recommendedPhysics(active, panel.view3d.enabled);
+		const diff = physicsDiff(panel.physics, baseline);
 		if (diff.length === 0) return;
-		const previous = settings.panel.physics;
+		const previous = panel.physics;
 		await this.updatePanelState((state) => ({ ...state, physics: { ...baseline } }));
 		this.physicsUndo = previous;
 
@@ -2346,8 +2399,11 @@ export class GraphInsightView extends ItemView {
 
 	/** Toggle helpers for commands and the corner widget. */
 	async updatePanelState(mutate: (state: PanelState) => PanelState): Promise<void> {
-		const next = mutate(this.plugin.settings.panel);
-		await this.plugin.savePanelState(next);
+		const next = mutate(this.effectivePanelState);
+		this.appearance = createGraphAppearance(next, this.currentAppearance.mode);
+		this.applyRendererAppearance();
+		await this.plugin.savePanelState(next, this.appearance);
+		this.scheduleWorkspaceSave();
 		this.panel?.destroy();
 		this.panel = this.buildPanel(next);
 		this.panel.setViewPresets(this.presetRows(this.plugin.settings.viewPresets));
