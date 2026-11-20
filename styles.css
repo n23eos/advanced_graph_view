@@ -48,6 +48,8 @@
 
 .graph-insight-tooltip {
 	position: absolute;
+	box-sizing: border-box;
+	max-height: 100%;
 	z-index: 10;
 	pointer-events: none;
 	background: var(--background-secondary);
@@ -69,7 +71,8 @@
 	top: var(--graph-topbar-bottom, 72px);
 	left: 12px;
 	z-index: 10;
-	min-width: 220px;
+	box-sizing: border-box;
+	width: min(264px, calc(100% - 24px));
 	background: color-mix(in srgb, var(--background-secondary) 85%, transparent);
 	backdrop-filter: blur(8px);
 	border: 1px solid var(--background-modifier-border);
@@ -90,7 +93,7 @@
 	text-align: left;
 	justify-content: space-between;
 	align-items: center;
-	padding: 10px 12px;
+	padding: 7px 10px;
 	cursor: pointer;
 	font-weight: 600;
 	user-select: none;
@@ -101,7 +104,7 @@
 }
 
 .graph-insight-panel-body {
-	padding: 4px 12px 12px;
+	padding: 4px 10px 8px;
 }
 
 .graph-insight-panel-body.is-hidden {
@@ -109,7 +112,7 @@
 }
 
 .graph-insight-panel-section-title {
-	margin: 8px 0 4px;
+	margin: 5px 0 3px;
 	font-size: var(--font-ui-smaller);
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
@@ -120,16 +123,49 @@
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	gap: 8px;
-	margin: 6px 0 2px;
+	gap: 6px;
+	margin: 4px 0 2px;
+	font-size: var(--font-ui-smaller);
+}
+
+.graph-insight-panel-row > * {
+	min-width: 0;
+}
+
+.graph-insight-panel-label,
+.graph-insight-panel-checkbox,
+.graph-insight-panel-header > span:first-child {
+	overflow-wrap: anywhere;
+}
+
+.graph-insight-panel-row :is(select, input[type="text"]) {
+	box-sizing: border-box;
+	flex: 0 1 58%;
+	max-width: 58%;
 	font-size: var(--font-ui-smaller);
 }
 
 .graph-insight-panel-row select {
-	max-width: 150px;
-	font-size: var(--font-ui-smaller);
-	height: auto;
-	padding: 2px 18px 2px 6px;
+	height: 24px;
+	padding-block: 2px;
+	text-overflow: ellipsis;
+}
+
+.graph-insight-panel-row input[type="text"] {
+	height: 26px;
+	padding-inline: 6px;
+}
+
+.graph-insight-panel-row.graph-insight-panel-preset > select {
+	flex-basis: 100%;
+	max-width: 100%;
+}
+
+.graph-insight-panel-body .graph-insight-panel-preset-actions button {
+	flex: 1 1 0;
+	width: auto;
+	margin-top: 0;
+	overflow-wrap: anywhere;
 }
 
 .graph-insight-legend {
@@ -243,7 +279,7 @@
 .graph-insight-panel-modes {
 	display: flex;
 	gap: 4px;
-	margin: 4px 0 8px;
+	margin: 2px 0 6px;
 }
 
 .graph-insight-panel-mode {
@@ -251,6 +287,57 @@
 	padding: 4px 6px;
 	font-size: var(--font-ui-smaller);
 	cursor: pointer;
+}
+
+.graph-insight-panel-top-controls {
+	flex-wrap: wrap;
+	align-items: stretch;
+}
+
+.graph-insight-panel-mode-group,
+.graph-insight-panel-view-controls {
+	display: flex;
+	gap: 4px;
+	min-width: 0;
+}
+
+.graph-insight-panel-mode-group {
+	flex: 1 1 106px;
+}
+
+.graph-insight-panel-body .graph-insight-panel-modes .graph-insight-panel-mode {
+	min-width: 0;
+	width: auto;
+	min-height: 30px;
+	height: auto;
+	margin: 0;
+	padding: 4px;
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+
+.graph-insight-panel-dimension,
+.graph-insight-panel-body button.graph-insight-screensaver-button {
+	box-sizing: border-box;
+	height: 30px;
+	margin: 0;
+}
+
+.graph-insight-panel-dimension {
+	font-size: var(--font-ui-smaller);
+}
+
+.graph-insight-panel-body button.graph-insight-screensaver-button {
+	display: grid;
+	place-items: center;
+	flex: 0 0 30px;
+	width: 30px;
+	padding: 0;
+}
+
+.graph-insight-screensaver-button svg {
+	width: 15px;
+	height: 15px;
 }
 
 .graph-insight-panel-mode.is-active {
@@ -266,10 +353,6 @@
 	white-space: normal;
 	overflow-wrap: anywhere;
 	line-height: 1.35;
-}
-
-.graph-insight-panel {
-	max-width: 280px;
 }
 
 .graph-insight-cluster-list {
@@ -690,12 +773,13 @@
 .graph-insight-panel {
 	/* Leave room for the search row above and the cursor toolbar below. */
 	max-height: max(40px, calc(100% - var(--graph-topbar-bottom, 72px) - var(--graph-bottom-controls, 100px) - var(--graph-timeline-space, 0px) - 12px));
-	overflow-y: auto;
-	min-width: 240px;
+	overflow: hidden auto;
+	scrollbar-gutter: stable;
+	overscroll-behavior: contain;
 }
 
 .graph-insight-panel-section {
-	padding-bottom: 8px;
+	padding-bottom: 5px;
 	border-bottom: 1px solid var(--background-modifier-border);
 }
 
@@ -707,14 +791,14 @@
 .graph-insight-panel-body input[type="range"] {
 	width: 100%;
 	height: 14px;
-	margin: 0 0 6px;
+	margin: 0 0 3px;
 }
 
 .graph-insight-panel-body button {
 	width: 100%;
-	margin-top: 6px;
+	margin-top: 4px;
 	font-size: var(--font-ui-smaller);
-	padding: 4px 8px;
+	padding: 3px 6px;
 	cursor: pointer;
 }
 
@@ -978,8 +1062,7 @@
 [data-graph-responsive="minimal"] .graph-insight-panel {
 	left: 8px;
 	right: 8px;
-	max-width: none;
-	overflow-y: auto;
+	width: auto;
 }
 
 /* A drawer needs the full pane width. Restore its legend when it closes. */
@@ -1370,4 +1453,46 @@
 		animation: none !important;
 		transition: none !important;
 	}
+}
+
+
+
+.graph-insight-screensaver > :not(.graph-insight-scene, .graph-insight-label-layer, .graph-insight-screensaver-controls) {
+	display: none;
+}
+
+.graph-insight-screensaver > .graph-insight-scene {
+	pointer-events: none;
+}
+
+.graph-insight-screensaver-controls {
+	position: absolute;
+	z-index: 20;
+	inset: auto clamp(12px, 3vw, 48px) clamp(12px, 3vw, 48px);
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.graph-insight-screensaver-controls button {
+	flex: 0 0 auto;
+}
+
+.graph-insight-screensaver-title {
+	flex: 1;
+	min-width: 0;
+	max-width: 44ch;
+	margin-inline-end: auto;
+	padding: 10px 14px;
+	border-radius: var(--radius-m);
+	background: color-mix(in srgb, var(--background-secondary) 84%, transparent);
+	color: var(--text-normal);
+	font-size: clamp(14px, 1.45vw, 22px);
+	font-weight: 600;
+	line-height: 1.25;
+	overflow-wrap: anywhere;
+}
+
+.graph-insight-screensaver-title:empty {
+	visibility: hidden;
 }

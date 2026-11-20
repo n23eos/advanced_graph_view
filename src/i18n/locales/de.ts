@@ -15,6 +15,9 @@ export const de: Translation = {
 	"nodes.total": "Knoten",
 	"nodes.openSource": "Quellnotiz öffnen",
 
+	"screensaver.start": "Screensaver",
+	"screensaver.pause": "Pause",
+	"screensaver.resume": "Resume",
 	"panel.title": "Advanced Graph View",
 	"panel.section.presets": "Ansichts-Presets",
 	"panel.section.appearance": "Darstellung",

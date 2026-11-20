@@ -14,6 +14,9 @@ export const ru: Translation = {
 	"nodes.total": "Узлы",
 	"nodes.openSource": "Открыть исходную заметку",
 
+	"screensaver.start": "Заставка",
+	"screensaver.pause": "Пауза",
+	"screensaver.resume": "Продолжить",
 	"panel.title": "Advanced Graph View",
 	"panel.section.presets": "Пресеты вида",
 	"panel.section.appearance": "Внешний вид",

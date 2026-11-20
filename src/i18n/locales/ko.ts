@@ -14,6 +14,9 @@ export const ko: Translation = {
 	"nodes.total": "노드",
 	"nodes.openSource": "원본 노트 열기",
 
+	"screensaver.start": "Screensaver",
+	"screensaver.pause": "Pause",
+	"screensaver.resume": "Resume",
 	"panel.title": "Advanced Graph View",
 	"panel.section.presets": "보기 프리셋",
 	"panel.section.appearance": "모양",

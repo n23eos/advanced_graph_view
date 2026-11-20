@@ -14,6 +14,9 @@ export const fr: Translation = {
 	"nodes.total": "Nœuds",
 	"nodes.openSource": "Ouvrir la note source",
 
+	"screensaver.start": "Screensaver",
+	"screensaver.pause": "Pause",
+	"screensaver.resume": "Resume",
 	"panel.title": "Advanced Graph View",
 	"panel.section.presets": "Préréglages de vue",
 	"panel.section.appearance": "Apparence",

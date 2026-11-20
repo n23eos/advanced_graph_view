@@ -14,6 +14,9 @@ export const pl: Translation = {
 	"nodes.total": "Węzły",
 	"nodes.openSource": "Otwórz notatkę źródłową",
 
+	"screensaver.start": "Screensaver",
+	"screensaver.pause": "Pause",
+	"screensaver.resume": "Resume",
 	"panel.title": "Advanced Graph View",
 	"panel.section.presets": "Ustawienia widoku",
 	"panel.section.appearance": "Wygląd",

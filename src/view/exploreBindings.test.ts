@@ -130,4 +130,17 @@ describe("Explore panel state", () => {
 		expect(layout.setParams).toHaveBeenCalledWith(expect.objectContaining({ disabled: true }));
 		expect(layout.reheat).not.toHaveBeenCalled();
 	});
+	test("does not reheat physics when the visual node size changes", () => {
+		const view = Object.create(GraphInsightView.prototype) as {
+			applyPhysics(state: PanelState): void;
+		};
+		const layout = { setParams: vi.fn(), reheat: vi.fn() };
+		Object.assign(view, { layout, model: { nodes: [] }, lastFreeLayout: null });
+		const saved = panel({ physics: { ...DEFAULT_SETTINGS.panel.physics, disabled: false } });
+		view.applyPhysics(saved);
+		view.applyPhysics({ ...saved, nodeScale: saved.nodeScale + 0.5 });
+		expect(layout.setParams).toHaveBeenCalledTimes(1);
+		expect(layout.reheat).toHaveBeenCalledTimes(1);
+	});
+
 });

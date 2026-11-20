@@ -2,6 +2,7 @@
  * Floating control panel: metric-to-channel assignment, overlay toggles,
  * cluster list. Native DOM + Obsidian CSS variables, no framework.
  */
+import { setIcon } from "obsidian";
 import { t } from "../i18n";
 import type { ChannelAssignment } from "../encoding/encode";
 import type { LayoutRule } from "../workers/layoutEngine";
@@ -118,6 +119,7 @@ export interface PanelCallbacks {
 	onResetViewState(): void;
 	/** Switch between the simple and the expert panel. */
 	onModeChange(mode: PanelMode): void;
+	onStartScreensaver?(): void;
 	/** F-07: restore the recommended physics values (host owns the baseline). */
 	onPhysicsReset(): void;
 	/** A section was opened/closed — the host persists what it cares about. */
@@ -489,13 +491,15 @@ export class ControlPanel {
 
 	/** Two buttons at the very top: the way out of whichever panel you are in. */
 	private renderModeSwitch(): void {
-		const row = this.body.createDiv({ cls: "graph-insight-panel-modes" });
+		const row = this.body.createDiv({ cls: "graph-insight-panel-modes graph-insight-panel-top-controls" });
+		const modes = row.createDiv({ cls: "graph-insight-panel-mode-group" });
 		for (const mode of PANEL_MODES) {
-			const button = row.createEl("button", {
+			const button = modes.createEl("button", {
 				text: mode === "simple" ? t("panel.mode.simple") : t("panel.mode.expert"),
 				cls: "graph-insight-panel-mode",
 			});
 			button.toggleClass("is-active", this.mode === mode);
+			button.setAttribute("aria-pressed", String(this.mode === mode));
 			button.addEventListener("click", () => {
 				if (this.mode === mode) return;
 				this.mode = mode;
@@ -503,7 +507,11 @@ export class ControlPanel {
 				this.renderBody();
 			});
 		}
-		const dimension = row.createEl("select", { cls: "dropdown", attr: { "aria-label": t("command.toggle3d") } });
+		const actions = row.createDiv({ cls: "graph-insight-panel-view-controls" });
+		const dimension = actions.createEl("select", {
+			cls: "dropdown graph-insight-panel-dimension",
+			attr: { "aria-label": t("command.toggle3d") },
+		});
 		for (const name of ["2D", "3D"]) dimension.createEl("option", { text: name, value: name });
 		dimension.disabled = this.dimensionLocked;
 		dimension.value = this.is3D ? "3D" : "2D";
@@ -513,6 +521,15 @@ export class ControlPanel {
 			this.setState({ ...this.state, view3d: { ...this.state.view3d, enabled } });
 			this.body.querySelector<HTMLSelectElement>(".graph-insight-panel-modes select")?.focus();
 		});
+		if (this.callbacks.onStartScreensaver) {
+			const title = t("screensaver.start");
+			const button = actions.createEl("button", {
+				cls: "graph-insight-screensaver-button",
+				attr: { "aria-label": title, title, type: "button" },
+			});
+			setIcon(button, "maximize");
+			button.addEventListener("click", () => this.callbacks.onStartScreensaver?.());
+		}
 	}
 
 	/** Frequently used controls shared by both dimensions. */
@@ -596,7 +613,7 @@ export class ControlPanel {
 	}
 
 	private renderPresets(parent: HTMLElement): void {
-		const presetRow = parent.createDiv({ cls: "graph-insight-panel-row" });
+		const presetRow = parent.createDiv({ cls: "graph-insight-panel-row graph-insight-panel-preset" });
 		this.presetSelect = presetRow.createEl("select", { cls: "dropdown" });
 		this.presetSelect.addEventListener("change", () => {
 			const index = Number(this.presetSelect!.value);
@@ -607,7 +624,7 @@ export class ControlPanel {
 				this.selectedPresetIndex = null;
 			}
 		});
-		const presetButtons = parent.createDiv({ cls: "graph-insight-panel-row" });
+		const presetButtons = parent.createDiv({ cls: "graph-insight-panel-row graph-insight-panel-preset-actions" });
 		const saveButton = presetButtons.createEl("button", { text: t("presets.save") });
 		saveButton.addEventListener("click", () => this.callbacks.onPresetSaveRequest());
 		const deleteButton = presetButtons.createEl("button", { text: t("presets.delete") });
@@ -676,7 +693,7 @@ export class ControlPanel {
 		const row = parent.createDiv({ cls: "graph-insight-panel-row" });
 		row.createSpan({ cls: "graph-insight-panel-label", text: label });
 		const valueEl = row.createSpan({ cls: "graph-insight-panel-count", text: String(value) });
-		const slider = parent.createEl("input", { type: "range" });
+		const slider = parent.createEl("input", { type: "range", attr: { "aria-label": label } });
 		slider.min = String(min);
 		slider.max = String(max);
 		slider.step = String(step);

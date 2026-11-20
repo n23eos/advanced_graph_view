@@ -14,6 +14,9 @@ export const ptBR: Translation = {
 	"nodes.total": "Nós",
 	"nodes.openSource": "Abrir nota de origem",
 
+	"screensaver.start": "Screensaver",
+	"screensaver.pause": "Pause",
+	"screensaver.resume": "Resume",
 	"panel.title": "Advanced Graph View",
 	"panel.section.presets": "Predefinições",
 	"panel.section.appearance": "Aparência",

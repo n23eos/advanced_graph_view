@@ -14,6 +14,9 @@ export const ja: Translation = {
 	"nodes.total": "ノード",
 	"nodes.openSource": "参照元のノートを開く",
 
+	"screensaver.start": "Screensaver",
+	"screensaver.pause": "Pause",
+	"screensaver.resume": "Resume",
 	"panel.title": "Advanced Graph View",
 	"panel.section.presets": "ビューのプリセット",
 	"panel.section.appearance": "外観",

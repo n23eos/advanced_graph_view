@@ -67,6 +67,20 @@ describe("GraphRenderer edge pulses", () => {
 		expect(getEdgePath).toHaveBeenCalled();
 	});
 
+	test("sends a presentation wave only along the revealed links", () => {
+		const { renderer, harness } = setup(2);
+		harness.model = { edges: [
+			{ source: 0, target: 1 },
+			{ source: 2, target: 0 },
+		] } as unknown as GraphModel;
+
+		renderer.playPresentationPulse(0, [2]);
+
+		expect(harness.edgePulseBatch?.edgeIndices).toEqual([1]);
+		renderer.playPresentationPulse(null);
+		expect(harness.edgePulseBatch).toBeNull();
+	});
+
 	test("does not start motion when the operating system requests less motion", () => {
 		const { harness, getEdgePath } = setup();
 		harness._ownerWindow = ownerWindow(true);

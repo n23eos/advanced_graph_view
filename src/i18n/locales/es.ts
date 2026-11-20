@@ -14,6 +14,9 @@ export const es: Translation = {
 	"nodes.total": "Nodos",
 	"nodes.openSource": "Abrir nota de origen",
 
+	"screensaver.start": "Screensaver",
+	"screensaver.pause": "Pause",
+	"screensaver.resume": "Resume",
 	"panel.title": "Advanced Graph View",
 	"panel.section.presets": "Ajustes de vista",
 	"panel.section.appearance": "Apariencia",

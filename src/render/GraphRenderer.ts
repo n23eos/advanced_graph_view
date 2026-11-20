@@ -1,3 +1,4 @@
+import { edgeColor, edgeWorldWidth } from "./edgeAppearance";
 import { renderResolution } from "../settings/renderResolution";
 import type { RenderScale } from "../settings/schema";
 import type { CameraState } from "../view/workspaceState";
@@ -56,11 +57,10 @@ const LABEL_COUNT_LIMIT = 150;
 const TINY_NODE_CULL_PX = 0.35; // nodes smaller than this on screen are skipped
 /** Host-size changes smaller than this are noise, not a real pane resize. */
 const EDGE_ALPHA = 0.25;
-const OVERVIEW_EDGE_ALPHA_FACTOR = 0.17;
-const OVERVIEW_EDGE_WIDTH_FACTOR = 0.85;
+const OVERVIEW_EDGE_ALPHA_FACTOR = 0.36;
 const HOVER_EDGE_LIMIT = 120;
 const HOVER_EDGE_FADE_MS = 180;
-const HOVER_EDGE_WIDTH_PX = 1.05;
+const HOVER_EDGE_WIDTH_PX = 1.35;
 const FOLDER_COLORS = [0x508bd7, 0x53bba7, 0xaf79d2, 0xe0a456, 0x72a95d];
 // Text rasterization is expensive; creating many labels in one frame causes
 // visible hitches during panning, so budget creations per frame.
@@ -226,6 +226,7 @@ export class GraphRenderer {
 	private trailProgress = 1;
 	private exploreGraphics = new Graphics();
 	private explore: ExploreOverlay | null = null;
+	private presentationLinks: number | null = null;
 	private pathGraphics = new Graphics();
 	/** Node chain of the current "shortest path" pick, in order. */
 	private pathNodeIds: number[] = [];
@@ -274,6 +275,7 @@ export class GraphRenderer {
 	/** true: labels live in world scale and tiny ones hide (scamin). */
 	private labelScaleWithZoom = true;
 	private edgeWidth = 1;
+	private edgeZoom = 1;
 	private edgeOpacity = EDGE_ALPHA;
 	private edgesVisible = true;
 	private modernAppearance = false;
@@ -393,6 +395,8 @@ export class GraphRenderer {
 				autoStart: false,
 				antialias: false, // MSAA on 30k edge lines costs several ms/frame; glow sprites hide the aliasing
 				backgroundAlpha: 0,
+				// DOM overlays can repaint between on-demand WebGL draws.
+				preserveDrawingBuffer: true,
 				// An array is an allowlist in Pixi 8. A string is only a preference
 				// and silently falls back to Canvas, which cannot render EdgeMesh.
 				preference: ["webgl"],
@@ -530,6 +534,7 @@ export class GraphRenderer {
 		if (!this.app || !this.nodeTexture || !this.colors) return;
 		this.invalidate();
 		this.model = model;
+		this.encodedTints = null;
 		this.clearModernLabels();
 		this.fittedCameraDistance = 0;
 		this.folders = this.modernAppearance ? groupGraphFolders(model.nodes, this.folderMode) : [];
@@ -592,8 +597,8 @@ export class GraphRenderer {
 		this.edgeMesh = new EdgeMesh(pairs, this.colors.edge, this.effectiveEdgeAlpha(), this.modernAppearance
 			? { curvature: this.edgeCurvature, segments: 3, nodeKeys: this.model.nodes.map((node) => node.path) }
 			: undefined);
+		this.syncEdgePalette();
 		this.edgeMesh.setVisible(this.edgesVisible);
-		this.edgeMesh.setWidth(this.effectiveEdgeWidth());
 		this.world.addChildAt(this.edgeMesh.mesh, 1);
 		this.syncEdgeVisibility();
 	}
@@ -826,7 +831,10 @@ export class GraphRenderer {
 	applyEncoding(sizes: Float32Array, tints: Int32Array, glow: Float32Array): void {
 		if (!this.radii || sizes.length !== this.sprites.length) return;
 		this.invalidate();
-		this.encodedTints = tints;
+		if (this.encodedTints !== tints) {
+			this.encodedTints = tints;
+			this.syncEdgePalette();
+		}
 		this.encodedGlow = glow;
 		let maxRadius = 0;
 		for (let i = 0; i < this.sprites.length; i++) {
@@ -885,6 +893,7 @@ export class GraphRenderer {
 		const world = this.modernAppearance && this.camera.enabled && this.positions3
 			? { positions3d: this.positions3, projector: this.camera, zOverride: this.depthOverride }
 			: undefined;
+		this.edgeMesh?.setWidth(this.effectiveEdgeWidth());
 		this.edgeMesh?.updatePositions(this.positions, depth, world);
 	}
 
@@ -1180,6 +1189,18 @@ export class GraphRenderer {
 		return best;
 	}
 
+	isPresentationNodeVisible(id: number): boolean {
+		return Number.isInteger(id) && id >= 0 && id < (this.model?.nodes.length ?? 0)
+			&& this.hiddenMask?.[id] !== 1 && this.nodePosition(id) !== null;
+	}
+
+	orbitPresentation(pivot: { x: number; y: number; z: number }, radius: number, yaw: number, pitch: number): void {
+		this.camera.yaw = yaw;
+		this.camera.pitch = pitch;
+		const [x, y, z] = this.camera.forward();
+		this.placeCamera({ x: pivot.x - x * radius, y: pivot.y - y * radius, z: pivot.z - z * radius }, pivot);
+	}
+
 	/** Camera position in world space — the start point of an explore flight. */
 	get cameraPosition(): { x: number; y: number; z: number } {
 		return { x: this.camera.px, y: this.camera.py, z: this.camera.pz };
@@ -1206,11 +1227,24 @@ export class GraphRenderer {
 		this.callbacks.onCameraChanged?.();
 	}
 
+	setPresentationLinks(emphasis: number | null): void {
+		if (this.presentationLinks === emphasis) return;
+		this.presentationLinks = emphasis;
+		this.exploreGraphics.alpha = emphasis ?? 1;
+		this.edgeMesh?.setAlpha(this.effectiveEdgeAlpha());
+		this.invalidate();
+	}
+
+	playPresentationPulse(id: number | null, neighbors?: readonly number[]): void {
+		this.startEdgePulses(id, neighbors);
+	}
+
 	private redrawExplore(): void {
 		const g = this.exploreGraphics;
 		g.clear();
 		const overlay = this.explore;
-		if (!overlay || !this.positions || !this.colors) return;
+		if (!overlay || !this.positions || !this.colors ||
+			(this.presentationLinks !== null && !this.edgesVisible)) return;
 
 		const centerX = this.positions[overlay.centerId * 2];
 		const centerY = this.positions[overlay.centerId * 2 + 1];
@@ -1229,9 +1263,14 @@ export class GraphRenderer {
 				g.moveTo(centerX, centerY);
 				g.lineTo(x, y);
 			}
+			const presentation = this.presentationLinks !== null;
+			const color = presentation ? edgeColor(
+				this.encodedTints?.[overlay.centerId] ?? -1, this.encodedTints?.[id] ?? -1,
+				this.colors.nodeSelected, this.colors.label
+			) : isCandidate ? this.colors.nodeSelected : this.colors.edge;
 			g.stroke({
-				color: isCandidate ? this.colors.nodeSelected : this.colors.edge,
-				alpha: isCandidate ? EXPLORE_CANDIDATE_ALPHA : EXPLORE_LINK_ALPHA,
+				color,
+				alpha: presentation ? 0.78 : isCandidate ? EXPLORE_CANDIDATE_ALPHA : EXPLORE_LINK_ALPHA,
 				width: isCandidate ? EXPLORE_CANDIDATE_WIDTH : EXPLORE_LINK_WIDTH,
 			});
 
@@ -1679,6 +1718,11 @@ export class GraphRenderer {
 			this.positionsDirty = false;
 		}
 
+		const zoom = this.camera.enabled ? 1 : (this.viewport?.scale ?? 1);
+		if (zoom !== this.edgeZoom) {
+			this.edgeZoom = zoom;
+			this.edgesDirty = true;
+		}
 		if (this.edgesDirty) {
 			this.edgesDirty = false;
 			this.updateEdgeGeometry();
@@ -1933,7 +1977,6 @@ export class GraphRenderer {
 		}
 		this.syncOverviewStyle();
 		this.edgeMesh?.setAlpha(this.effectiveEdgeAlpha());
-		this.edgeMesh?.setWidth(this.effectiveEdgeWidth());
 		this.invalidate();
 	}
 
@@ -1946,21 +1989,27 @@ export class GraphRenderer {
 
 	private effectiveEdgeAlpha(): number {
 		return this.edgeOpacity * (this.overviewStyle ? OVERVIEW_EDGE_ALPHA_FACTOR : 1) *
-			(this.explore ? EXPLORE_BACKGROUND_EDGE_DIM : 1);
+			(this.presentationLinks === null
+				? this.explore ? EXPLORE_BACKGROUND_EDGE_DIM : 1
+				: 0.42 + (EXPLORE_BACKGROUND_EDGE_DIM - 0.42) * this.presentationLinks);
 	}
 
 	private effectiveEdgeWidth(): number {
-		return this.edgeWidth * (this.overviewStyle ? OVERVIEW_EDGE_WIDTH_FACTOR : 1);
+		return edgeWorldWidth(this.edgeWidth, this.camera.enabled ? 1 : (this.viewport?.scale ?? 1));
+	}
+
+	private syncEdgePalette(): void {
+		if (this.colors) this.edgeMesh?.setPalette(this.encodedTints, this.colors.nodeSelected, this.colors.label);
 	}
 
 	setEdgeStyle(show: boolean, width: number, opacity: number): void {
 		this.invalidate();
 		this.edgesVisible = show;
+		if (this.edgeWidth !== width) this.edgesDirty = true;
 		this.edgeWidth = width;
 		this.edgeOpacity = opacity;
 		this.edgeMesh?.setVisible(show);
 		this.edgeMesh?.setAlpha(this.effectiveEdgeAlpha());
-		this.edgeMesh?.setWidth(this.effectiveEdgeWidth());
 		if (!show) this.clearEdgePulses(false);
 	}
 
@@ -1988,7 +2037,7 @@ export class GraphRenderer {
 		this.clearModernLabels();
 		for (const label of this.labels.values()) label.destroy();
 		this.labels.clear();
-		this.edgeMesh?.setColor(this.colors.edge);
+		this.syncEdgePalette();
 		this.positionsDirty = true;
 		this.edgesDirty = true;
 	}
@@ -2186,16 +2235,20 @@ export class GraphRenderer {
 		return this.modernAppearance || this.overviewStyle;
 	}
 
-	private startEdgePulses(origin: number | null): void {
+	private startEdgePulses(origin: number | null, neighbors?: readonly number[]): void {
 		if (origin === null || !this.edgesVisible ||
 			this.hiddenMask?.[origin] === 1 || !this._ownerWindow ||
 			(typeof this._ownerWindow.matchMedia === "function" && prefersReducedMotion(this._ownerWindow))) {
 			this.clearEdgePulses();
 			return;
 		}
-		const visibleIncident = (this.incidentEdges[origin] ?? []).filter((edgeIndex) =>
-			this.edgeMesh?.getEdgePath(edgeIndex, this.edgePath) === true
-		);
+		const visibleIncident = (this.incidentEdges[origin] ?? []).filter((edgeIndex) => {
+			if (neighbors) {
+				const edge = this.model?.edges[edgeIndex];
+				if (!edge || !neighbors.includes(edge.source === origin ? edge.target : edge.source)) return false;
+			}
+			return this.edgeMesh?.getEdgePath(edgeIndex, this.edgePath) === true;
+		});
 		const edgeIndices = selectPulseEdges(visibleIncident);
 		if (edgeIndices.length === 0) {
 			this.clearEdgePulses();
@@ -2322,7 +2375,7 @@ export class GraphRenderer {
 		}
 		if (count > 0) graphics.stroke({
 			color: this.colors.nodeSelected,
-			alpha: 0.58,
+			alpha: 0.83,
 			width: HOVER_EDGE_WIDTH_PX / Math.max(0.001, this.viewport?.scale ?? 1),
 		});
 	}

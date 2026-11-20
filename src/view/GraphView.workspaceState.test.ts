@@ -144,7 +144,7 @@ describe("GraphInsightView workspace state", () => {
 		view.toggleOverview();
 		expect(view.getState()).toMatchObject(savedState({ camera, overview: true }));
 		expect(setOverviewStyle).toHaveBeenLastCalledWith(true);
-		expect(setModernAppearance).toHaveBeenLastCalledWith(true, 0.1, false);
+		expect(setModernAppearance).toHaveBeenLastCalledWith(true, 0.18, false);
 		const reopened = harness();
 		await reopened.view.setState(view.getState(), { history: false });
 		expect(reopened.view.getState()).toMatchObject(savedState({ camera, overview: true }));

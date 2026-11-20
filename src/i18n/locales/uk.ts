@@ -14,6 +14,9 @@ export const uk: Translation = {
 	"nodes.total": "Вузли",
 	"nodes.openSource": "Відкрити вихідну нотатку",
 
+	"screensaver.start": "Screensaver",
+	"screensaver.pause": "Pause",
+	"screensaver.resume": "Resume",
 	"panel.title": "Advanced Graph View",
 	"panel.section.presets": "Пресети вигляду",
 	"panel.section.appearance": "Вигляд",

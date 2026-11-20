@@ -1,5 +1,7 @@
 import { Mesh, MeshGeometry, Texture, type Buffer } from "pixi.js";
 
+import { createEdgeTexture, edgeColor, writeEdgeUVs } from "./edgeAppearance";
+
 export interface EdgeMeshOptions {
 	/** Control-point offset as a fraction of endpoint distance. Zero is straight. */
 	curvature?: number;
@@ -99,6 +101,8 @@ function quadratic(start: number, control: number, end: number, t: number): numb
 export class EdgeMesh {
 	readonly mesh: Mesh;
 	private readonly vertices: Float32Array;
+	private readonly uvs: Float32Array;
+	private edgeTexture: Texture | null = null;
 	private readonly positionBuffer: Buffer;
 	private readonly geometry: MeshGeometry;
 	private readonly edgePairs: Uint32Array;
@@ -117,8 +121,6 @@ export class EdgeMesh {
 	private width = 1;
 	private hiddenNodes: Uint8Array | null = null;
 	private lastPositions: Float32Array | null = null;
-	private lastDepthScales: Float32Array | null = null;
-	private lastSpatial: EdgeSpatialProjection | null = null;
 
 	constructor(
 		edgePairs: Uint32Array,
@@ -178,9 +180,10 @@ export class EdgeMesh {
 			}
 		}
 
+		this.uvs = new Float32Array(this.vertices.length);
 		this.geometry = new MeshGeometry({
 			positions: this.vertices,
-			uvs: new Float32Array(this.vertices.length),
+			uvs: this.uvs,
 			indices,
 			topology: "triangle-list",
 		});
@@ -194,20 +197,27 @@ export class EdgeMesh {
 		this.mesh.alpha = alpha;
 	}
 
-	setColor(color: number): void {
-		this.mesh.tint = color;
+	setPalette(nodeTints: Int32Array | null, accent: number, foreground: number): void {
+		if (!this.edgeTexture) {
+			this.edgeTexture = createEdgeTexture();
+			this.mesh.texture = this.edgeTexture;
+			this.mesh.tint = 0xffffff;
+		}
+		for (let edge = 0; edge < this.pathVisible.length; edge++) {
+			const source = nodeTints?.[this.edgePairs[edge * 2]] ?? -1;
+			const target = nodeTints?.[this.edgePairs[edge * 2 + 1]] ?? -1;
+			writeEdgeUVs(this.uvs, edge * this.segmentCount * 8, this.segmentCount, edgeColor(source, target, accent, foreground));
+		}
+		this.geometry.getBuffer("aUV").update();
 	}
 
 	setVisible(visible: boolean): void {
 		this.mesh.visible = visible;
 	}
 
-	/** World-units line width; re-applies the last known positions. */
+	/** World-units line width for the next geometry update. */
 	setWidth(width: number): void {
 		this.width = width;
-		if (this.lastPositions) {
-			this.updatePositions(this.lastPositions, this.lastDepthScales, this.lastSpatial);
-		}
 	}
 
 	setHiddenNodes(mask: Uint8Array | null): void {
@@ -225,8 +235,6 @@ export class EdgeMesh {
 		spatial?: EdgeSpatialProjection | null
 	): void {
 		this.lastPositions = nodePositions;
-		this.lastDepthScales = depthScales ?? null;
-		this.lastSpatial = spatial ?? null;
 		if (this.segmentCount === 1) {
 			this.updateStraightPathsAndVertices(nodePositions, depthScales ?? null);
 		} else if (spatial) {
@@ -335,6 +343,11 @@ export class EdgeMesh {
 		return true;
 	}
 
+	/** Preserve perspective without losing distant strands below a pixel. */
+	private strokeDepth(depth: number): number {
+		return this.edgeTexture ? 0.2 + 0.8 * Math.min(depth, 2.4) : depth;
+	}
+
 	private updateStraightPathsAndVertices(
 		nodePositions: Float32Array,
 		depthScales: Float32Array | null
@@ -359,7 +372,7 @@ export class EdgeMesh {
 			const dy = y2 - y1;
 			const length = Math.hypot(dx, dy) || 1;
 			const half = depthScales
-				? this.width * (depthScales[source] + depthScales[target]) * 0.25
+				? this.width * this.strokeDepth((depthScales[source] + depthScales[target]) * 0.5) * 0.5
 				: this.width / 2;
 			const px = (-dy / length) * half;
 			const py = (dx / length) * half;
@@ -529,14 +542,14 @@ export class EdgeMesh {
 					const dx = x2 - x1;
 					const dy = y2 - y1;
 					const length = Math.sqrt(dx * dx + dy * dy) || 1;
-					const offset = this.width * this.pathDepths![point] * 0.5 / length;
+					const offset = this.width * this.strokeDepth(this.pathDepths![point]) * 0.5 / length;
 					endPx = -dy * offset;
 					endPy = dx * offset;
 				}
 				const startPx = endPx;
 				const startPy = endPy;
 				const endLength = Math.sqrt(endDx * endDx + endDy * endDy) || 1;
-				const endOffset = this.width * this.pathDepths![point + 1] * 0.5 / endLength;
+				const endOffset = this.width * this.strokeDepth(this.pathDepths![point + 1]) * 0.5 / endLength;
 				endPx = -endDy * endOffset;
 				endPy = endDx * endOffset;
 				const vertex = edgeVertex + segment * 8;
@@ -559,6 +572,7 @@ export class EdgeMesh {
 		const indexBuffer = this.geometry.indexBuffer;
 		// Texture.WHITE and the default shader belong to Pixi, not this mesh.
 		this.mesh.destroy({ texture: false, textureSource: false });
+		this.edgeTexture?.destroy(true);
 		// Pixi's Geometry.destroy(true) destroys the index buffer twice.
 		this.geometry.destroy(false);
 		for (const buffer of buffers) {

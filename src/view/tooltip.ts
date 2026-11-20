@@ -27,6 +27,8 @@ export interface TooltipControllerDeps {
 }
 
 export class TooltipController {
+	private anchor: { x: number; y: number } | null = null;
+
 	constructor(private readonly deps: TooltipControllerDeps) {}
 
 	private get app() { return this.deps.getApp(); }
@@ -51,13 +53,11 @@ export class TooltipController {
 			this.tooltip.hide();
 			return;
 		}
-		// The tooltip trails the cursor on every move, but only its position.
-		const rect = this.contentEl.getBoundingClientRect();
-		this.tooltip.style.left = `${clientX - rect.left + 12}px`;
-		this.tooltip.style.top = `${clientY - rect.top + 12}px`;
-		// Same node: don't rebuild or re-read \u2014 that would cancel the pending
-		// preview read on every micro-movement of the mouse.
-		if (nodeId === this.tooltipNodeId) return;
+		this.anchor = { x: clientX, y: clientY };
+		if (nodeId === this.tooltipNodeId) {
+			this.positionTooltip();
+			return;
+		}
 		this.tooltipNodeId = nodeId;
 		this.deps.clearPreviewTimer();
 
@@ -82,6 +82,7 @@ export class TooltipController {
 			if (channels.color) encoding.createSpan({ text: `${t("appearance.color")}: ${metricLabel(channels.color)}` });
 		}
 		this.tooltip.show();
+		this.positionTooltip();
 
 		const preview = this.plugin.settings.hoverPreview;
 		if (preview.enabled) {
@@ -98,6 +99,21 @@ export class TooltipController {
 		}
 	}
 
+	private positionTooltip(): void {
+		const tooltip = this.tooltip;
+		if (!tooltip || !this.anchor) return;
+		const bounds = this.contentEl.getBoundingClientRect();
+		const x = this.anchor.x - bounds.left;
+		const y = this.anchor.y - bounds.top;
+		const place = (anchor: number, size: number, limit: number) => {
+			const gap = 12;
+			const preferred = anchor + gap + size <= limit ? anchor + gap : anchor - gap - size;
+			return Math.max(0, Math.min(preferred, limit - size));
+		};
+		tooltip.style.left = `${place(x, tooltip.offsetWidth, bounds.width)}px`;
+		tooltip.style.top = `${place(y, tooltip.offsetHeight, bounds.height)}px`;
+	}
+
 	clearPreviewTimer(): void {
 		if (this.previewTimer !== null) {
 			this.viewWindow?.clearTimeout(this.previewTimer);
@@ -112,6 +128,7 @@ export class TooltipController {
 		if (generation !== this.openGeneration || tooltip !== this.tooltip ||
 			nodeId !== this.tooltipNodeId || !tooltip || !text) return;
 		tooltip.createDiv({ cls: "graph-insight-tooltip-preview", text });
+		this.positionTooltip();
 	}
 
 	async notePreview(nodeId: number, words: number): Promise<string | null> {

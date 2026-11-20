@@ -3,6 +3,7 @@ import { isAttachmentNode } from "../data/graphNodes";
 import { buildVaultGraph } from "../data/vaultGraph";
 import { NativeHoverPreview } from "./nativeHoverPreview";
 import { applyExplorePanelOverride, ExploreBindings } from "./exploreBindings";
+import { GraphScreensaver } from "./GraphScreensaver";
 import { TooltipController } from "./tooltip";
 import { ChangesController } from "./changesController";
 import { ExportActions } from "./exportActions";
@@ -95,9 +96,6 @@ const POSITION_SAVE_DEBOUNCE_MS = 5000;
 const WORKSPACE_SAVE_DEBOUNCE_MS = 300;
 /** How long the session trail takes to redraw itself end to end. */
 const TRAIL_REPLAY_MS = 4000;
-/** World-unit collision radius at nodeScale 1. 0 = no size-based repulsion
- *  (nodes may overlap; layout spacing comes from charge + links only). */
-const COLLIDE_BASE_RADIUS = 0;
 /** How dim the rest of the graph goes while explore mode is running. Low
  *  enough to read as backdrop: the notes you can travel to must be the only
  *  thing competing for attention. */
@@ -336,6 +334,7 @@ export class GraphInsightView extends ItemView {
 	private hiddenMask: Uint8Array | null = null;
 	/** Path the graph itself just opened, so following can skip its own moves. */
 	private selfOpenedPath: string | null = null;
+	private screensaver: GraphScreensaver | null = null;
 	private tooltip: HTMLElement | null = null;
 	/** Node the tooltip currently describes; guards async preview reads and
 	 *  avoids rebuilding the tooltip on every same-node pointermove. */
@@ -481,6 +480,7 @@ export class GraphInsightView extends ItemView {
 
 	getState(): Record<string, unknown> {
 		const camera = this.pendingWorkspaceCamera?.camera
+			?? this.screensaver?.camera
 			?? this.renderer?.getCameraState()
 			?? this.lastWorkspaceCamera;
 		const state: Record<string, unknown> = {
@@ -595,6 +595,7 @@ export class GraphInsightView extends ItemView {
 	}
 
 	private handleCameraChanged(): void {
+		if (this.screensaver) return;
 		this.autoFit.cancel();
 		this.scheduleWorkspaceSave();
 	}
@@ -621,7 +622,7 @@ export class GraphInsightView extends ItemView {
 	}
 
 	private captureWorkspaceStateForReopen(): void {
-		const camera = this.renderer?.getCameraState();
+		const camera = this.screensaver?.camera ?? this.renderer?.getCameraState();
 		if (camera && this.pendingWorkspaceCamera === null) {
 			this.lastWorkspaceCamera = camera;
 			this.pendingWorkspaceCamera = { camera, revision: this.workspaceStateRevision };
@@ -666,9 +667,10 @@ export class GraphInsightView extends ItemView {
 		const renderer = new GraphRenderer({
 			onCameraChanged: () => this.handleCameraChanged(),
 			onNodePreview: (nodeId, event) => {
-				this.nativeHoverPreview?.hover(this.nativePreviewPath(nodeId), event);
+				if (!this.screensaver) this.nativeHoverPreview?.hover(this.nativePreviewPath(nodeId), event);
 			},
 			onNodeHover: (nodeId, clientX, clientY) => {
+				if (this.screensaver) return;
 				if (this.isExploring) this.showExploreTarget(nodeId, clientX, clientY);
 				else this.showTooltip(nodeId, clientX, clientY);
 			},
@@ -702,6 +704,7 @@ export class GraphInsightView extends ItemView {
 				this.savePositionsDebounced();
 			},
 			onExploreAim: (nodeId, clientX, clientY) => {
+				if (this.screensaver) return;
 				this.exploreSession?.aimAt(nodeId);
 				this.showExploreTarget(nodeId, clientX, clientY);
 			},
@@ -950,6 +953,7 @@ export class GraphInsightView extends ItemView {
 	}
 
 	private handleKeyDown(event: KeyboardEvent): void {
+		if (this.screensaver) return;
 		if (this.exploreNoteModal) return;
 		if (!this.contentEl.isShown()) return;
 		if (this.app.workspace.getActiveViewOfType(GraphInsightView) !== this) return;
@@ -2261,6 +2265,24 @@ export class GraphInsightView extends ItemView {
 
 	exportGexfFile(): void { this.exportActions.exportGexfFile(); }
 
+	get canStartScreensaver(): boolean {
+		return Boolean(this.renderer && this.model?.nodes.length && !this.screensaver && !this.isExploring);
+	}
+
+	startScreensaver(): void {
+		const renderer = this.renderer;
+		const camera = renderer?.getCameraState();
+		const model = this.model;
+		if (!renderer || !camera || !model || !this.canStartScreensaver) return;
+		this.autoFit.cancel();
+		this.nativeHoverPreview?.clear();
+		this.showTooltip(null, 0, 0);
+		const graph = { names: model.nodes.map(node => node.name), links: this.graphAdjacency() };
+		this.screensaver = new GraphScreensaver(this.contentEl, renderer, camera,
+			() => this.model === model ? graph : null, () => { this.screensaver = null; });
+		void this.screensaver.start();
+	}
+
 	/** The ONE place panel callbacks are defined — panel is rebuilt from
 	 *  here everywhere, so behavior can never diverge between copies. */
 	private buildPanel(state: PanelState): ControlPanel {
@@ -2296,6 +2318,7 @@ export class GraphInsightView extends ItemView {
 			},
 			onPresetDelete: (index) => void this.deleteViewPreset(index),
 			onModeChange: (mode) => void this.plugin.savePanelMode(mode),
+			onStartScreensaver: () => this.startScreensaver(),
 		}, this.plugin.settings.panelMode, this.plugin.settings.collapsedSections,
 		collectPropertyKeys(this.facts, state.channels.color), this.overview || this.currentAppearance.mode === "modern");
 	}
@@ -2505,16 +2528,13 @@ export class GraphInsightView extends ItemView {
 	/** Push slider values into the layout worker; reheat so they take hold. */
 	private applyPhysics(state: PanelState): void {
 		state = this.runtimePanelState(state);
-		// Bigger nodes need proportionally more elbow room, so fold node size
-		// into the collision radius and the change key.
-		const collideRadius = COLLIDE_BASE_RADIUS * state.nodeScale;
-		const key = `${JSON.stringify(state.physics)}|${state.nodeScale}`;
+		const key = JSON.stringify(state.physics);
 		if (key === this.lastPhysics) return;
 		this.lastPhysics = key;
 		// Slider values are tuned for a mid-size vault; rescale the spread to
 		// the actual node count before handing them to the worker.
 		const adapted = adaptPhysicsToGraphSize(state.physics, this.model?.nodes.length ?? 0);
-		this.layout?.setParams({ ...adapted, collideRadius });
+		this.layout?.setParams({ ...adapted, collideRadius: 0 });
 
 		// Physics off: the worker freezes itself; don't reheat it back to life.
 		if (state.physics.disabled) return;
@@ -2676,6 +2696,7 @@ export class GraphInsightView extends ItemView {
 	}
 
 	private async teardown(): Promise<void> {
+		this.screensaver?.stop();
 		this.nativeHoverPreview?.destroy();
 		this.nativeHoverPreview = null;
 		this.closing = true;

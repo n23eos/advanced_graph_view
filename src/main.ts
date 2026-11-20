@@ -239,6 +239,17 @@ export default class GraphInsightPlugin extends Plugin {
 		}));
 
 		this.addCommand({
+			id: "start-screensaver",
+			name: t("screensaver.start"),
+			checkCallback: (checking) => {
+				const view = this.getGraphView();
+				if (!view?.canStartScreensaver) return false;
+				if (!checking) view.startScreensaver();
+				return true;
+			},
+		});
+
+		this.addCommand({
 			id: "toggle-follow-active-note",
 			name: t("command.toggleFollow"),
 			checkCallback: (checking) => {

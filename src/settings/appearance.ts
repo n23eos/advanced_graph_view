@@ -116,7 +116,7 @@ export function applyRendererAppearanceFlag(renderer: unknown, appearance: Graph
 	const hubs = labels.hubs ?? DEFAULT_LABEL_APPEARANCE.hubs;
 	const curvature = edges.curvature ?? DEFAULT_EDGE_CURVATURE;
 	renderer.setOverviewStyle?.(overview);
-	if (overview) renderer.setModernAppearance(true, Math.min(curvature, 0.1), modern);
+	if (overview) renderer.setModernAppearance(true, curvature, modern);
 	else renderer.setModernAppearance(modern, curvature);
 	renderer.setLabelPresentation?.(
 		labels.hoverOnly ?? false,

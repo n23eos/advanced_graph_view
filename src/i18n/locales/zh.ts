@@ -14,6 +14,9 @@ export const zh: Translation = {
 	"nodes.total": "节点",
 	"nodes.openSource": "打开来源笔记",
 
+	"screensaver.start": "Screensaver",
+	"screensaver.pause": "Pause",
+	"screensaver.resume": "Resume",
 	"panel.title": "Advanced Graph View",
 	"panel.section.presets": "视图预设",
 	"panel.section.appearance": "外观",

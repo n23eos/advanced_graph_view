@@ -18,6 +18,9 @@ export const en = {
 	"nodes.openSource": "Open source note",
 
 	// ── Panel chrome ──────────────────────────────────────────────────
+	"screensaver.start": "Screensaver",
+	"screensaver.pause": "Pause",
+	"screensaver.resume": "Resume",
 	"panel.title": "Advanced Graph View",
 	"panel.section.presets": "View presets",
 	"panel.section.appearance": "Appearance",
