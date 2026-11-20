@@ -5,6 +5,9 @@ import GraphInsightPlugin from "../main";
 import { GraphInsightView } from "../view/GraphView";
 import { DEFAULT_SETTINGS, type GraphInsightSettings } from "./schema";
 import type { PanelState } from "../ui/ControlPanel";
+import { createGraphAppearance } from "./appearance";
+import { normalizeSettings } from "./normalize";
+import { createNewGraphViewState } from "../view/workspaceState";
 
 const host = vi.hoisted(() => ({
 	saveData: vi.fn<(data: unknown) => Promise<void>>(async () => {}),
@@ -96,6 +99,19 @@ afterEach(() => {
 });
 
 describe("panel settings persistence", () => {
+	test("a restored leaf saves shared physics without replacing the next graph's appearance", async () => {
+		const { plugin } = buildPlugin();
+		const initial = plugin.settings.panel;
+		const next = { ...panel(3), physics: { ...initial.physics, repel: 250 } };
+		await plugin.savePanelState(next, createGraphAppearance(next, "legacy"));
+		await plugin.flushSettings();
+		const restored = normalizeSettings(host.saveData.mock.lastCall?.[0]);
+		expect(restored.panel.physics.repel).toBe(250);
+		expect(createNewGraphViewState(restored.panel).appearance).toMatchObject({
+			mode: "modern", panel: { nodeScale: initial.nodeScale },
+		});
+	});
+
 	test("updates memory synchronously and coalesces twenty changes into one write after 400 ms", async () => {
 		vi.useFakeTimers();
 		const { plugin } = buildPlugin();

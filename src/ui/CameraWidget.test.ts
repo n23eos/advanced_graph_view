@@ -12,6 +12,7 @@ beforeAll(() => {
 function build() {
 	const onFit = vi.fn();
 	const onReset = vi.fn();
+	const onToggleOverview = vi.fn();
 	const callbacks: CameraWidgetCallbacks = {
 		onToggle3D: vi.fn(),
 		onToggleFreeLayout: vi.fn(),
@@ -19,10 +20,11 @@ function build() {
 		onReset,
 		onToggleUI: vi.fn(),
 		onToggleExplore: vi.fn(),
+		onToggleOverview,
 	};
 	const host = document.body.createDiv();
 	const widget = new CameraWidget(host, { enabled: true, depthSource: "physics", focal: 900 }, true, callbacks);
-	return { host, widget, onFit, onReset };
+	return { host, widget, onFit, onReset, onToggleOverview };
 }
 
 const byAria = (host: HTMLElement, label: string): HTMLButtonElement => {
@@ -35,6 +37,16 @@ describe("CameraWidget (F-06)", () => {
 	test("the X/Y offset sliders are gone", () => {
 		const { host } = build();
 		expect(host.querySelectorAll("input[type=range]").length).toBe(0);
+	});
+
+	test("overview is keyboard-addressable and reports its pressed state", () => {
+		const { host, widget, onToggleOverview } = build();
+		const button = byAria(host, "Toggle graph overview");
+		expect(button.getAttribute("aria-pressed")).toBe("false");
+		button.click();
+		expect(onToggleOverview).toHaveBeenCalledOnce();
+		widget.setOverview(true);
+		expect(button.getAttribute("aria-pressed")).toBe("true");
 	});
 
 	test("fit and reset are separate buttons with distinct labels and callbacks", () => {

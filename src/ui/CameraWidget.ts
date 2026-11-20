@@ -10,6 +10,7 @@ import type { View3DOptions } from "./ControlPanel";
 export interface CameraWidgetCallbacks {
 	onToggle3D(enabled: boolean): void;
 	onToggleFreeLayout(enabled: boolean): void;
+	onToggleOverview?(): void;
 	/** Frame the whole graph; never touches orientation. */
 	onFit(): void;
 	/** Deterministic home view: zero pan/orbit/zoom, then fit. */
@@ -22,6 +23,7 @@ export class CameraWidget {
 	private root: HTMLElement;
 	private button3d: HTMLButtonElement;
 	private buttonFree: HTMLButtonElement;
+	private overviewButton: HTMLButtonElement | null = null;
 	private exploreButton: HTMLElement;
 	private uiHidden = false;
 
@@ -45,11 +47,17 @@ export class CameraWidget {
 			this.callbacks.onToggle3D(!this.button3d.hasClass("is-active"));
 		});
 		this.button3d.toggleClass("is-active", state3d.enabled);
+		this.button3d.setAttribute("aria-pressed", String(state3d.enabled));
 
 		this.buttonFree = this.iconButton(header, "expand", t("camera.free"), () => {
 			this.callbacks.onToggleFreeLayout(!this.buttonFree.hasClass("is-active"));
 		});
 		this.buttonFree.toggleClass("is-active", freeLayout);
+
+		if (callbacks.onToggleOverview) {
+			this.overviewButton = this.iconButton(header, "map", t("camera.overview"), () => callbacks.onToggleOverview?.());
+			this.setOverview(false);
+		}
 
 		const fitButton = this.iconButton(header, "maximize", t("camera.fit"), () => this.callbacks.onFit());
 		fitButton.addClass("graph-insight-camera-secondary");
@@ -67,8 +75,12 @@ export class CameraWidget {
 		this.exploreButton.addEventListener("click", () => this.callbacks.onToggleExplore());
 	}
 
-	/** Light up the button while the mode is running, so it reads as a state
-	 *  and not as a one-shot action. */
+	setOverview(active: boolean): void {
+		this.overviewButton?.toggleClass("is-active", active);
+		this.overviewButton?.setAttribute("aria-pressed", String(active));
+	}
+
+	/** Reflect Explore state in the button. */
 	setExploring(active: boolean): void {
 		this.exploreButton.toggleClass("is-active", active);
 	}
@@ -87,8 +99,10 @@ export class CameraWidget {
 	}
 
 	/** Keep in step when 3D/free-layout is toggled from the main panel. */
-	sync(state3d: View3DOptions, freeLayout: boolean): void {
+	sync(state3d: View3DOptions, freeLayout: boolean, dimensionLocked = false): void {
+		this.button3d.disabled = dimensionLocked;
 		this.button3d.toggleClass("is-active", state3d.enabled);
+		this.button3d.setAttribute("aria-pressed", String(state3d.enabled));
 		this.buttonFree.toggleClass("is-active", freeLayout);
 	}
 

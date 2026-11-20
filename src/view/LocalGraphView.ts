@@ -15,6 +15,7 @@ import {
 	setIcon,
 	type Debouncer,
 	type EventRef,
+	type ViewStateResult,
 	type WorkspaceLeaf,
 } from "obsidian";
 import { type GraphModel } from "../data/GraphStore";
@@ -33,6 +34,13 @@ import { observeRendererVisibility } from "./rendererVisibility";
 import { t } from "../i18n";
 import { renderGraphStartupError } from "../ui/GraphStartupError";
 import type GraphInsightPlugin from "../main";
+import {
+	applyGraphAppearance,
+	applyRendererAppearanceFlag,
+	createGraphAppearance,
+	type GraphAppearance,
+} from "../settings/appearance";
+import { normalizeLocalGraphViewState } from "./workspaceState";
 
 export const LOCAL_GRAPH_VIEW_TYPE = "graph-insight-local";
 
@@ -67,12 +75,30 @@ export class LocalGraphView extends ItemView {
 	private reopenPromise: Promise<void> | null = null;
 	private closeEpoch = 0;
 	private readonly cancelAutoFit = () => this.autoFit.cancel();
+	private appearance: GraphAppearance;
 	/** Full-vault model, rebuilt only when the metadata cache says it changed.
 	 *  Switching notes or depth re-cuts the neighborhood from this. */
 	private vaultModel: GraphModel | null = null;
 
 	constructor(leaf: WorkspaceLeaf, private readonly plugin: GraphInsightPlugin) {
 		super(leaf);
+		this.appearance = createGraphAppearance(this.localFallbackPanel(), "legacy");
+	}
+
+	private localFallbackPanel() {
+		const panel = this.plugin.settings.panel;
+		return {
+			...panel,
+			view3d: { ...panel.view3d, enabled: this.plugin.settings.localGraph.view3d },
+		};
+	}
+
+	private get effectivePanelState() {
+		return applyGraphAppearance(this.plugin.settings.panel, this.appearance);
+	}
+
+	private applyRendererAppearance(): void {
+		applyRendererAppearanceFlag(this.renderer, this.appearance);
 	}
 
 	getViewType(): string {
@@ -85,6 +111,19 @@ export class LocalGraphView extends ItemView {
 
 	getIcon(): string {
 		return "orbit";
+	}
+
+	getState(): Record<string, unknown> {
+		return { version: 1, appearance: this.appearance };
+	}
+
+	async setState(state: unknown, _result: ViewStateResult): Promise<void> {
+		const normalized = normalizeLocalGraphViewState(state, this.localFallbackPanel());
+		if (!normalized) return;
+		this.appearance = normalized.appearance;
+		this.view3d = this.appearance.panel.view3d.enabled;
+		this.applyRendererAppearance();
+		if (this.rootPath && this.renderer) this.refresh(this.rootPath);
 	}
 
 	async onOpen(): Promise<void> {
@@ -101,7 +140,7 @@ export class LocalGraphView extends ItemView {
 		container.addClass("graph-insight-container");
 
 		this.depth = this.plugin.settings.localGraph.depth;
-		this.view3d = this.plugin.settings.localGraph.view3d;
+		this.view3d = this.effectivePanelState.view3d.enabled;
 
 		this.buildHeader(container);
 		const emptyState = container.createDiv({
@@ -128,6 +167,7 @@ export class LocalGraphView extends ItemView {
 			onContextLost: () => {},
 		});
 		this.renderer = renderer;
+		this.applyRendererAppearance();
 		try {
 			await renderer.init(container, this.plugin.settings.renderScale);
 		} catch (error) {
@@ -227,7 +267,14 @@ export class LocalGraphView extends ItemView {
 		this.viewDocument = null;
 	}
 
-	reloadFromSettings(): Promise<void> {
+	reloadFromSettings(appearance?: GraphAppearance): Promise<void> {
+		if (appearance) {
+			const panel = applyGraphAppearance(this.plugin.settings.panel, appearance);
+			this.appearance = createGraphAppearance({
+				...panel,
+				view3d: { ...panel.view3d, enabled: this.plugin.settings.localGraph.view3d },
+			}, appearance.mode);
+		}
 		return this.reopen();
 	}
 
@@ -312,8 +359,14 @@ export class LocalGraphView extends ItemView {
 		toggle3D.toggleClass("is-active", this.view3d);
 		toggle3D.addEventListener("click", () => {
 			this.view3d = !this.view3d;
+			const panel = this.effectivePanelState;
+			this.appearance = createGraphAppearance({
+				...panel,
+				view3d: { ...panel.view3d, enabled: this.view3d },
+			}, this.appearance.mode);
 			toggle3D.toggleClass("is-active", this.view3d);
 			void this.plugin.saveLocalGraph({ depth: this.depth, view3d: this.view3d });
+			void this.app.workspace.requestSaveLayout();
 			if (this.rootPath) this.refresh(this.rootPath);
 		});
 
@@ -369,19 +422,21 @@ export class LocalGraphView extends ItemView {
 		const sub = neighborhood.model;
 		this.renderer.setModel(sub);
 		this.renderer.set3DMode(this.view3d);
-		this.renderer.setCameraFocal(this.plugin.settings.panel.view3d.focal);
+		const panel = this.effectivePanelState;
+		this.renderer.setCameraFocal(panel.view3d.focal);
 
-		const labels = this.plugin.settings.panel.labels;
+		const labels = panel.labels;
 		this.renderer.setLabelOptions(true, labels.fontSize, 0, sub.nodes.length, labels.scaleWithZoom);
-		const edges = this.plugin.settings.panel.edges;
+		const edges = panel.edges;
 		this.renderer.setEdgeStyle(true, edges.width, edges.opacity);
 
 		// Same scheme as the main graph, sampled by ring so distance reads as
 		// color instead of leaving the whole neighborhood one flat grey.
-		const preset = activePreset(this.plugin.settings.panel.colorPreset, this.viewDocument ?? undefined);
+		const preset = activePreset(panel.colorPreset, this.viewDocument ?? undefined);
 		this.renderer.setVisualStyle(
-			effectiveNodeStyle(this.plugin.settings.panel.nodeStyle, isLightTheme(this.viewDocument ?? undefined)),
-			preset.backdrop ?? null
+			effectiveNodeStyle(panel.nodeStyle, isLightTheme(this.viewDocument ?? undefined)),
+			preset.backdrop ?? null,
+			panel.colorPreset
 		);
 		// Size still comes from how linked a note is — a hub neighbor has to
 		// look like a hub — with the root scaled up as the anchor of the view.
@@ -390,7 +445,7 @@ export class LocalGraphView extends ItemView {
 		for (const node of sub.nodes) {
 			const anchor = neighborhood.depths[node.id] === 0 ? ROOT_SIZE_BOOST : 1;
 			sizes[node.id] =
-				degreeRadius(node.inCount + node.outCount) * anchor * this.plugin.settings.panel.nodeScale;
+				degreeRadius(node.inCount + node.outCount) * anchor * panel.nodeScale;
 			glow[node.id] = 1;
 		}
 		this.renderer.applyEncoding(sizes, ringTints(neighborhood.depths, this.depth, preset), glow);
@@ -407,7 +462,7 @@ export class LocalGraphView extends ItemView {
 
 		this.autoFit.request();
 		this.layout.start(sub, undefined, this.view3d ? 3 : 2);
-		const physics = this.plugin.settings.panel.physics;
+		const physics = panel.physics;
 		this.layout.setParams({
 			...adaptPhysicsToGraphSize(physics, sub.nodes.length),
 			freeLayout: true,

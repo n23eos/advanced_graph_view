@@ -14,7 +14,7 @@ import { pointInPolygon } from "../analysis/geometry";
 import type { GraphModel } from "../data/GraphStore";
 import { DRAG_THRESHOLD_PX, dragTargetPosition, isDragGesture } from "./dragMath";
 import { ClickDispatcher } from "./clickDispatcher";
-import { EdgeMesh } from "./EdgeMesh";
+import { createEdgePathView, EdgeMesh } from "./EdgeMesh";
 import { DEAD_ZONE_PX, MAX_AIM_ANGLE, pickAimedNeighbor } from "../explore/aiming";
 import { HOVER_RADIUS_PX, pickNodeAt } from "./hitTest";
 import {
@@ -29,13 +29,26 @@ import {
 	degreeRadius,
 	MAX_NODE_RADIUS,
 } from "./nodeAppearance";
-import { createNodeTexture, createRingTexture, createStarTexture, STAR_SIZE_FACTOR } from "./NodeTexture";
+import { NodeTextureCache, nodeCoreRatio, STAR_SIZE_FACTOR } from "./NodeTexture";
 import type { NodeStyle } from "./nodeStyle";
-import { overlapsAny, type LabelBox } from "./labelCollision";
+import { LabelCollisionGrid, overlapsAny, type LabelBox } from "./labelCollision";
+import { placeLabelCandidates, selectLabelCandidates, type LabelId, type LabelLayoutCandidate, type LabelRole } from "./labelLayout";
+import { groupGraphFolders } from "./folderLabels";
+import { categoryColor } from "../encoding/colorScales";
+import { adaptColorToTheme } from "../encoding/themeContrast";
+import { isLightTheme } from "./theme";
 import { SMOOTH_FACTOR, easePositions } from "./positionSmoothing";
 import { Camera3D } from "./projection";
 import { Viewport } from "./Viewport";
 import { isMeaningfulResize } from "./resizeGate";
+import { motionMs, prefersReducedMotion } from "./motion";
+import { LabelOverlay, type OverlayLabel } from "./LabelOverlay";
+import {
+	edgePulsePhase,
+	pulseDelay,
+	selectPulseEdges,
+	slicePackedPath,
+} from "./edgePulse";
 
 const DEFAULT_LABEL_ZOOM_THRESHOLD = 0.9;
 const DEFAULT_LABEL_FONT_SIZE = 11;
@@ -43,6 +56,12 @@ const LABEL_COUNT_LIMIT = 150;
 const TINY_NODE_CULL_PX = 0.35; // nodes smaller than this on screen are skipped
 /** Host-size changes smaller than this are noise, not a real pane resize. */
 const EDGE_ALPHA = 0.25;
+const OVERVIEW_EDGE_ALPHA_FACTOR = 0.17;
+const OVERVIEW_EDGE_WIDTH_FACTOR = 0.85;
+const HOVER_EDGE_LIMIT = 120;
+const HOVER_EDGE_FADE_MS = 180;
+const HOVER_EDGE_WIDTH_PX = 1.05;
+const FOLDER_COLORS = [0x508bd7, 0x53bba7, 0xaf79d2, 0xe0a456, 0x72a95d];
 // Text rasterization is expensive; creating many labels in one frame causes
 // visible hitches during panning, so budget creations per frame.
 const NEW_LABELS_PER_FRAME = 4;
@@ -108,6 +127,12 @@ interface ThemeColors {
 	label: number;
 }
 
+interface EdgePulseBatch {
+	origin: number;
+	startedAt: number;
+	edgeIndices: number[];
+}
+
 /** Resolved inside `parent`, so container-scoped variable overrides (the
  *  graph's own light/dark theme) win over the Obsidian body theme. */
 function cssColorToNumber(value: string, parent: HTMLElement, ownerWindow: Window): number {
@@ -139,11 +164,17 @@ function drawArrowHead(
 	x1: number, y1: number, x2: number, y2: number,
 	color: number, alpha: number
 ): void {
-	const angle = Math.atan2(y2 - y1, x2 - x1);
-	const size = 6;
 	// Head sits at 65% of the segment so it stays visible outside node circles.
 	const hx = x1 + (x2 - x1) * 0.65;
 	const hy = y1 + (y2 - y1) * 0.65;
+	drawArrowTip(g, hx, hy, x2 - x1, y2 - y1, color, alpha);
+}
+
+function drawArrowTip(
+	g: Graphics, hx: number, hy: number, dx: number, dy: number, color: number, alpha: number
+): void {
+	const angle = Math.atan2(dy, dx);
+	const size = 6;
 	g.moveTo(hx, hy);
 	g.lineTo(hx - size * Math.cos(angle - 0.4), hy - size * Math.sin(angle - 0.4));
 	g.moveTo(hx, hy);
@@ -158,7 +189,8 @@ function readThemeColors(host: HTMLElement, ownerWindow: Window): ThemeColors {
 		node: cssColorToNumber(read("--graph-node", "var(--text-muted)"), host, ownerWindow),
 		nodeSelected: cssColorToNumber(read("--interactive-accent", "#7c3aed"), host, ownerWindow),
 		edge: cssColorToNumber(read("--graph-line", "var(--background-modifier-border)"), host, ownerWindow),
-		label: cssColorToNumber(read("--text-muted", "#888888"), host, ownerWindow),
+		label: cssColorToNumber(read("--text-normal", isLightTheme(host.ownerDocument) ? "#1f2937" : "#f4f4f5"),
+			host, ownerWindow),
 	};
 }
 
@@ -179,7 +211,16 @@ export class GraphRenderer {
 	private frameNow = () => performance.now();
 	private world = new Container();
 	private edgeMesh: EdgeMesh | null = null;
+	private readonly edgePath = createEdgePathView();
 	private hullGraphics = new Graphics();
+	private hoverEdgeGraphics = new Graphics();
+	private edgePulseGraphics = new Graphics();
+	private incidentEdges: number[][] = [];
+	private highlightedEdgeNode: number | null = null;
+	private hoverEdgeOpacity = 0;
+	private hoverEdgeFrameAt = 0;
+	private edgePulseBatch: EdgePulseBatch | null = null;
+	private readonly edgePulseScratch: number[] = [];
 	private trailGraphics = new Graphics();
 	private trailNodeIds: number[] = [];
 	private trailProgress = 1;
@@ -192,8 +233,28 @@ export class GraphRenderer {
 	private pinnedIds: ReadonlySet<number> = new Set();
 	private nodeLayer = new Container();
 	private labelLayer = new Container();
+	private labelOverlay: LabelOverlay | null = null;
 	private sprites: Sprite[] = [];
 	private labels = new Map<number, Text>();
+	private folderLabels = new Map<string, Text>();
+	private folderGraphics = new Graphics();
+	private folders: ReturnType<typeof groupGraphFolders> = [];
+	private labelGrid = new LabelCollisionGrid();
+	private labelFades = new Map<LabelId, { label: Text; target: number; placement: number }>();
+	private labelClock = 0;
+	private fittedCameraDistance = 0;
+	private searchLabelIds: readonly number[] = [];
+	private labelImportance: Float32Array | null = null;
+	private modernLabelOrder: number[] = [];
+	private labelHubCount = 8;
+	private hoverOnlyLabels = false;
+	private labelFadeMs = 180;
+	private folderLabelsEnabled = true;
+	private folderMode: "top" | "parent" = "top";
+	private folderColors: Readonly<Record<string, string>> = {};
+	private glowIntensity = 1;
+	private nodeTextureCache: NodeTextureCache | null = null;
+	private colorScheme = "recency";
 	private nodeTexture: Texture | null = null;
 	/** Wide-halo variant used by the glow ("galaxy") color schemes. */
 	private starTexture: Texture | null = null;
@@ -215,6 +276,11 @@ export class GraphRenderer {
 	private edgeWidth = 1;
 	private edgeOpacity = EDGE_ALPHA;
 	private edgesVisible = true;
+	private modernAppearance = false;
+	private preferCoreHitRadius = false;
+	private overviewStyle = false;
+	private backdrop: number | null = null;
+	private edgeCurvature = 0.13;
 	/** Halo color behind label glyphs — theme background for contrast. */
 	private labelHalo = 0x000000;
 
@@ -238,6 +304,7 @@ export class GraphRenderer {
 	 *  (sprites, edges, culling, hit tests, hulls) only ever sees these. */
 	private positions: Float32Array | null = null;
 	private radii: Float32Array | null = null;
+	private projectedCoreRadii = new Float32Array(0);
 	private positionsDirty = false;
 	private edgesDirty = false;
 	private cullDirty = false;
@@ -315,7 +382,7 @@ export class GraphRenderer {
 		this._ownerWindow = ownerWindow;
 		this.frameNow = () => ownerWindow.performance.now();
 		this.host = host;
-		const canvas = ownerWindow.createEl("canvas");
+		const canvas = ownerWindow.createEl("canvas", { cls: "graph-insight-scene" });
 		const app = new Application();
 		try {
 			await app.init({
@@ -353,16 +420,19 @@ export class GraphRenderer {
 		app.canvas.addEventListener("webglcontextlost", this.handleContextLost);
 
 		this.colors = readThemeColors(host, ownerWindow);
+		if (this.overviewStyle) this.syncOverviewStyle();
 		this.labelHalo = cssColorToNumber(
 			ownerWindow.getComputedStyle(host).getPropertyValue("--background-primary").trim() || "#1e1e1e",
 			host,
 			ownerWindow
 		);
-		this.nodeTexture = createNodeTexture(app.renderer);
-		this.starTexture = createStarTexture(app.renderer);
-		this.ringTexture = createRingTexture(app.renderer);
+		this.nodeTextureCache = new NodeTextureCache(app.renderer);
+		this.refreshNodeTextures();
 		this.world.addChild(
 			this.hullGraphics,
+			this.folderGraphics,
+			this.hoverEdgeGraphics,
+			this.edgePulseGraphics,
 			this.nodeLayer,
 			this.pinGraphics,
 			this.labelLayer,
@@ -437,6 +507,7 @@ export class GraphRenderer {
 		if (this.destroyed) return;
 		this.paused = true;
 		this.stopFrames();
+		this.clearEdgePulses(false);
 		// Persist the latest worker frame even if smoothing had not reached it
 		// when the pane was hidden. Projection can wait until the pane returns.
 		if (this.smoothing && this.targetPositions3) {
@@ -459,6 +530,17 @@ export class GraphRenderer {
 		if (!this.app || !this.nodeTexture || !this.colors) return;
 		this.invalidate();
 		this.model = model;
+		this.clearModernLabels();
+		this.fittedCameraDistance = 0;
+		this.folders = this.modernAppearance ? groupGraphFolders(model.nodes, this.folderMode) : [];
+		this.searchLabelIds = [];
+		this.labelImportance = null;
+		this.rebuildModernLabelOrder();
+		this.incidentEdges = Array.from({ length: model.nodes.length }, () => []);
+		this.highlightedEdgeNode = null;
+		this.hoverEdgeOpacity = 0;
+		this.hoverEdgeGraphics.clear();
+		this.clearEdgePulses(false);
 		this.positions3 = new Float32Array(model.nodes.length * 3);
 		this.targetPositions3 = null;
 		this.smoothing = false;
@@ -466,17 +548,14 @@ export class GraphRenderer {
 		this.positions = new Float32Array(model.nodes.length * 2);
 		this.depthScales = new Float32Array(model.nodes.length);
 		this.radii = new Float32Array(model.nodes.length);
+		this.projectedCoreRadii = new Float32Array(model.nodes.length);
 
-		this.edgeMesh?.destroy();
-		const edgePairs = new Uint32Array(model.edges.length * 2);
 		for (let i = 0; i < model.edges.length; i++) {
-			edgePairs[i * 2] = model.edges[i].source;
-			edgePairs[i * 2 + 1] = model.edges[i].target;
+			const { source, target } = model.edges[i];
+			this.incidentEdges[source].push(i);
+			if (source !== target) this.incidentEdges[target].push(i);
 		}
-		this.edgeMesh = new EdgeMesh(edgePairs, this.colors.edge, this.edgeOpacity);
-		this.edgeMesh.setVisible(this.edgesVisible);
-		this.edgeMesh.setWidth(this.edgeWidth);
-		this.world.addChildAt(this.edgeMesh.mesh, 1); // above hulls, below nodes
+		this.rebuildEdgeMesh();
 
 		this.nodeLayer.removeChildren();
 		for (const label of this.labels.values()) label.destroy();
@@ -493,11 +572,30 @@ export class GraphRenderer {
 			if (this.nodeStyle === "glow") sprite.blendMode = "add";
 			sprite.setSize(radius * 2 * this.spriteScale);
 			this.sprites.push(sprite);
+			this.projectedCoreRadii[node.id] = radius * this.spriteScale * nodeCoreRatio(this.nodeStyle);
 			this.nodeLayer.addChild(sprite);
 		}
 		this.rebuildLabelPriority();
 		this.edgesDirty = true;
 		this.cullDirty = true;
+	}
+
+	private rebuildEdgeMesh(): void {
+		if (!this.colors || !this.model) return;
+		this.edgeMesh?.destroy();
+		const pairs = new Uint32Array(this.model.edges.length * 2);
+		for (let i = 0; i < this.model.edges.length; i++) {
+			const edge = this.model.edges[i];
+			pairs[i * 2] = edge.source;
+			pairs[i * 2 + 1] = edge.target;
+		}
+		this.edgeMesh = new EdgeMesh(pairs, this.colors.edge, this.effectiveEdgeAlpha(), this.modernAppearance
+			? { curvature: this.edgeCurvature, segments: 3, nodeKeys: this.model.nodes.map((node) => node.path) }
+			: undefined);
+		this.edgeMesh.setVisible(this.edgesVisible);
+		this.edgeMesh.setWidth(this.effectiveEdgeWidth());
+		this.world.addChildAt(this.edgeMesh.mesh, 1);
+		this.syncEdgeVisibility();
 	}
 
 	/** New xyz frame from the layout worker (stride 3). It becomes the target
@@ -532,6 +630,9 @@ export class GraphRenderer {
 			this.positions3.length !== positions3.length
 		) {
 			this.positions3 = new Float32Array(positions3);
+			if (this.modernAppearance && this.fittedCameraDistance === 0 && positions3.length > 0) {
+				this.fittedCameraDistance = this.cloudBounds().distance;
+			}
 			this.hasWorkerFrame = true;
 			this.smoothing = false;
 			this.reproject();
@@ -614,32 +715,38 @@ export class GraphRenderer {
 			this.camera.pz = 0;
 			return;
 		}
+		const { cx, cy, cz, distance } = this.cloudBounds();
+		const [fx, fy, fz] = this.camera.forward();
+		this.fittedCameraDistance = distance;
+		this.camera.px = cx - fx * distance;
+		this.camera.py = cy - fy * distance;
+		this.camera.pz = cz - fz * distance;
+		this.camera.tx = cx;
+		this.camera.ty = cy;
+		this.camera.tz = cz;
+	}
+
+	private cloudBounds(): { cx: number; cy: number; cz: number; distance: number } {
 		let cx = 0, cy = 0, cz = 0;
-		const count = this.positions3.length / 3;
+		const positions = this.positions3;
+		if (!positions?.length) return { cx, cy, cz, distance: 1 };
+		const count = positions.length / 3;
 		for (let i = 0; i < count; i++) {
-			cx += this.positions3[i * 3];
-			cy += this.positions3[i * 3 + 1];
-			cz += this.positions3[i * 3 + 2];
+			cx += positions[i * 3];
+			cy += positions[i * 3 + 1];
+			cz += positions[i * 3 + 2];
 		}
 		cx /= count; cy /= count; cz /= count;
 		let radius = 1;
 		for (let i = 0; i < count; i++) {
 			const d = Math.hypot(
-				this.positions3[i * 3] - cx,
-				this.positions3[i * 3 + 1] - cy,
-				this.positions3[i * 3 + 2] - cz
+				positions[i * 3] - cx,
+				positions[i * 3 + 1] - cy,
+				positions[i * 3 + 2] - cz
 			);
 			if (d > radius) radius = d;
 		}
-		const [fx, fy, fz] = this.camera.forward();
-		const distance = radius * 1.6;
-		this.camera.px = cx - fx * distance;
-		this.camera.py = cy - fy * distance;
-		this.camera.pz = cz - fz * distance;
-		// Remember the center so orbiting pivots exactly around it.
-		this.camera.tx = cx;
-		this.camera.ty = cy;
-		this.camera.tz = cz;
+		return { cx, cy, cz, distance: radius * 1.6 };
 	}
 
 	/** Fit every visible node into the viewport. */
@@ -766,9 +873,19 @@ export class GraphRenderer {
 		this.hiddenMask = mask;
 		this.syncEdgeVisibility();
 		if (this.positions) {
-			this.edgeMesh?.updatePositions(this.positions, this.camera.enabled ? this.depthScales : null);
+			this.updateEdgeGeometry();
+			this.edgesDirty = true;
 		}
 		this.cullDirty = true;
+	}
+
+	private updateEdgeGeometry(): void {
+		if (!this.positions) return;
+		const depth = this.camera.enabled ? this.depthScales : null;
+		const world = this.modernAppearance && this.camera.enabled && this.positions3
+			? { positions3d: this.positions3, projector: this.camera, zOverride: this.depthOverride }
+			: undefined;
+		this.edgeMesh?.updatePositions(this.positions, depth, world);
 	}
 
 	/** Edges must vanish for user-hidden nodes AND nodes behind the camera —
@@ -803,12 +920,18 @@ export class GraphRenderer {
 				i === this.hoveredId,
 				this.highlightMask !== null && this.highlightMask[i] === 1
 			);
-			this.sprites[i].setSize(this.spriteDiameter(i, depth, boost));
+			this.setNodeDiameter(i, depth, boost);
 		}
 		if (this.hoveredId !== null) {
 			// zIndex only matters when the layer is sorted (3D mode).
 			this.sprites[this.hoveredId].zIndex = Number.MAX_SAFE_INTEGER;
 		}
+	}
+
+	private setNodeDiameter(id: number, depth: number, boost: number): void {
+		const diameter = this.spriteDiameter(id, depth, boost);
+		this.sprites[id].setSize(diameter);
+		this.projectedCoreRadii[id] = diameter * 0.5 * nodeCoreRatio(this.nodeStyle);
 	}
 
 	private applyNodeAlpha(): void {
@@ -928,6 +1051,13 @@ export class GraphRenderer {
 		const ids = this.pathNodeIds;
 		if (ids.length < 2 || !this.positions || !this.colors) return;
 		for (let i = 0; i < ids.length - 1; i++) {
+			if (this.modernAppearance) {
+				if (!this.edgeMesh?.findEdgePath(ids[i], ids[i + 1], this.edgePath)) continue;
+				this.traceEdge(g);
+				g.stroke({ color: PATH_LINK_COLOR, alpha: 1, width: PATH_LINK_WIDTH });
+				this.drawCurveArrow(g, PATH_LINK_COLOR, 1);
+				continue;
+			}
 			const x1 = this.positions[ids[i] * 2];
 			const y1 = this.positions[ids[i] * 2 + 1];
 			const x2 = this.positions[ids[i + 1] * 2];
@@ -983,7 +1113,7 @@ export class GraphRenderer {
 		// the nodes are dimmed, so fade the whole edge mesh while the mode
 		// draws its own links on top of it.
 		if (wasExploring !== (overlay !== null)) {
-			this.edgeMesh?.setAlpha(overlay ? this.edgeOpacity * EXPLORE_BACKGROUND_EDGE_DIM : this.edgeOpacity);
+			this.edgeMesh?.setAlpha(this.effectiveEdgeAlpha());
 		}
 		// Explore owns node emphasis even though hit testing still drives the
 		// tooltip and direct clicks. Clear the old normal-mode hover styling.
@@ -1092,8 +1222,13 @@ export class GraphRenderer {
 			const y = this.positions[id * 2 + 1];
 			const isCandidate = id === overlay.candidateId;
 
-			g.moveTo(centerX, centerY);
-			g.lineTo(x, y);
+			if (this.modernAppearance) {
+				if (!this.edgeMesh?.findEdgePath(overlay.centerId, id, this.edgePath)) continue;
+				this.traceEdge(g);
+			} else {
+				g.moveTo(centerX, centerY);
+				g.lineTo(x, y);
+			}
 			g.stroke({
 				color: isCandidate ? this.colors.nodeSelected : this.colors.edge,
 				alpha: isCandidate ? EXPLORE_CANDIDATE_ALPHA : EXPLORE_LINK_ALPHA,
@@ -1102,8 +1237,333 @@ export class GraphRenderer {
 
 			// An arrow on the aimed link says which way the trip would go —
 			// with two notes lit up, the direction is the missing half.
-			if (isCandidate) drawArrowHead(g, centerX, centerY, x, y, this.colors.nodeSelected, 1);
+			if (isCandidate) {
+				if (this.modernAppearance) this.drawCurveArrow(g, this.colors.nodeSelected, 1);
+				else drawArrowHead(g, centerX, centerY, x, y, this.colors.nodeSelected, 1);
+			}
 		}
+	}
+
+	private traceEdge(graphics: Graphics): void {
+		const { points, offset, pointCount, reversed } = this.edgePath;
+		const stride = reversed ? -2 : 2;
+		let cursor = reversed ? offset + (pointCount - 1) * 2 : offset;
+		graphics.moveTo(points[cursor], points[cursor + 1]);
+		for (let i = 1; i < pointCount; i++) {
+			cursor += stride;
+			graphics.lineTo(points[cursor], points[cursor + 1]);
+		}
+	}
+
+	setSearchLabels(ids: readonly number[]): void {
+		this.searchLabelIds = ids.length <= 8 ? ids.slice() : [];
+		this.cullDirty = true;
+		this.invalidate();
+	}
+
+	setLabelImportance(importance: Float32Array | null): void {
+		if (this.labelImportance === importance) return;
+		this.labelImportance = importance;
+		this.rebuildModernLabelOrder();
+		this.cullDirty = true;
+		this.invalidate();
+	}
+
+	setLabelPresentation(hoverOnly: boolean, hubs: number, fadeMs: number): void {
+		if (this.hoverOnlyLabels === hoverOnly && this.labelHubCount === hubs && this.labelFadeMs === fadeMs) return;
+		this.hoverOnlyLabels = hoverOnly;
+		this.labelHubCount = hubs;
+		this.labelFadeMs = fadeMs;
+		this.cullDirty = true;
+		this.invalidate();
+	}
+
+	setFolderPresentation(enabled: boolean, level: "top" | "parent", colors: Readonly<Record<string, string>>): void {
+		if (this.folderMode !== level && this.model) this.folders = groupGraphFolders(this.model.nodes, level);
+		this.folderMode = level;
+		this.folderLabelsEnabled = enabled;
+		this.folderColors = colors;
+		this.cullDirty = true;
+		this.invalidate();
+	}
+
+	setGlowIntensity(intensity: number): void {
+		if (this.glowIntensity === intensity) return;
+		this.glowIntensity = intensity;
+		this.nodeTextureCache?.invalidate("glow");
+		this.refreshNodeTextures();
+		if (this.nodeStyle === "glow" && this.starTexture) {
+			for (const sprite of this.sprites) sprite.texture = this.starTexture;
+		}
+		this.invalidate();
+	}
+
+	private rebuildModernLabelOrder(): void {
+		const nodes = this.model?.nodes;
+		if (!nodes || !this.modernAppearance) {
+			this.modernLabelOrder = [];
+			return;
+		}
+		this.modernLabelOrder = Array.from(nodes.keys()).sort((a, b) =>
+			this.importanceOf(b) - this.importanceOf(a) ||
+			(nodes[a].path < nodes[b].path ? -1 : nodes[a].path > nodes[b].path ? 1 : 0));
+	}
+
+	private importanceOf(id: number): number {
+		const node = this.model!.nodes[id];
+		return this.labelImportance?.[id] ?? node.inCount + node.outCount;
+	}
+
+	private clearModernLabels(): void {
+		for (const { label } of this.labelFades.values()) label.visible = false;
+		for (const label of this.folderLabels.values()) label.destroy();
+		this.folderLabels.clear();
+		this.labelFades.clear();
+		this.folderGraphics.clear();
+		this.labelClock = 0;
+	}
+
+	private layoutFolderLabels(
+		opacity: number, candidates: LabelLayoutCandidate[], valid: (id: number) => boolean, scale: number
+	): Map<string, { x: number; y: number; name: string }> {
+		const centers = new Map<string, { x: number; y: number; name: string }>();
+		this.folderGraphics.clear();
+		if (opacity <= 0 || !this.positions || !this.colors) return centers;
+		const light = this.host ? isLightTheme(this.host.ownerDocument) : false;
+		for (const folder of this.folders) {
+			let sumX = 0, sumY = 0, sumSquares = 0, visible = 0;
+			for (const id of folder.ids) {
+				if (!valid(id)) continue;
+				const x = this.positions[id * 2];
+				const y = this.positions[id * 2 + 1];
+				sumX += x;
+				sumY += y;
+				sumSquares += x * x + y * y;
+				visible++;
+			}
+			if (visible < 3) continue;
+			const x = sumX / visible;
+			const y = sumY / visible;
+			const spread = Math.sqrt(Math.max(0, sumSquares / visible - x * x - y * y));
+			const radius = Math.max(18 / scale, Math.min(150 / scale, spread));
+			const custom = Object.hasOwn(this.folderColors, folder.path) ? this.folderColors[folder.path] : undefined;
+			const color = custom && this.host
+				? cssColorToNumber(custom, this.host, this.ownerWindow)
+				: adaptColorToTheme(categoryColor(folder.path, FOLDER_COLORS), light);
+			for (const fraction of [1, 0.8, 0.6, 0.4]) {
+				this.folderGraphics.circle(x, y, radius * fraction);
+				this.folderGraphics.fill({ color, alpha: opacity * 0.025 });
+			}
+			centers.set(folder.path, { x, y, name: folder.name });
+			candidates.push({
+				id: folder.path, stableKey: folder.path, role: "group", importance: visible,
+				minZoom: 0, zoom: 1, wasVisible: this.labelFades.has(folder.path), placements: [],
+			});
+			if (centers.size >= 12) break;
+		}
+		return centers;
+	}
+
+	private advanceLabelFades(force: boolean): void {
+		if (!this.modernAppearance || this.labelFades.size === 0) return;
+		const now = this.frameNow();
+		const owner = this._ownerWindow;
+		const duration = owner?.matchMedia ? motionMs(this.labelFadeMs, owner) : this.labelFadeMs;
+		const step = force || duration <= 0 ? 1 : Math.max(1, Math.min(50, now - this.labelClock)) / duration;
+		this.labelClock = now;
+		for (const [id, fade] of this.labelFades) {
+			const difference = fade.target - fade.label.alpha;
+			if (difference !== 0) {
+				fade.label.alpha += Math.sign(difference) * Math.min(step, Math.abs(difference));
+				this.invalidate();
+			}
+			if (fade.target !== 0 || fade.label.alpha >= 0.001) continue;
+			fade.label.visible = false;
+			this.labelFades.delete(id);
+			this.cullDirty = true;
+		}
+	}
+
+	private createTextLabel(text: string): Text {
+		const label = new Text({
+			text,
+			style: {
+				fontFamily: this.labelFontFamily(), fontSize: this.labelFontSize, fill: this.colors!.label,
+				fontWeight: "500",
+				stroke: { color: this.labelHalo, width: Math.max(1.75, this.labelFontSize / 5) },
+			},
+			resolution: 2,
+		});
+		label.anchor.set(0.5, 0);
+		this.labelLayer.addChild(label);
+		return label;
+	}
+
+	private cullModernLabels(isOnScreen: (id: number) => boolean, complete: boolean): void {
+		if (!this.model || !this.positions || !this.viewport || !this.colors) return;
+		const scale = this.viewport.scale;
+		const distance = Math.hypot(this.camera.px - this.camera.tx, this.camera.py - this.camera.ty,
+			this.camera.pz - this.camera.tz);
+		const sceneZoom = this.camera.enabled
+			? this.fittedCameraDistance / Math.max(1, distance) || 1
+			: scale / Math.max(0.00001, this.viewport.referenceScale);
+		const valid = (id: number) => id >= 0 && id < this.model!.nodes.length && isOnScreen(id) &&
+			!this.hiddenMask?.[id] && this.depthScales?.[id] !== 0;
+		const candidates: LabelLayoutCandidate[] = [];
+		const seen = new Set<number>();
+		const add = (id: number | null, role: LabelRole, minZoom = 0) => {
+			if (id === null || seen.has(id) || !valid(id)) return;
+			seen.add(id);
+			const depth = this.camera.enabled ? this.depthScales?.[id] ?? 1 : 1;
+			candidates.push({
+				id, role, minZoom, zoom: this.camera.enabled ? depth : sceneZoom,
+				stableKey: this.model!.nodes[id].path, importance: this.importanceOf(id),
+				wasVisible: (this.labelFades.get(id)?.target ?? 0) > 0, placements: [],
+			});
+		};
+		const show = this.labelsVisible;
+		const budget = show ? this.labelMaxCount : 0;
+		if (show) {
+			add(this.hoveredId, "pointer");
+			if (!this.hoverOnlyLabels) add(this.selectedId, "selected");
+			if (this.explore) {
+				add(this.explore.centerId, "action");
+				add(this.explore.candidateId, "action");
+				for (const id of this.explore.neighbors) add(id, "neighbor");
+			}
+			for (const id of this.pathNodeIds) add(id, "action");
+			if (!this.hoverOnlyLabels) for (const id of this.searchLabelIds) add(id, "search");
+			if (this.hoveredId !== null) for (const id of this.hoverNeighbors) add(id, "neighbor");
+			if (!this.explore && !this.hoverOnlyLabels) {
+				const threshold = Math.max(0, this.labelZoomThreshold);
+				const detail = this.camera.enabled ? 1 :
+					Math.max(0, Math.min(1, (sceneZoom - threshold + 0.1) / Math.max(0.1, threshold)));
+				const normalLimit = this.labelHubCount + Math.round(detail * Math.max(0, budget * 2 - this.labelHubCount));
+				let count = 0;
+				for (const id of this.modernLabelOrder) {
+					if (!valid(id) || seen.has(id)) continue;
+					if (count >= normalLimit) break;
+					if (count < this.labelHubCount) {
+						add(id, "hub");
+						count++;
+						continue;
+					}
+					const wasVisible = (this.labelFades.get(id)?.target ?? 0) > 0;
+					if (this.camera.enabled && (this.depthScales?.[id] ?? 1) < threshold - (wasVisible ? 0.1 : 0)) continue;
+					add(id, "normal", threshold);
+					count++;
+				}
+			}
+		}
+		const groupOpacity = show && this.folderLabelsEnabled && !this.explore && !this.hoverOnlyLabels
+			? Math.max(0, Math.min(1, (1.9 - sceneZoom) / 0.65)) : 0;
+		const centers = this.layoutFolderLabels(groupOpacity, candidates, valid, scale);
+		const ranked = selectLabelCandidates(candidates, { hysteresis: 0.1 });
+		const active = new Set(ranked.map((candidate) => candidate.id));
+		const reserved: LabelBox[] = [];
+		const originX = this.world.position.x;
+		const originY = this.world.position.y;
+		for (const [id, fade] of this.labelFades) {
+			if (typeof id === "number" && !valid(id)) {
+				fade.label.visible = false;
+				this.labelFades.delete(id);
+				continue;
+			}
+			fade.target = 0;
+			if (!active.has(id) && fade.label.alpha > 0.18) {
+				reserved.push({
+					x: (fade.label.x - fade.label.width / 2) * scale + originX - 3,
+					y: fade.label.y * scale + originY - 2,
+					width: fade.label.width * scale + 6, height: fade.label.height * scale + 4,
+				});
+			}
+		}
+
+		let createBudget = complete ? Infinity : NEW_LABELS_PER_FRAME;
+		const measured: LabelLayoutCandidate[] = [];
+		const labels = new Map<LabelId, Text>();
+		for (const candidate of ranked.slice(0, Math.max(8, budget * 2))) {
+			const id = candidate.id;
+			const oldFade = this.labelFades.get(id);
+			const existing = typeof id === "number" ? this.labels.get(id) : this.folderLabels.get(id);
+			if (!existing && createBudget <= 0) {
+				this.cullDirty = true;
+				continue;
+			}
+			const previousAlpha = oldFade?.label.alpha ?? 0;
+			let label: Text;
+			let anchorX: number;
+			let anchorY: number;
+			let gap: number;
+			if (typeof id === "number") {
+				anchorX = this.positions[id * 2];
+				anchorY = this.positions[id * 2 + 1];
+				gap = this.projectedCoreRadii[id] + 4 / scale;
+				const lastX = existing?.x ?? 0;
+				const lastY = existing?.y ?? 0;
+				this.ensureLabel(id, anchorX, anchorY);
+				label = this.labels.get(id)!;
+				if (oldFade) label.position.set(lastX, lastY);
+			} else {
+				const center = centers.get(id);
+				if (!center) continue;
+				anchorX = center.x;
+				anchorY = center.y;
+				gap = 2 / scale;
+				label = existing ?? this.createTextLabel(center.name);
+				if (!existing) this.folderLabels.set(id, label);
+			}
+			if (!existing) createBudget--;
+			labels.set(id, label);
+			label.alpha = previousAlpha;
+			const baseSize = this.labelScaleWithZoom ? Math.max(0.8, Math.min(1.2, candidate.zoom)) : 1;
+			const emphasis = candidate.role === "pointer" || candidate.role === "selected" || candidate.role === "action"
+				? 1.08
+				: candidate.role === "neighbor" || candidate.role === "group" ? 1.04 : 1;
+			const labelSize = Math.min(1.25, baseSize * emphasis);
+			label.scale.set(labelSize / scale);
+			const w = label.width * scale + 6;
+			const h = label.height * scale + 4;
+			const x = anchorX * scale + originX;
+			const y = anchorY * scale + originY;
+			const pad = gap * scale;
+			measured.push({
+				...candidate,
+				placements: [
+					{ x: x - w / 2, y: y + pad, width: w, height: h },
+					{ x: x - w / 2, y: y - pad - h, width: w, height: h },
+					{ x: x + pad, y: y - h / 2, width: w, height: h },
+					{ x: x - pad - w, y: y - h / 2, width: w, height: h },
+				],
+				preferredPlacement: oldFade?.placement,
+			});
+		}
+		for (const placement of placeLabelCandidates(measured, this.labelGrid, { budget, reservations: reserved })) {
+			const label = labels.get(placement.id)!;
+			const { box } = placement;
+			label.position.set((box.x + box.width / 2 - originX) / scale, (box.y + 2 - originY) / scale);
+			label.visible = true;
+			this.labelFades.set(placement.id, {
+				label, target: placement.role === "group" ? groupOpacity : 1, placement: placement.placementIndex,
+			});
+			labels.delete(placement.id);
+		}
+		for (const [id, label] of labels) {
+			if (!this.labelFades.has(id)) label.visible = false;
+		}
+	}
+
+	private drawCurveArrow(graphics: Graphics, color: number, alpha: number): void {
+		const { points, offset, pointCount, reversed } = this.edgePath;
+		const progress = (pointCount - 1) * (reversed ? 0.35 : 0.65);
+		const segment = Math.floor(progress);
+		const index = offset + segment * 2;
+		const dx = points[index + 2] - points[index];
+		const dy = points[index + 3] - points[index + 1];
+		const fraction = progress - segment;
+		const direction = reversed ? -1 : 1;
+		drawArrowTip(graphics, points[index] + dx * fraction, points[index + 1] + dy * fraction,
+			dx * direction, dy * direction, color, alpha);
 	}
 
 	/** Current viewport rendered at 2x into a PNG blob. */
@@ -1111,11 +1571,18 @@ export class GraphRenderer {
 		if (!this.app || this.contextLost || this.destroyed) return null;
 		try {
 			this.renderFrame(true);
-			const canvas = this.app.renderer.extract.canvas({
-				target: this.app.stage,
-				frame: this.app.screen,
-				resolution: 2,
-			}) as HTMLCanvasElement;
+			const usesDomLabels = this.labelOverlay !== null;
+			if (usesDomLabels) this.labelLayer.renderable = true;
+			let canvas: HTMLCanvasElement;
+			try {
+				canvas = this.app.renderer.extract.canvas({
+					target: this.app.stage,
+					frame: this.app.screen,
+					resolution: 2,
+				}) as HTMLCanvasElement;
+			} finally {
+				if (usesDomLabels) this.labelLayer.renderable = false;
+			}
 			return await new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), "image/png"));
 		} catch (error) {
 			console.error("Advanced Graph View: PNG export failed", error);
@@ -1167,6 +1634,7 @@ export class GraphRenderer {
 		this.updateScene(force);
 		const now = this.frameNow();
 		if (force || !RENDER_ON_DEMAND || this.needsRender || now - this.lastRenderAt >= MAX_IDLE_RENDER_MS) {
+			this.syncLabelOverlay();
 			this.app.render();
 			this.needsRender = false;
 			this.lastRenderAt = now;
@@ -1204,7 +1672,7 @@ export class GraphRenderer {
 						i === this.hoveredId,
 						this.highlightMask !== null && this.highlightMask[i] === 1
 					);
-					sprite.setSize(this.spriteDiameter(i, depth, boost));
+					this.setNodeDiameter(i, depth, boost);
 					sprite.zIndex = i === this.hoveredId ? Number.MAX_SAFE_INTEGER : depth;
 				}
 			}
@@ -1213,12 +1681,15 @@ export class GraphRenderer {
 
 		if (this.edgesDirty) {
 			this.edgesDirty = false;
-			this.edgeMesh?.updatePositions(this.positions, this.camera.enabled ? this.depthScales : null);
+			this.updateEdgeGeometry();
+			this.redrawHoverEdges();
 			this.redrawTrail();
 			this.redrawExplore();
 			this.redrawPath();
 			this.redrawPins();
 		}
+		this.advanceHoverEdges();
+		this.advanceEdgePulses();
 		if (this.cullDirty || force) {
 			const now = this.frameNow();
 			// Culling correctness can lag a frame or two; don't let it eat
@@ -1232,6 +1703,7 @@ export class GraphRenderer {
 				this.cullAndLabel(force);
 			}
 		}
+		this.advanceLabelFades(force);
 	}
 
 	private lastCullAt = 0;
@@ -1271,6 +1743,10 @@ export class GraphRenderer {
 			const bigEnough = (this.spriteDiameter(i, 1, 1) / 2) * scale >= TINY_NODE_CULL_PX;
 			const hidden = this.hiddenMask !== null && this.hiddenMask[i] === 1;
 			this.sprites[i].visible = isOnScreen(i) && bigEnough && !hidden;
+		}
+		if (this.modernAppearance) {
+			this.cullModernLabels(isOnScreen, complete);
+			return;
 		}
 
 		// Labels go to the most important (largest) nodes first, not to
@@ -1417,10 +1893,64 @@ export class GraphRenderer {
 		this.labelMaxCount = maxCount;
 		this.labelScaleWithZoom = scaleWithZoom;
 		if (changed) {
+			this.clearModernLabels();
 			for (const label of this.labels.values()) label.destroy();
 			this.labels.clear();
 		}
 		this.cullDirty = true;
+	}
+
+	setModernAppearance(enabled: boolean, curvature = 0.13, preferCoreHitRadius = enabled): void {
+		// Overview can borrow modern visuals while a legacy view keeps its hit area.
+		this.preferCoreHitRadius = preferCoreHitRadius;
+		const nextCurvature = Number.isFinite(curvature) ? Math.max(0, Math.min(1, curvature)) : 0.13;
+		if (this.modernAppearance === enabled && this.edgeCurvature === nextCurvature) return;
+		this.modernAppearance = enabled;
+		if (enabled && this.fittedCameraDistance === 0 && this.positions3?.length) {
+			this.fittedCameraDistance = this.cloudBounds().distance;
+		}
+		this.clearModernLabels();
+		for (const label of this.labels.values()) label.visible = false;
+		this.folders = enabled && this.model ? groupGraphFolders(this.model.nodes, this.folderMode) : [];
+		this.rebuildModernLabelOrder();
+		this.edgeCurvature = nextCurvature;
+		this.highlightedEdgeNode = null;
+		this.hoverEdgeOpacity = 0;
+		this.hoverEdgeGraphics.clear();
+		this.rebuildEdgeMesh();
+		this.edgesDirty = true;
+		this.cullDirty = true;
+		this.invalidate();
+	}
+
+	setOverviewStyle(enabled: boolean): void {
+		if (this.overviewStyle === enabled) return;
+		this.overviewStyle = enabled;
+		if (!enabled && !this.modernAppearance) {
+			this.highlightedEdgeNode = null;
+			this.hoverEdgeOpacity = 0;
+			this.hoverEdgeGraphics.clear();
+		}
+		this.syncOverviewStyle();
+		this.edgeMesh?.setAlpha(this.effectiveEdgeAlpha());
+		this.edgeMesh?.setWidth(this.effectiveEdgeWidth());
+		this.invalidate();
+	}
+
+	private syncOverviewStyle(): void {
+		if (!this.host) return;
+		this.host.classList.toggle("graph-insight-overview", this.overviewStyle);
+		this.syncBackdrop();
+	}
+
+
+	private effectiveEdgeAlpha(): number {
+		return this.edgeOpacity * (this.overviewStyle ? OVERVIEW_EDGE_ALPHA_FACTOR : 1) *
+			(this.explore ? EXPLORE_BACKGROUND_EDGE_DIM : 1);
+	}
+
+	private effectiveEdgeWidth(): number {
+		return this.edgeWidth * (this.overviewStyle ? OVERVIEW_EDGE_WIDTH_FACTOR : 1);
 	}
 
 	setEdgeStyle(show: boolean, width: number, opacity: number): void {
@@ -1429,8 +1959,9 @@ export class GraphRenderer {
 		this.edgeWidth = width;
 		this.edgeOpacity = opacity;
 		this.edgeMesh?.setVisible(show);
-		this.edgeMesh?.setAlpha(opacity);
-		this.edgeMesh?.setWidth(width);
+		this.edgeMesh?.setAlpha(this.effectiveEdgeAlpha());
+		this.edgeMesh?.setWidth(this.effectiveEdgeWidth());
+		if (!show) this.clearEdgePulses(false);
 	}
 
 	/**
@@ -1448,11 +1979,13 @@ export class GraphRenderer {
 		this.invalidate();
 		this.cullDirty = true;
 		this.colors = readThemeColors(this.host, this.ownerWindow);
+		if (this.overviewStyle) this.syncOverviewStyle();
 		this.labelHalo = cssColorToNumber(
 			this.ownerWindow.getComputedStyle(this.host).getPropertyValue("--background-primary").trim() || "#1e1e1e",
 			this.host,
 			this.ownerWindow
 		);
+		this.clearModernLabels();
 		for (const label of this.labels.values()) label.destroy();
 		this.labels.clear();
 		this.edgeMesh?.setColor(this.colors.edge);
@@ -1460,13 +1993,16 @@ export class GraphRenderer {
 		this.edgesDirty = true;
 	}
 
-	setVisualStyle(style: NodeStyle, backdrop: number | null): void {
+	setVisualStyle(style: NodeStyle, backdrop: number | null, schemeId = this.colorScheme): void {
 		this.invalidate();
-		if (this.app) {
-			this.app.renderer.background.alpha = backdrop === null ? 0 : 1;
-			if (backdrop !== null) this.app.renderer.background.color = backdrop;
+		this.backdrop = backdrop;
+		this.syncBackdrop();
+		const schemeChanged = schemeId !== this.colorScheme;
+		if (schemeChanged) {
+			this.colorScheme = schemeId;
+			this.refreshNodeTextures();
 		}
-		if (style === this.nodeStyle) return;
+		if (style === this.nodeStyle && !schemeChanged) return;
 		this.nodeStyle = style;
 		this.spriteScale = style === "glow" ? STAR_SIZE_FACTOR : 1;
 
@@ -1480,10 +2016,23 @@ export class GraphRenderer {
 		this.cullDirty = true;
 	}
 
+	private syncBackdrop(): void {
+		if (!this.app) return;
+		this.app.renderer.background.alpha = this.backdrop === null || this.overviewStyle ? 0 : 1;
+		if (this.backdrop !== null) this.app.renderer.background.color = this.backdrop;
+	}
+
 	private textureForStyle(style: NodeStyle): Texture {
 		if (style === "glow") return this.starTexture ?? this.nodeTexture!;
 		if (style === "ring") return this.ringTexture ?? this.nodeTexture!;
 		return this.nodeTexture!;
+	}
+
+	private refreshNodeTextures(): void {
+		if (!this.nodeTextureCache) return;
+		this.nodeTexture = this.nodeTextureCache.get(this.colorScheme, "flat", this.glowIntensity);
+		this.starTexture = this.nodeTextureCache.get(this.colorScheme, "glow", this.glowIntensity);
+		this.ringTexture = this.nodeTextureCache.get(this.colorScheme, "ring", this.glowIntensity);
 	}
 
 	private ensureLabel(nodeId: number, x: number, y: number): void {
@@ -1495,10 +2044,11 @@ export class GraphRenderer {
 				style: {
 					fill: this.colors.label,
 					fontSize: this.labelFontSize,
-					fontFamily: this.ownerWindow.getComputedStyle(this.ownerWindow.document.body).getPropertyValue("--font-interface") || "sans-serif",
+					fontFamily: this.labelFontFamily(),
+					fontWeight: "500",
 					// Halo in the theme background color keeps text readable
 					// on top of edges and glowing nodes.
-					stroke: { color: this.labelHalo, width: Math.max(1.5, this.labelFontSize / 6) },
+					stroke: { color: this.labelHalo, width: Math.max(1.75, this.labelFontSize / 5) },
 				},
 				resolution: 2,
 			});
@@ -1522,6 +2072,61 @@ export class GraphRenderer {
 		label.visible = true;
 	}
 
+	private labelFontFamily(): string {
+		return this.ownerWindow.getComputedStyle(this.ownerWindow.document.body)
+			.getPropertyValue("--font-interface").trim() || "sans-serif";
+	}
+
+	private syncLabelOverlay(): void {
+		if (!this.host || !this.viewport || !this.colors) return;
+		if (!this.labelOverlay) {
+			this.labelOverlay = new LabelOverlay(this.host);
+			// The DOM mirror is the sharp on-screen layer. Pixi text stays alive
+			// for measurements, collision layout and explicit PNG extraction.
+			this.labelLayer.renderable = false;
+		}
+		const scale = this.viewport.scale;
+		const originX = this.world.position.x;
+		const originY = this.world.position.y;
+		const emphasized = new Set(this.pathNodeIds);
+		if (this.hoveredId !== null) emphasized.add(this.hoveredId);
+		if (this.selectedId !== null) emphasized.add(this.selectedId);
+		for (const id of this.hoverNeighbors) emphasized.add(id);
+		if (this.explore) {
+			emphasized.add(this.explore.centerId);
+			if (this.explore.candidateId !== null) emphasized.add(this.explore.candidateId);
+			for (const id of this.explore.neighbors) emphasized.add(id);
+		}
+		const visible: OverlayLabel[] = [];
+		const append = (id: LabelId, label: Text) => {
+			if (!label.visible || label.alpha <= 0.001) return;
+			visible.push({
+				id,
+				text: String(label.text),
+				x: label.x * scale + originX,
+				y: label.y * scale + originY,
+				scale: label.scale.x * scale,
+				alpha: label.alpha,
+				weight: typeof id === "string" || emphasized.has(id) ? 600 : 500,
+			});
+		};
+		if (this.modernAppearance) {
+			for (const [id, fade] of this.labelFades) append(id, fade.label);
+		} else {
+			for (const [id, label] of this.labels) append(id, label);
+		}
+		this.labelOverlay.sync(visible, {
+			fontFamily: this.labelFontFamily(),
+			fontSize: this.labelFontSize,
+			fill: this.cssHex(this.colors.label),
+			halo: this.cssHex(this.labelHalo),
+		});
+	}
+
+	private cssHex(color: number): string {
+		return `#${color.toString(16).padStart(6, "0")}`;
+	}
+
 	private findNodeAt(clientX: number, clientY: number): number | null {
 		if (!this.app || !this.positions || !this.radii || !this.viewport) return null;
 		const rect = this.app.canvas.getBoundingClientRect();
@@ -1535,6 +2140,7 @@ export class GraphRenderer {
 			hitRadius: HOVER_RADIUS_PX / this.viewport.scale,
 			hiddenMask: this.hiddenMask,
 			depthScales: this.depthScales,
+			projectedCoreRadii: this.preferCoreHitRadius ? this.projectedCoreRadii : null,
 		});
 	}
 
@@ -1563,10 +2169,162 @@ export class GraphRenderer {
 	private updateHoverNeighbors(): void {
 		this.hoverNeighbors.clear();
 		if (this.hoveredId === null || !this.model) return;
+		if (this.modernAppearance) {
+			for (const index of this.incidentEdges[this.hoveredId] ?? []) {
+				const { source, target } = this.model.edges[index];
+				this.hoverNeighbors.add(source === this.hoveredId ? target : source);
+			}
+			return;
+		}
 		for (const edge of this.model.edges) {
 			if (edge.source === this.hoveredId) this.hoverNeighbors.add(edge.target);
 			else if (edge.target === this.hoveredId) this.hoverNeighbors.add(edge.source);
 		}
+	}
+
+	private hoverEdgeAppearanceEnabled(): boolean {
+		return this.modernAppearance || this.overviewStyle;
+	}
+
+	private startEdgePulses(origin: number | null): void {
+		if (origin === null || !this.edgesVisible ||
+			this.hiddenMask?.[origin] === 1 || !this._ownerWindow ||
+			(typeof this._ownerWindow.matchMedia === "function" && prefersReducedMotion(this._ownerWindow))) {
+			this.clearEdgePulses();
+			return;
+		}
+		const visibleIncident = (this.incidentEdges[origin] ?? []).filter((edgeIndex) =>
+			this.edgeMesh?.getEdgePath(edgeIndex, this.edgePath) === true
+		);
+		const edgeIndices = selectPulseEdges(visibleIncident);
+		if (edgeIndices.length === 0) {
+			this.clearEdgePulses();
+			return;
+		}
+		this.edgePulseBatch = { origin, startedAt: this.frameNow(), edgeIndices };
+		this.advanceEdgePulses();
+	}
+
+	private clearEdgePulses(invalidate = true): void {
+		if (this.edgePulseBatch === null) return;
+		this.edgePulseBatch = null;
+		this.edgePulseGraphics.clear();
+		if (invalidate) this.invalidate();
+	}
+
+	private tracePulse(points: readonly number[]): void {
+		if (points.length < 4) return;
+		this.edgePulseGraphics.moveTo(points[0], points[1]);
+		for (let i = 2; i < points.length; i += 2) {
+			this.edgePulseGraphics.lineTo(points[i], points[i + 1]);
+		}
+	}
+
+	private advanceEdgePulses(): void {
+		const batch = this.edgePulseBatch;
+		if (!batch) return;
+		if (!this.edgesVisible || this.paused ||
+			this.hiddenMask?.[batch.origin] === 1 || !this.model || !this.colors) {
+			this.clearEdgePulses();
+			return;
+		}
+
+		const graphics = this.edgePulseGraphics;
+		graphics.clear();
+		const elapsed = this.frameNow() - batch.startedAt;
+		const scale = Math.max(0.001, this.viewport?.scale ?? 1);
+		const frontColor = this.host && isLightTheme(this.host.ownerDocument) ? 0xdcecff : 0xffffff;
+		let running = false;
+		let pathAvailable = false;
+		for (let order = 0; order < batch.edgeIndices.length; order++) {
+			const edgeIndex = batch.edgeIndices[order];
+			const phase = edgePulsePhase(elapsed, pulseDelay(order, batch.edgeIndices.length));
+			if (!phase.done) running = true;
+			if (!this.edgeMesh?.getEdgePath(edgeIndex, this.edgePath)) continue;
+			pathAvailable = true;
+			if (!phase.visible) continue;
+			const edge = this.model.edges[edgeIndex];
+			if (!edge || (edge.source !== batch.origin && edge.target !== batch.origin)) continue;
+			const path = {
+				points: this.edgePath.points,
+				offset: this.edgePath.offset,
+				pointCount: this.edgePath.pointCount,
+				reversed: edge.target === batch.origin && edge.source !== batch.origin,
+			};
+
+			if (phase.head < 1) {
+				const tail = slicePackedPath(path, phase.tail, phase.head, this.edgePulseScratch);
+				if (tail.length >= 4) {
+					this.tracePulse(tail);
+					graphics.stroke({ color: this.colors.nodeSelected, alpha: 0.28, width: 3.2 / scale });
+					this.tracePulse(tail);
+					graphics.stroke({ color: frontColor, alpha: 0.92, width: 1.15 / scale });
+					const x = tail[tail.length - 2];
+					const y = tail[tail.length - 1];
+					graphics.circle(x, y, 3.6 / scale).fill({ color: this.colors.nodeSelected, alpha: 0.2 });
+					graphics.circle(x, y, 1.65 / scale).fill({ color: frontColor, alpha: 0.98 });
+				}
+			} else if (phase.arrival > 0) {
+				const endpoint = slicePackedPath(path, 1, 1, this.edgePulseScratch);
+				if (endpoint.length >= 2) {
+					const x = endpoint[endpoint.length - 2];
+					const y = endpoint[endpoint.length - 1];
+					graphics.circle(x, y, (4 + phase.arrival * 5) / scale)
+						.fill({ color: this.colors.nodeSelected, alpha: phase.arrival * 0.14 });
+					graphics.circle(x, y, (1.5 + phase.arrival * 2.5) / scale)
+						.fill({ color: frontColor, alpha: phase.arrival * 0.72 });
+				}
+			}
+		}
+
+		if (!running || !pathAvailable) {
+			this.edgePulseBatch = null;
+			graphics.clear();
+		}
+		this.invalidate();
+	}
+
+	private advanceHoverEdges(): void {
+		if (!this.hoverEdgeAppearanceEnabled()) return;
+		const target = this.edgesVisible ? this.hoveredId : null;
+		if (target === this.highlightedEdgeNode &&
+			this.hoverEdgeOpacity === (target === null ? 0 : 1)) return;
+
+		const now = this.frameNow();
+		const owner = this._ownerWindow;
+		const duration = owner?.matchMedia ? motionMs(HOVER_EDGE_FADE_MS, owner) : HOVER_EDGE_FADE_MS;
+		const step = Math.min(1, Math.max(1, now - this.hoverEdgeFrameAt) / duration);
+		this.hoverEdgeFrameAt = now;
+		if (this.hoverEdgeOpacity === 0 && target !== this.highlightedEdgeNode) {
+			this.highlightedEdgeNode = target;
+			this.redrawHoverEdges();
+		}
+		this.hoverEdgeOpacity = target === this.highlightedEdgeNode && target !== null
+			? Math.min(1, this.hoverEdgeOpacity + step)
+			: Math.max(0, this.hoverEdgeOpacity - step);
+		this.hoverEdgeGraphics.alpha = this.hoverEdgeOpacity;
+		this.invalidate();
+	}
+
+	private redrawHoverEdges(): void {
+		const graphics = this.hoverEdgeGraphics;
+		graphics.clear();
+		const id = this.highlightedEdgeNode;
+		if (!this.hoverEdgeAppearanceEnabled() || !this.edgesVisible || id === null ||
+			!this.positions || !this.model || !this.colors) return;
+		const incident = this.incidentEdges[id];
+		if (!incident) return;
+		let count = 0;
+		for (const index of incident) {
+			if (!this.edgeMesh?.getEdgePath(index, this.edgePath)) continue;
+			this.traceEdge(graphics);
+			if (++count >= HOVER_EDGE_LIMIT) break;
+		}
+		if (count > 0) graphics.stroke({
+			color: this.colors.nodeSelected,
+			alpha: 0.58,
+			width: HOVER_EDGE_WIDTH_PX / Math.max(0.001, this.viewport?.scale ?? 1),
+		});
 	}
 
 	private handlePointerMove = (event: PointerEvent): void => {
@@ -1623,6 +2381,7 @@ export class GraphRenderer {
 				this.draggingId = this.pressedId;
 				if (this.viewport) this.viewport.suppressPan = true;
 				this.callbacks.onNodeDragStart(this.draggingId);
+				this.startEdgePulses(this.draggingId);
 				this.moveDraggedNode(event);
 				return;
 			}
@@ -1651,7 +2410,9 @@ export class GraphRenderer {
 			this.invalidate();
 			this.cullDirty = true;
 			this.hoveredId = nodeId;
+			this.hoverEdgeFrameAt = this.frameNow();
 			this.updateHoverNeighbors();
+			this.startEdgePulses(nodeId);
 			this.applyNodeTints();
 			this.applyNodeAlpha();
 			this.applyHoverSize();
@@ -1887,13 +2648,17 @@ export class GraphRenderer {
 		if (this.destroyed) return;
 		this.destroyed = true;
 		this.stopFrames();
+		this.clearEdgePulses(false);
 		this.clickDispatcher.cancel();
 		this.viewport?.destroy();
 		this.viewport = null;
 		this.edgeMesh?.destroy();
 		this.edgeMesh = null;
+		this.labelOverlay?.destroy();
+		this.labelOverlay = null;
 		const app = this.app;
 		this.app = null;
+		this.host?.classList.remove("graph-insight-overview");
 		this.host = null;
 		if (app) {
 			app.canvas.removeEventListener("webglcontextlost", this.handleContextLost);
@@ -1905,6 +2670,8 @@ export class GraphRenderer {
 			this._ownerWindow?.removeEventListener("resize", this.handleWindowResize);
 			app.destroy({ removeView: true }, { children: true, texture: true });
 		}
+		this.nodeTextureCache?.destroy();
+		this.nodeTextureCache = null;
 		this._ownerWindow = null;
 	}
 }

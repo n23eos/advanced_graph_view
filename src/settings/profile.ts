@@ -5,8 +5,16 @@ import { normalizeGraphScope } from "../data/graphScope";
  * behind — they describe one vault, not a way of working.
  */
 import type { GraphInsightSettings } from "./schema";
-import { migratePhysicsDefaults, normalizeSettings, normalizePanel, normalizeSearchPresets, normalizeViewPresets } from "./normalize";
+import {
+	migratePhysicsDefaults,
+	normalizeGraphAppearance,
+	normalizeSettings,
+	normalizePanel,
+	normalizeSearchPresets,
+	normalizeViewPresets,
+} from "./normalize";
 import { PANEL_MODES, type PanelMode, type PanelState } from "../ui/ControlPanel";
+import { applyGraphAppearance, type GraphAppearance } from "./appearance";
 
 /** Bump only on a breaking change: an older plugin refuses a newer profile. */
 export const PROFILE_VERSION = 1;
@@ -16,6 +24,7 @@ export interface SettingsProfile {
 	physicsDefaultsVersion?: number;
 	version: number;
 	panel: PanelState;
+	appearance: GraphAppearance;
 	panelMode: PanelMode;
 	viewPresets: GraphInsightSettings["viewPresets"];
 	presets: GraphInsightSettings["presets"];
@@ -26,12 +35,13 @@ export interface SettingsProfile {
 	openInSidePane: boolean;
 }
 
-export function buildProfile(settings: GraphInsightSettings): SettingsProfile {
+export function buildProfile(settings: GraphInsightSettings, currentAppearance?: GraphAppearance): SettingsProfile {
 	return {
 		version: PROFILE_VERSION,
 		graphScope: settings.graphScope,
 		physicsDefaultsVersion: settings.physicsDefaultsVersion,
-		panel: settings.panel,
+		panel: currentAppearance ? applyGraphAppearance(settings.panel, currentAppearance) : settings.panel,
+		appearance: currentAppearance ?? settings.appearance,
 		panelMode: settings.panelMode,
 		viewPresets: settings.viewPresets,
 		presets: settings.presets,
@@ -56,6 +66,13 @@ export function mergeProfile(
 	const profile = raw as Partial<SettingsProfile>;
 	if (typeof profile.version !== "number" || profile.version > PROFILE_VERSION) return null;
 
+	const panel = isObject(profile.panel)
+		? normalizePanel({ ...current.panel, ...profile.panel })
+		: current.panel;
+	const appearance = isObject(profile.panel)
+		? normalizeGraphAppearance(profile.appearance, panel, "legacy")!
+		: current.appearance;
+
 	return migratePhysicsDefaults({
 		...current,
 		graphScope: profile.graphScope === undefined ? current.graphScope : normalizeGraphScope(profile.graphScope),
@@ -63,9 +80,8 @@ export function mergeProfile(
 			? normalizeSettings(profile).physicsDefaultsVersion : current.physicsDefaultsVersion,
 		// normalizePanel/normalizeSearchPresets accept profiles written by
 		// older versions: missing layoutRule, presets without id/timestamps.
-		panel: isObject(profile.panel)
-			? normalizePanel({ ...current.panel, ...profile.panel })
-			: current.panel,
+		panel,
+		appearance,
 		panelMode: isPanelMode(profile.panelMode) ? profile.panelMode : current.panelMode,
 		viewPresets: Array.isArray(profile.viewPresets)
 			? normalizeViewPresets(profile.viewPresets)

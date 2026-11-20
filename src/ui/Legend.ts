@@ -24,7 +24,7 @@ export class Legend {
 		this.root.hide();
 	}
 
-	update(colorMetric: MetricId | null, presetId: string, categories: string[] | null): void {
+	update(colorMetric: MetricId | null, presetId: string, categories: string[] | null, overrides?: Readonly<Record<string, string>>): void {
 		this.root.empty();
 		if (!colorMetric) {
 			this.root.hide();
@@ -33,7 +33,7 @@ export class Legend {
 		this.root.show();
 
 		if (isCategoricalMetric(colorMetric) && categories) {
-			this.renderCategories(colorMetric, categories, presetId);
+			this.renderCategories(colorMetric, categories, presetId, overrides);
 		} else {
 			this.renderGradient(colorMetric, presetId);
 		}
@@ -52,7 +52,7 @@ export class Legend {
 		range.createSpan({ text: t("legend.max") });
 	}
 
-	private renderCategories(metric: MetricId, categories: string[], presetId: string): void {
+	private renderCategories(metric: MetricId, categories: string[], presetId: string, overrides?: Readonly<Record<string, string>>): void {
 		const palette = activePreset(presetId, this.ownerDocument).categories;
 		this.root.createDiv({
 			cls: "graph-insight-legend-title",
@@ -71,7 +71,8 @@ export class Legend {
 		for (const [category] of top) {
 			const row = this.root.createDiv({ cls: "graph-insight-legend-category" });
 			const swatch = row.createSpan({ cls: "graph-insight-legend-swatch" });
-			swatch.style.background = toHex(categoryColor(category, palette));
+			swatch.style.background = overrides && Object.hasOwn(overrides, category)
+				? overrides[category] : toHex(categoryColor(category, palette));
 			row.createSpan({ text: category });
 		}
 		const rest = counts.size - top.length;

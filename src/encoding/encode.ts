@@ -50,7 +50,8 @@ export function buildEncoding(
 	colorPreset: string,
 	now: number,
 	/** Light themes need the brightest scheme colors dimmed to stay visible. */
-	isLightTheme = false
+	isLightTheme = false,
+	folders?: { level: "top" | "parent"; overrides: Readonly<Record<string, string>> }
 ): NodeEncoding {
 	const count = nodes.length;
 	const sizes = new Float32Array(count).fill(DEFAULT_RADIUS);
@@ -68,9 +69,15 @@ export function buildEncoding(
 	if (channels.color) {
 		const preset = adaptPresetToTheme(resolvePreset(colorPreset), isLightTheme);
 		if (isCategoricalMetric(channels.color)) {
-			categories = nodes.map((f) => String(computeMetric(channels.color!, f, now)));
+			categories = nodes.map((f) => {
+				const category = String(computeMetric(channels.color!, f, now));
+				return channels.color === "folder" && folders?.level === "top" ? category.split("/")[0] : category;
+			});
 			for (let i = 0; i < count; i++) {
-				tints[i] = categories[i] ? categoryColor(categories[i], preset.categories) : -1;
+				const category = categories[i];
+				const override = channels.color === "folder" && folders && Object.hasOwn(folders.overrides, category)
+					? folders.overrides[category] : undefined;
+				tints[i] = !category ? -1 : override ? hexToRgb(override) : categoryColor(category, preset.categories);
 			}
 		} else {
 			const stops = preset.stops;
@@ -89,4 +96,10 @@ export function buildEncoding(
 	}
 
 	return { sizes, tints, glow, categories };
+}
+
+function hexToRgb(color: string): number {
+	const digits = color.slice(1, color.length <= 5 ? 4 : 7);
+	const rgb = digits.length === 3 ? Array.from(digits, (digit) => digit + digit).join("") : digits;
+	return Number.parseInt(rgb, 16);
 }

@@ -37,6 +37,7 @@ export interface ExploreBindingsDeps {
 	getRebuildDeferred(): boolean;
 	setRebuildDeferred(value: boolean): void;
 	getPlugin(): { settings: Pick<GraphInsightSettings, "panel" | "openInSidePane"> };
+	getPanelState(): PanelState;
 	getTooltipNodeId(): number | null;
 	setTooltipNodeId(value: number | null): void;
 	getContentEl(): HTMLElement;
@@ -61,6 +62,14 @@ export interface ExploreBindingsDeps {
 	openTopicMapExport(source: TopicMapSource, rootId: number | null, flatIds?: number[]): void;
 	exitExplore(): Promise<void>;
 	renderTrail(host: HTMLElement, trail: NavigationTrail, go: (nodeId: number) => void): void;
+}
+
+export function applyExplorePanelOverride(state: PanelState): PanelState {
+	return {
+		...state,
+		view3d: { ...state.view3d, enabled: true },
+		physics: { ...state.physics, disabled: true },
+	};
 }
 
 export class ExploreBindings {
@@ -152,13 +161,7 @@ export class ExploreBindings {
 	}
 
 	applyExploreOverride(): void {
-		const saved = this.plugin.settings.panel;
-		const forced: PanelState = {
-			...saved,
-			view3d: { ...saved.view3d, enabled: true },
-			physics: { ...saved.physics, disabled: true },
-		};
-		this.deps.applyAllPanelState(forced);
+		this.deps.applyAllPanelState(applyExplorePanelOverride(this.deps.getPanelState()));
 	}
 
 	async exitExplore(): Promise<void> {
@@ -178,7 +181,7 @@ export class ExploreBindings {
 			this.exploreOverride = false;
 			// The saved settings were never touched, so putting them back is
 			// just re-applying them.
-			this.deps.applyAllPanelState(this.plugin.settings.panel);
+			this.deps.applyAllPanelState(this.deps.getPanelState());
 		}
 		this.deps.recomputeVisual();
 

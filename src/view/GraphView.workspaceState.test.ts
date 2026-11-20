@@ -5,6 +5,7 @@ import { DEFAULT_SETTINGS } from "../settings/schema";
 import type { CameraState } from "./workspaceState";
 import { GraphInsightView } from "./GraphView";
 import { installObsidianDom } from "../test/obsidianDom";
+import { createGraphAppearance } from "../settings/appearance";
 
 vi.mock("obsidian", async (importOriginal) => ({
 	...await importOriginal<typeof import("obsidian")>(),
@@ -38,10 +39,19 @@ const camera: CameraState = {
 	},
 };
 
+const legacyAppearance = createGraphAppearance(DEFAULT_SETTINGS.panel, "legacy");
+const savedState = (state: Record<string, unknown>) => ({
+	version: 1,
+	appearance: legacyAppearance,
+	...state,
+});
+
 interface Internals {
 	renderer: {
 		getCameraState(): CameraState | null;
 		restoreCameraState(state: CameraState): void;
+		setModernAppearance?(enabled: boolean): void;
+		setOverviewStyle?(enabled: boolean): void;
 	} | null;
 	model: object | null;
 	autoFit: { request(): void; isPending(): boolean };
@@ -97,6 +107,55 @@ afterEach(() => {
 });
 
 describe("GraphInsightView workspace state", () => {
+	test("keeps modern appearance and visual values isolated in the leaf", async () => {
+		const first = harness();
+		const second = harness();
+		const setModernAppearance = vi.fn();
+		first.internal.renderer = {
+			getCameraState: () => null,
+			restoreCameraState: vi.fn(),
+			setModernAppearance,
+		};
+		await first.view.setState({
+			version: 1,
+			appearance: {
+				version: 1,
+				mode: "modern",
+				panel: { nodeScale: 2.5 },
+			},
+		}, { history: false });
+
+		expect(setModernAppearance).toHaveBeenCalledWith(true, 0.18);
+		expect(first.view.getState()).toMatchObject({
+			appearance: { mode: "modern", panel: { nodeScale: 2.5 } },
+		});
+		expect(second.view.getState()).toMatchObject({
+			appearance: { mode: "legacy", panel: { nodeScale: DEFAULT_SETTINGS.panel.nodeScale } },
+		});
+	});
+
+	test("toggles the visual overview on the same camera and restores the saved look", async () => {
+		const { view, internal } = harness();
+		const setOverviewStyle = vi.fn();
+		const setModernAppearance = vi.fn();
+		const restoreCameraState = vi.fn();
+		internal.renderer = { getCameraState: () => camera, restoreCameraState, setModernAppearance, setOverviewStyle };
+
+		view.toggleOverview();
+		expect(view.getState()).toMatchObject(savedState({ camera, overview: true }));
+		expect(setOverviewStyle).toHaveBeenLastCalledWith(true);
+		expect(setModernAppearance).toHaveBeenLastCalledWith(true, 0.1, false);
+		const reopened = harness();
+		await reopened.view.setState(view.getState(), { history: false });
+		expect(reopened.view.getState()).toMatchObject(savedState({ camera, overview: true }));
+
+		view.toggleOverview();
+		expect(view.getState()).toEqual(savedState({ camera, hardQuery: "" }));
+		expect(setOverviewStyle).toHaveBeenLastCalledWith(false);
+		expect(setModernAppearance).toHaveBeenLastCalledWith(false, 0.18);
+		expect(restoreCameraState).not.toHaveBeenCalled();
+	});
+
 	test("applies a late camera and query independently and returns the current per-leaf state", async () => {
 		const { view, internal } = harness();
 		const restoreCameraState = vi.fn();
@@ -108,7 +167,7 @@ describe("GraphInsightView workspace state", () => {
 
 		expect(restoreCameraState).toHaveBeenCalledExactlyOnceWith(camera);
 		expect(internal.autoFit.isPending()).toBe(false);
-		expect(view.getState()).toEqual({ version: 1, camera, hardQuery: "tag:#work" });
+		expect(view.getState()).toEqual(savedState({ camera, hardQuery: "tag:#work" }));
 	});
 
 	test("keeps normal auto-fit when only the query is valid", async () => {
@@ -122,7 +181,7 @@ describe("GraphInsightView workspace state", () => {
 		}, { history: false });
 
 		expect(internal.autoFit.isPending()).toBe(true);
-		expect(view.getState()).toEqual({ version: 1, hardQuery: "tag:#work" });
+		expect(view.getState()).toEqual(savedState({ hardQuery: "tag:#work" }));
 	});
 
 	test("keeps workspace state isolated between graph leaves", async () => {
@@ -132,8 +191,8 @@ describe("GraphInsightView workspace state", () => {
 		await first.setState({ version: 1, hardQuery: "tag:#first" }, { history: false });
 		await second.setState({ version: 1, hardQuery: "tag:#second" }, { history: false });
 
-		expect(first.getState()).toEqual({ version: 1, hardQuery: "tag:#first" });
-		expect(second.getState()).toEqual({ version: 1, hardQuery: "tag:#second" });
+		expect(first.getState()).toEqual(savedState({ hardQuery: "tag:#first" }));
+		expect(second.getState()).toEqual(savedState({ hardQuery: "tag:#second" }));
 	});
 
 	test("indexes a restored content query after the model is ready", async () => {
@@ -231,12 +290,12 @@ describe("GraphInsightView workspace state", () => {
 		internal.commitSearchQuery("tag:#work");
 		await vi.advanceTimersByTimeAsync(300);
 		expect(requestSaveLayout).toHaveBeenCalledOnce();
-		expect(view.getState()).toEqual({ version: 1, hardQuery: "tag:#work" });
+		expect(view.getState()).toEqual(savedState({ hardQuery: "tag:#work" }));
 
 		internal.clearSearchQuery();
 		await vi.advanceTimersByTimeAsync(300);
 		expect(requestSaveLayout).toHaveBeenCalledTimes(2);
-		expect(view.getState()).toEqual({ version: 1, hardQuery: "" });
+		expect(view.getState()).toEqual(savedState({ hardQuery: "" }));
 	});
 
 	test("restores the initial camera after 3D mode setup and leaves settle auto-fit cancelled", async () => {
@@ -288,7 +347,7 @@ describe("GraphInsightView workspace state", () => {
 
 		await view.reloadFromSettings();
 
-		expect(view.getState()).toEqual({ version: 1, camera, hardQuery: "tag:#before-reopen" });
+		expect(view.getState()).toEqual(savedState({ camera, hardQuery: "tag:#before-reopen" }));
 	});
 
 	test("a newer external state wins while an internal reopen is waiting for teardown", async () => {
@@ -325,7 +384,7 @@ describe("GraphInsightView workspace state", () => {
 
 		expect(restoreOldRenderer).not.toHaveBeenCalled();
 		expect(restoreNewRenderer).toHaveBeenCalledExactlyOnceWith(newCamera);
-		expect(view.getState()).toEqual({ version: 1, camera: newCamera, hardQuery: "tag:#new" });
+		expect(view.getState()).toEqual(savedState({ camera: newCamera, hardQuery: "tag:#new" }));
 	});
 
 	test("requests persistence when a task clears the query and when view state resets", async () => {

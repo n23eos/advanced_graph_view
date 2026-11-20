@@ -43,6 +43,8 @@ import type { GraphModel } from "./data/GraphStore";
 import type { PanelMode, PanelState } from "./ui/ControlPanel";
 import type { SearchPreset } from "./ui/SearchBar";
 import type { ViewPreset } from "./view/builtinPresets";
+import type { GraphAppearance } from "./settings/appearance";
+import { createNewGraphViewState } from "./view/workspaceState";
 
 const SESSION_TRAIL_CAP = 200;
 const USAGE_SAVE_DEBOUNCE_MS = 30_000;
@@ -114,6 +116,16 @@ export default class GraphInsightPlugin extends Plugin {
 			id: "open-graph",
 			name: t("command.openView"),
 			callback: () => void this.activateView(),
+		});
+		this.addCommand({
+			id: "toggle-graph-overview",
+			name: t("camera.overview"),
+			checkCallback: (checking) => {
+				const view = this.app.workspace.getActiveViewOfType(GraphInsightView) ?? this.getGraphView();
+				if (!view) return false;
+				if (!checking) view.toggleOverview();
+				return true;
+			},
 		});
 		this.addRibbonIcon("git-fork", t("command.ribbon"), () => void this.activateView());
 
@@ -363,11 +375,14 @@ export default class GraphInsightPlugin extends Plugin {
 	async replaceSettings(settings: GraphInsightSettings): Promise<void> {
 		this.settings = settings;
 		await this.saveData(this.settings);
-		await this.reloadGraphViews();
+		await this.reloadGraphViews(settings.appearance);
 	}
 
-	async savePanelState(panel: PanelState): Promise<void> {
-		this.settings = { ...this.settings, panel };
+	async savePanelState(panel: PanelState, leafAppearance?: GraphAppearance): Promise<void> {
+		const sharedPanel = leafAppearance
+			? { ...this.settings.panel, physics: panel.physics, layoutRule: panel.layoutRule, collapsed: panel.collapsed }
+			: panel;
+		this.settings = { ...this.settings, panel: sharedPanel };
 		this.settingsDirty = true;
 		this.saveSettingsDebounced();
 	}
@@ -433,7 +448,7 @@ export default class GraphInsightPlugin extends Plugin {
 			id,
 			name: t(nameKey),
 			checkCallback: (checking) => {
-				const view = this.getGraphView();
+				const view = this.app.workspace.getActiveViewOfType(GraphInsightView) ?? this.getGraphView();
 				if (!view) return false;
 				if (!checking) void view.updatePanelState(mutate);
 				return true;
@@ -445,7 +460,7 @@ export default class GraphInsightPlugin extends Plugin {
 		return findGraphView(this.app.workspace.getLeavesOfType(GRAPH_INSIGHT_VIEW_TYPE));
 	}
 
-	async reloadGraphViews(): Promise<void> {
+	async reloadGraphViews(appearance?: GraphAppearance): Promise<void> {
 		const performReload = async () => {
 			const leaves = [
 				...this.app.workspace.getLeavesOfType(GRAPH_INSIGHT_VIEW_TYPE),
@@ -457,7 +472,8 @@ export default class GraphInsightPlugin extends Plugin {
 			for (const { view } of leaves) {
 				if (!(view instanceof GraphInsightView || view instanceof LocalGraphView || view instanceof InsightsView)) continue;
 				try {
-					await view.reloadFromSettings();
+					if (view instanceof InsightsView) await view.reloadFromSettings();
+					else await view.reloadFromSettings(appearance);
 				} catch (error) {
 					if (!failed) firstError = error;
 					failed = true;
@@ -490,7 +506,17 @@ export default class GraphInsightPlugin extends Plugin {
 		}
 		const leaf = this.app.workspace.getRightLeaf(false);
 		if (!leaf) return;
-		await leaf.setViewState({ type: LOCAL_GRAPH_VIEW_TYPE, active: true });
+		await leaf.setViewState({
+			type: LOCAL_GRAPH_VIEW_TYPE,
+			active: true,
+			state: createNewGraphViewState({
+				...this.settings.panel,
+				view3d: {
+					...this.settings.panel.view3d,
+					enabled: this.settings.localGraph.view3d,
+				},
+			}),
+		});
 		await this.app.workspace.revealLeaf(leaf);
 	}
 
@@ -590,7 +616,11 @@ export default class GraphInsightPlugin extends Plugin {
 			return;
 		}
 		const leaf = this.app.workspace.getLeaf(true);
-		await leaf.setViewState({ type: GRAPH_INSIGHT_VIEW_TYPE, active: true });
+		await leaf.setViewState({
+			type: GRAPH_INSIGHT_VIEW_TYPE,
+			active: true,
+			state: createNewGraphViewState(this.settings.panel),
+		});
 		await this.app.workspace.revealLeaf(leaf);
 	}
 

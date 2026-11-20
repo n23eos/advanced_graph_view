@@ -16,6 +16,7 @@ const state = vi.hoisted(() => ({
 		destroy: ReturnType<typeof vi.fn>;
 		resize: ReturnType<typeof vi.fn>;
 		setModel: ReturnType<typeof vi.fn>;
+		setModernAppearance: ReturnType<typeof vi.fn>;
 	}>,
 	debouncers: [] as Array<{ cancel: ReturnType<typeof vi.fn> }>,
 }));
@@ -63,6 +64,7 @@ vi.mock("../render/GraphRenderer", () => ({
 		applyEncoding = vi.fn();
 		setHighlightMask = vi.fn();
 		setAlphaFactors = vi.fn();
+		setModernAppearance = vi.fn();
 		constructor() { state.renderers.push(this); }
 		init(host: HTMLElement, renderScale?: unknown): Promise<void> {
 			state.initCalls.push({ host, renderScale });
@@ -147,6 +149,23 @@ afterEach(() => {
 });
 
 describe("local graph settings reload", () => {
+	test.each([
+		[{}, false],
+		[{ version: 1, appearance: { version: 1, mode: "legacy", panel: { nodeScale: 2 } } }, false],
+		[{ version: 1, appearance: { version: 1, mode: "modern", panel: { nodeScale: 2 } } }, true],
+	] as const)("round-trips old and new leaf state %#", async (saved, modern) => {
+		const { view } = setup();
+		await view.setState(saved, { history: false });
+		await view.onOpen();
+
+		expect(state.renderers[0].setModernAppearance).toHaveBeenCalledWith(modern, 0.18);
+		expect(view.getState()).toMatchObject({
+			version: 1,
+			appearance: { version: 1, mode: modern ? "modern" : "legacy" },
+		});
+		await view.onClose();
+	});
+
 	test("passes the saved render scale into renderer startup", async () => {
 		const { view } = setup();
 		await view.onOpen();

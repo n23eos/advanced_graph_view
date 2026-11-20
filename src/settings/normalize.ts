@@ -17,6 +17,16 @@ import {
 	type MetricId,
 	type NumericMetricId,
 } from "../encoding/metrics";
+import {
+	createGraphAppearance,
+	DEFAULT_EDGE_CURVATURE,
+	DEFAULT_FOLDER_APPEARANCE,
+	DEFAULT_GLOW_INTENSITY,
+	DEFAULT_LABEL_APPEARANCE,
+	normalizeFolderOverrides,
+	type GraphAppearance,
+	type GraphAppearanceMode,
+} from "./appearance";
 
 const LAYOUT_RULES: readonly LayoutRule[] = [
 	"links", "tags", "folders", "cluster", "age", "recency", "hubs",
@@ -48,14 +58,88 @@ export function normalizePanel(raw: unknown): PanelState {
 		},
 		overlays: { ...base.overlays, ...asObject(saved.overlays) },
 		physics: { ...base.physics, ...asObject(saved.physics) },
-		labels: { ...base.labels, ...asObject(saved.labels) },
-		edges: { ...base.edges, ...asObject(saved.edges) },
+		labels: normalizeLabelOptions(saved.labels, base.labels),
+		edges: normalizeEdgeOptions(saved.edges, base.edges),
+		glowIntensity: normalizeNumber(saved.glowIntensity, DEFAULT_GLOW_INTENSITY, 0, 3),
+		folders: normalizeFolderAppearance(saved.folders),
 		view3d: { ...base.view3d, ...asObject(saved.view3d) },
 		nodeStyle: saved.nodeStyle === undefined
 			? nodeStyleFromPreset(typeof saved.colorPreset === "string" ? saved.colorPreset : base.colorPreset)
 			: isNodeStyle(saved.nodeStyle) ? saved.nodeStyle : base.nodeStyle,
 		layoutRule: normalizeLayoutRule(saved.layoutRule),
 	};
+}
+
+function normalizeLabelOptions(raw: unknown, base: PanelState["labels"]): PanelState["labels"] {
+	const saved = asObject(raw);
+	return {
+		...base,
+		...saved,
+		hoverOnly: typeof saved.hoverOnly === "boolean"
+			? saved.hoverOnly : DEFAULT_LABEL_APPEARANCE.hoverOnly,
+		hubs: normalizeNumber(saved.hubs, DEFAULT_LABEL_APPEARANCE.hubs, 0, 64, true),
+		fadeMs: normalizeNumber(saved.fadeMs, DEFAULT_LABEL_APPEARANCE.fadeMs, 0, 2000, true),
+		rank: saved.rank === "degree" || saved.rank === "pagerank"
+			? saved.rank : DEFAULT_LABEL_APPEARANCE.rank,
+	};
+}
+
+function normalizeEdgeOptions(raw: unknown, base: PanelState["edges"]): PanelState["edges"] {
+	const saved = asObject(raw);
+	return {
+		...base,
+		...saved,
+		curvature: normalizeNumber(saved.curvature, DEFAULT_EDGE_CURVATURE, 0, 1),
+	};
+}
+
+function normalizeFolderAppearance(raw: unknown): NonNullable<PanelState["folders"]> {
+	const saved = asObject(raw);
+	return {
+		enabled: typeof saved.enabled === "boolean" ? saved.enabled : DEFAULT_FOLDER_APPEARANCE.enabled,
+		level: saved.level === "top" || saved.level === "parent"
+			? saved.level : DEFAULT_FOLDER_APPEARANCE.level,
+		overrides: normalizeFolderOverrides(saved.overrides),
+	};
+}
+
+function normalizeNumber(
+	value: unknown,
+	fallback: number,
+	min: number,
+	max: number,
+	integer = false
+): number {
+	if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+	const clamped = Math.min(max, Math.max(min, value));
+	return integer ? Math.round(clamped) : clamped;
+}
+
+export function normalizeGraphAppearance(
+	raw: unknown,
+	fallbackPanel: PanelState,
+	fallbackMode?: GraphAppearanceMode
+): GraphAppearance | null {
+	if (!isObject(raw) || raw.version !== 1) {
+		return fallbackMode ? createGraphAppearance(fallbackPanel, fallbackMode) : null;
+	}
+	const mode = raw.mode === "legacy" || raw.mode === "modern" ? raw.mode : fallbackMode;
+	if (!mode) return null;
+	const saved = asObject(raw.panel);
+	const merged = normalizePanel({
+		...fallbackPanel,
+		...saved,
+		channels: { ...fallbackPanel.channels, ...asObject(saved.channels) },
+		overlays: { ...fallbackPanel.overlays, ...asObject(saved.overlays) },
+		labels: { ...fallbackPanel.labels, ...asObject(saved.labels) },
+		edges: { ...fallbackPanel.edges, ...asObject(saved.edges) },
+		folders: { ...fallbackPanel.folders, ...asObject(saved.folders) },
+		view3d: { ...fallbackPanel.view3d, ...asObject(saved.view3d) },
+		// These shared fields are intentionally never accepted from a leaf.
+		physics: fallbackPanel.physics,
+		layoutRule: fallbackPanel.layoutRule,
+	});
+	return createGraphAppearance(merged, mode);
 }
 
 function normalizeNumericChannel(value: unknown, fallback: NumericMetricId | null): NumericMetricId | null {
@@ -98,7 +182,12 @@ export function normalizeViewPresets(raw: unknown): ViewPreset[] {
 	const presets: ViewPreset[] = [];
 	for (const row of raw) {
 		if (!isObject(row) || typeof row.name !== "string" || !isObject(row.panel)) continue;
-		presets.push({ ...(row as unknown as ViewPreset), panel: normalizePanel(row.panel) });
+		const panel = normalizePanel(row.panel);
+		presets.push({
+			...(row as unknown as ViewPreset),
+			panel,
+			appearance: normalizeGraphAppearance(row.appearance, panel, "legacy")!,
+		});
 	}
 	return presets;
 }
@@ -120,6 +209,13 @@ export function normalizeSettings(raw: unknown, now: number = Date.now()): Graph
 	delete rest.onboardingShown;
 	delete rest.onboardingState;
 
+	const panel = normalizePanel(saved.panel);
+	const appearance = normalizeGraphAppearance(
+		saved.appearance,
+		panel,
+		isObject(raw) ? "legacy" : "modern"
+	)!;
+
 	return {
 		...DEFAULT_SETTINGS,
 		...rest,
@@ -128,7 +224,8 @@ export function normalizeSettings(raw: unknown, now: number = Date.now()): Graph
 		renderScale: saved.renderScale === "high" ? "high" : "standard",
 		physicsDefaultsVersion: typeof saved.physicsDefaultsVersion === "number" && Number.isFinite(saved.physicsDefaultsVersion)
 			? saved.physicsDefaultsVersion : 0,
-		panel: normalizePanel(saved.panel),
+		panel,
+		appearance,
 		presets: normalizeSearchPresets(saved.presets, now),
 		viewPresets: normalizeViewPresets(saved.viewPresets),
 		hoverPreview: { ...DEFAULT_SETTINGS.hoverPreview, ...asObject(saved.hoverPreview) },

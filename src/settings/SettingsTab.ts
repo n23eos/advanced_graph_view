@@ -153,7 +153,7 @@ export class GraphInsightSettingsTab extends PluginSettingTab {
 						desc: t("settings.exportProfile.desc"),
 						aliases: ["backup", "profile", "share"],
 						action: () => {
-							const profile = buildProfile(this.plugin.settings);
+							const profile = buildProfile(this.plugin.settings, this.plugin.getGraphView()?.getGraphAppearance());
 							downloadText(
 								"advanced-graph-view-settings.json",
 								JSON.stringify(profile, null, 2)

@@ -12,6 +12,8 @@ interface ExportHarness {
 			};
 		};
 	} | null;
+	labelLayer: { renderable: boolean };
+	labelOverlay: object | null;
 }
 
 describe("GraphRenderer PNG export", () => {
@@ -34,8 +36,11 @@ describe("GraphRenderer PNG export", () => {
 		} as HTMLCanvasElement;
 		const extractCanvas = vi.fn((options: { frame?: typeof screen }) => {
 			if (!options.frame) throw new RangeError("Invalid typed array length 101221965600");
+			expect(harness.labelLayer.renderable).toBe(true);
 			return canvas;
 		});
+		harness.labelLayer.renderable = false;
+		harness.labelOverlay = {};
 		harness.app = {
 			render: vi.fn(),
 			stage,
@@ -49,6 +54,7 @@ describe("GraphRenderer PNG export", () => {
 			frame: screen,
 			resolution: 2,
 		});
+		expect(harness.labelLayer.renderable).toBe(false);
 	});
 
 	test("returns null when viewport extraction fails", async () => {

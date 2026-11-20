@@ -22,7 +22,15 @@ interface RenderHarness {
 	lastCullAt: number;
 	contextLost: boolean;
 	destroyed: boolean;
-	labels: Map<number, { visible: boolean; destroy(): void }>;
+	labels: Map<number, {
+		alpha: number;
+		text: string;
+		visible: boolean;
+		x: number;
+		y: number;
+		scale: { x: number };
+		destroy(): void;
+	}>;
 	labelPriority: number[];
 	viewport: unknown;
 	host: HTMLElement | null;
@@ -97,7 +105,12 @@ function setupLabels() {
 	state.labelPriority = [0, 1, 2, 3, 4, 5];
 	vi.spyOn(state, "ensureLabel").mockImplementation((id, x, y) => {
 		state.labels.set(id, {
+			alpha: 1,
+			text: `${id}`,
 			visible: true,
+			x,
+			y,
+			scale: { x: 1 },
 			destroy: vi.fn(),
 			...{ getBounds: () => ({ x, y, width: 20, height: 12 }) },
 		});

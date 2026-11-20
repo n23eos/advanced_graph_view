@@ -66,4 +66,31 @@ describe("buildEncoding", () => {
 		expect(encoding.glow[0]).toBe(1);
 		expect(encoding.tints[0]).toBe(-1); // -1 = theme default color
 	});
+
+	test("top-level folder mode merges subfolders and honors pinned colors", () => {
+		const nodes = [
+			facts("a/one/x.md", { folder: "a/one" }),
+			facts("a/two/y.md", { folder: "a/two" }),
+		];
+		const options = { size: null, color: "folder", glow: null } as const;
+		const top = buildEncoding(nodes, options, "recency", NOW, false, {
+			level: "top", overrides: { a: "#48c" },
+		});
+		const parent = buildEncoding(nodes, options, "recency", NOW, false, {
+			level: "parent", overrides: { "a/one": "#1255a8" },
+		});
+
+		expect(top.categories).toEqual(["a", "a"]);
+		expect(Array.from(top.tints)).toEqual([0x4488cc, 0x4488cc]);
+		expect(parent.categories).toEqual(["a/one", "a/two"]);
+		expect(parent.tints[0]).toBe(0x1255a8);
+	});
+
+	test("an unpinned category falls back to its palette even if named like an object property", () => {
+		const nodes = [facts("constructor/x.md", { folder: "constructor" })];
+		const options = { size: null, color: "folder", glow: null } as const;
+		const original = buildEncoding(nodes, options, "recency", NOW);
+		const configured = buildEncoding(nodes, options, "recency", NOW, false, { level: "parent", overrides: {} });
+		expect(configured.tints[0]).toBe(original.tints[0]);
+	});
 });

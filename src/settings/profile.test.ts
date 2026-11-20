@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { DEFAULT_SETTINGS } from "./schema";
 import { PROFILE_VERSION, buildProfile, mergeProfile } from "./profile";
+import { createGraphAppearance } from "./appearance";
 
 const settings = {
 	...DEFAULT_SETTINGS,
@@ -26,6 +27,15 @@ describe("buildProfile", () => {
 		expect(profile).not.toHaveProperty("onboardingShown");
 		expect(profile).not.toHaveProperty("viewPresetsVersion");
 	});
+
+	test("exports the open leaf's appearance without changing vault defaults", () => {
+		const appearance = createGraphAppearance({ ...settings.panel, nodeScale: 2.5 }, "modern");
+		const profile = buildProfile(settings, appearance);
+		expect(profile.appearance).toBe(appearance);
+		expect(profile.panel.nodeScale).toBe(2.5);
+		expect(profile.panel.physics).toBe(settings.panel.physics);
+		expect(settings.panel.nodeScale).toBe(DEFAULT_SETTINGS.panel.nodeScale);
+	});
 });
 
 describe("mergeProfile", () => {
@@ -35,6 +45,17 @@ describe("mergeProfile", () => {
 		expect(restored?.openDwellSeconds).toBe(12);
 		expect(restored?.hoverPreview).toEqual(settings.hoverPreview);
 		expect(restored?.chipFilter).toEqual(settings.chipFilter);
+		expect(restored?.appearance).toEqual(settings.appearance);
+	});
+
+	test("imports an old profile with legacy rendering rules", () => {
+		const restored = mergeProfile(DEFAULT_SETTINGS, {
+			version: PROFILE_VERSION,
+			panel: { ...settings.panel, nodeScale: 2 },
+		});
+
+		expect(restored?.appearance.mode).toBe("legacy");
+		expect(restored?.appearance.panel.nodeScale).toBe(2);
 	});
 
 	test("rejects anything that is not a profile", () => {
@@ -88,7 +109,13 @@ describe("mergeProfile", () => {
 
 		const restored = mergeProfile(DEFAULT_SETTINGS, partial);
 
-		expect(restored?.panel).toEqual(settings.panel);
+		expect(restored?.panel).toEqual({
+			...settings.panel,
+			edges: { ...settings.panel.edges, curvature: 0.18 },
+			labels: { ...settings.panel.labels, hoverOnly: false, hubs: 8, fadeMs: 200, rank: "degree" },
+			folders: { enabled: true, level: "top", overrides: {} },
+			glowIntensity: 1,
+		});
 		expect(restored?.openDwellSeconds).toBe(DEFAULT_SETTINGS.openDwellSeconds);
 	});
 

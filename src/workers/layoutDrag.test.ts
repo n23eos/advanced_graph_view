@@ -65,6 +65,35 @@ function settle(engine: ReturnType<typeof makeEngine>["engine"]): void {
 	stepTimes(engine, 600);
 }
 
+function denseWeakHubInit(nodeCount = 25) {
+	const edges = new Uint32Array((nodeCount - 1) * 2);
+	const weights = new Float32Array(nodeCount - 1).fill(0.05);
+	const positions = new Float32Array(nodeCount * 3);
+	for (let id = 1; id < nodeCount; id++) {
+		edges[(id - 1) * 2] = 0;
+		edges[(id - 1) * 2 + 1] = id;
+		const angle = ((id - 1) / (nodeCount - 1)) * Math.PI * 2;
+		positions[id * 3] = Math.cos(angle) * 40;
+		positions[id * 3 + 1] = Math.sin(angle) * 40;
+	}
+	return {
+		type: "init" as const,
+		nodeCount,
+		edges,
+		weights,
+		positions,
+		paused: true,
+	};
+}
+
+const WEAK_LINK_PARAMS: PhysicsParams = {
+	...BASE_PARAMS,
+	repel: 0,
+	centering: 0,
+	linkStrength: 0.01,
+	velocityDecay: 0.8,
+};
+
 /** Radius of gyration of the given nodes — one number for "how spread out". */
 function spread(sent: EngineOutMessage[], ids: number[]): number {
 	const points = ids.map((id) => positionOf(sent, id));
@@ -113,6 +142,140 @@ describe("dragging a node", () => {
 		const freeMoved = Math.hypot(...positionOf(sent, 4).map((v, i) => v - freeBefore[i]));
 		expect(leafMoved).toBeGreaterThan(50);
 		expect(freeMoved).toBeLessThan(leafMoved / 3);
+	});
+
+	test("a direct neighbour starts following through physics without a pointer jump", () => {
+		const { engine, sent } = makeEngine();
+		engine.handle(STAR_INIT);
+		settle(engine);
+		const hubBefore = positionOf(sent, 0);
+		const leafBefore = positionOf(sent, 1);
+
+		engine.handle({ type: "drag-start", id: 0 });
+		engine.handle({
+			type: "drag-move",
+			id: 0,
+			x: hubBefore[0] + 600,
+			y: hubBefore[1],
+			z: hubBefore[2],
+		});
+		engine.handle({ type: "step" });
+
+		const leafAfter = positionOf(sent, 1);
+		const moved = Math.hypot(
+			leafAfter[0] - leafBefore[0],
+			leafAfter[1] - leafBefore[1],
+			leafAfter[2] - leafBefore[2]
+		);
+		// A physical spring reacts on the first simulation step, but it cannot
+		// teleport the leaf by the old 25% pointer delta (150 world units).
+		expect(moved).toBeGreaterThan(5);
+		expect(moved).toBeLessThan(100);
+	});
+
+	test("a small drag visibly moves direct neighbours even on a dense weak hub", () => {
+		const { engine, sent } = makeEngine();
+		engine.handle({ type: "params", params: WEAK_LINK_PARAMS });
+		engine.handle(denseWeakHubInit());
+		stepTimes(engine, 600);
+		const hubBefore = positionOf(sent, 0);
+		const leafBefore = positionOf(sent, 1);
+
+		engine.handle({ type: "drag-start", id: 0 });
+		engine.handle({
+			type: "drag-move",
+			id: 0,
+			x: hubBefore[0] + 24,
+			y: hubBefore[1],
+			z: hubBefore[2],
+		});
+		engine.handle({ type: "step" });
+
+		const leafAfter = positionOf(sent, 1);
+		const moved = Math.hypot(
+			leafAfter[0] - leafBefore[0],
+			leafAfter[1] - leafBefore[1],
+			leafAfter[2] - leafBefore[2]
+		);
+		expect(moved).toBeGreaterThan(3);
+		expect(moved).toBeLessThan(10);
+	});
+
+	test("a pinned direct neighbour is not moved by drag following", () => {
+		const { engine, sent } = makeEngine();
+		engine.handle({ type: "params", params: WEAK_LINK_PARAMS });
+		engine.handle(denseWeakHubInit());
+		stepTimes(engine, 600);
+		const hubBefore = positionOf(sent, 0);
+		const leafBefore = positionOf(sent, 1);
+		engine.handle({ type: "pin", id: 1, x: leafBefore[0], y: leafBefore[1], z: leafBefore[2] });
+
+		engine.handle({ type: "drag-start", id: 0 });
+		engine.handle({
+			type: "drag-move",
+			id: 0,
+			x: hubBefore[0] + 24,
+			y: hubBefore[1],
+			z: hubBefore[2],
+		});
+		engine.handle({ type: "step" });
+
+		expect(positionOf(sent, 1)).toEqual(leafBefore);
+	});
+
+	test("release discards drag following that has not reached a tick", () => {
+		const { engine, sent } = makeEngine();
+		engine.handle({ type: "params", params: WEAK_LINK_PARAMS });
+		engine.handle(denseWeakHubInit());
+		stepTimes(engine, 600);
+		const hubBefore = positionOf(sent, 0);
+		const leafBefore = positionOf(sent, 1);
+
+		engine.handle({ type: "drag-start", id: 0 });
+		engine.handle({
+			type: "drag-move",
+			id: 0,
+			x: hubBefore[0] + 24,
+			y: hubBefore[1],
+			z: hubBefore[2],
+		});
+		engine.handle({ type: "drag-end" });
+		engine.handle({ type: "step" });
+
+		const leafAfter = positionOf(sent, 1);
+		const moved = Math.hypot(
+			leafAfter[0] - leafBefore[0],
+			leafAfter[1] - leafBefore[1],
+			leafAfter[2] - leafBefore[2]
+		);
+		expect(moved).toBeLessThan(1);
+	});
+
+	test("direct following adds no neighbour momentum after release", () => {
+		const { engine, sent } = makeEngine();
+		engine.handle({
+			type: "params",
+			params: { ...WEAK_LINK_PARAMS, linkStrength: 0 },
+		});
+		engine.handle(denseWeakHubInit());
+		stepTimes(engine, 600);
+		const hubBefore = positionOf(sent, 0);
+
+		engine.handle({ type: "drag-start", id: 0 });
+		engine.handle({
+			type: "drag-move",
+			id: 0,
+			x: hubBefore[0] + 24,
+			y: hubBefore[1],
+			z: hubBefore[2],
+		});
+		engine.handle({ type: "step" });
+		const atRelease = positionOf(sent, 1);
+
+		engine.handle({ type: "drag-end" });
+		stepTimes(engine, 10);
+
+		expect(positionOf(sent, 1)).toEqual(atRelease);
 	});
 
 	test("the tow propagates hop by hop, so direct links move most", () => {
@@ -202,6 +365,29 @@ describe("dragging a node", () => {
 		// Assert: heavy damping settles the release faster than light damping,
 		// which can only happen if the released sim is using params again.
 		expect(drift(0.8)).toBeLessThan(drift(0.3));
+	});
+
+	test("releasing restores the resting link forces", () => {
+		const control = makeEngine();
+		const released = makeEngine();
+		for (const { engine } of [control, released]) {
+			engine.handle(STAR_INIT);
+			settle(engine);
+		}
+
+		released.engine.handle({ type: "drag-start", id: 0 });
+		released.engine.handle({ type: "drag-end" });
+		released.engine.handle({ type: "unpin", id: 0 });
+		for (const { engine } of [control, released]) {
+			engine.handle({ type: "reheat", alpha: 0.5 });
+			stepTimes(engine, 8);
+		}
+
+		const controlLeaf = positionOf(control.sent, 1);
+		const releasedLeaf = positionOf(released.sent, 1);
+		expect(releasedLeaf[0]).toBeCloseTo(controlLeaf[0], 5);
+		expect(releasedLeaf[1]).toBeCloseTo(controlLeaf[1], 5);
+		expect(releasedLeaf[2]).toBeCloseTo(controlLeaf[2], 5);
 	});
 
 	test("the graph does not contract while a node is dragged", () => {

@@ -16,6 +16,13 @@ import type { OverlayCounts, OverlayToggles } from "../analysis/overlays";
 import type { PhysicsParams } from "../workers/layoutEngine";
 import { LAYOUT_DENSITIES, applyLayoutDensity, matchLayoutDensity, type LayoutDensity } from "./layoutDensity";
 import { NODE_STYLES, type NodeStyle } from "../render/nodeStyle";
+import {
+	DEFAULT_EDGE_CURVATURE,
+	DEFAULT_FOLDER_APPEARANCE,
+	DEFAULT_GLOW_INTENSITY,
+	DEFAULT_LABEL_APPEARANCE,
+	normalizeFolderOverrides,
+} from "../settings/appearance";
 
 /** "simple" shows a handful of casual controls, "expert" the full panel. */
 export type PanelMode = "simple" | "expert";
@@ -34,6 +41,10 @@ export interface PanelState {
 	physics: PhysicsParams;
 	labels: LabelOptions;
 	edges: EdgeStyleOptions;
+	/** Strength multiplier for the selected glow channel. */
+	glowIntensity?: number;
+	/** Folder grouping and manual color assignments for the overview layer. */
+	folders?: FolderAppearanceOptions;
 	/** Multiplier on node circle radius. */
 	nodeScale: number;
 	view3d: View3DOptions;
@@ -58,12 +69,28 @@ export interface LabelOptions {
 	maxCount: number;
 	/** true: labels shrink with zoom-out and hide when unreadable (scamin). */
 	scaleWithZoom: boolean;
+	/** Hide background labels while keeping hover and action context. */
+	hoverOnly?: boolean;
+	/** Number of high-priority hubs eligible on the overview. */
+	hubs?: number;
+	/** Label opacity transition duration. */
+	fadeMs?: number;
+	/** Ranking used for background label candidates. */
+	rank?: "degree" | "pagerank";
 }
 
 export interface EdgeStyleOptions {
 	show: boolean;
 	width: number;
 	opacity: number;
+	/** Quadratic bend strength. Zero keeps the old straight edge path. */
+	curvature?: number;
+}
+
+export interface FolderAppearanceOptions {
+	enabled: boolean;
+	level: "top" | "parent";
+	overrides: Record<string, string>;
 }
 
 export interface ClusterRow {
@@ -113,6 +140,9 @@ const OVERLAY_KEYS: Record<keyof OverlayToggles, "layers.orphans" | "layers.dead
 
 export class ControlPanel {
 	private root: HTMLElement;
+	private is3D: boolean;
+	private dimensionLocked = false;
+	private overlayCounts: OverlayCounts | null = null;
 	private body: HTMLElement;
 	private overlayCountEls = new Map<keyof OverlayToggles, HTMLElement>();
 	private presetSelect: HTMLSelectElement | null = null;
@@ -128,7 +158,8 @@ export class ControlPanel {
 		private readonly callbacks: PanelCallbacks,
 		private mode: PanelMode = "expert",
 		collapsedSections?: { physics: boolean },
-		private propertyKeys: readonly string[] = []
+		private propertyKeys: readonly string[] = [],
+		private modernControls = true
 	) {
 		// The physics collapse survives restarts (F-07); other sections keep
 		// their session-only static default.
@@ -136,6 +167,7 @@ export class ControlPanel {
 			if (collapsedSections.physics) ControlPanel.openSections.delete("physics");
 			else ControlPanel.openSections.add("physics");
 		}
+		this.is3D = state.view3d.enabled;
 		this.root = host.createDiv({ cls: "graph-insight-panel" });
 
 		const header = this.header = this.root.createEl("button", {
@@ -159,6 +191,14 @@ export class ControlPanel {
 		this.state = next;
 		this.applyCollapsed();
 		this.callbacks.onChange(next);
+	}
+
+	setDisplayMode(is3D: boolean, modernControls: boolean, locked = false): void {
+		if (this.is3D === is3D && this.modernControls === modernControls && this.dimensionLocked === locked) return;
+		this.dimensionLocked = locked;
+		this.is3D = is3D;
+		this.modernControls = modernControls;
+		this.renderBody();
 	}
 
 	private applyCollapsed(): void {
@@ -199,6 +239,7 @@ export class ControlPanel {
 		this.channelSelect(view, t("appearance.colorScheme"), this.state.colorPreset, scaleOptions(), (value) => {
 			this.setState({ ...this.state, colorPreset: value ?? DEFAULT_PRESET_ID });
 		}, false);
+		this.layoutRuleSelect(view);
 		this.channelSelect(
 			view,
 			t("appearance.nodeStyle"),
@@ -218,23 +259,81 @@ export class ControlPanel {
 		this.physicsSlider(view, t("appearance.nodeSize"), 0.1, 3, 0.05, this.state.nodeScale, (value) => {
 			this.setState({ ...this.state, nodeScale: value });
 		});
+		this.physicsSlider(
+			view,
+			t("appearance.glowIntensity"),
+			0,
+			3,
+			0.05,
+			this.state.glowIntensity ?? DEFAULT_GLOW_INTENSITY,
+			(value) => this.setState({ ...this.state, glowIntensity: value })
+		);
+		if (this.modernControls) {
+			const folders = this.effectiveFolders();
+			this.checkboxRow(view, t("folders.enabled"), folders.enabled, (enabled) => {
+				this.setState({ ...this.state, folders: { ...folders, enabled } });
+			});
+			this.channelSelect(
+				view,
+				t("folders.level"),
+				folders.level,
+				{
+					top: t("folders.level.top"),
+					parent: t("folders.level.parent"),
+				},
+				(value) => this.setState({
+					...this.state,
+					folders: { ...folders, level: (value ?? "top") as FolderAppearanceOptions["level"] },
+				}),
+				false
+			);
+			this.folderOverridesRow(view, folders);
+		}
 
 		const textSection = this.section("labels", t("panel.section.labels"));
+		const labelAppearance = { ...DEFAULT_LABEL_APPEARANCE, ...this.state.labels };
 		this.checkboxRow(textSection, t("labels.show"), this.state.labels.show, (value) => {
 			this.setState({ ...this.state, labels: { ...this.state.labels, show: value } });
 		});
 		this.physicsSlider(textSection, t("labels.size"), 6, 18, 0.5, this.state.labels.fontSize, (value) => {
 			this.setState({ ...this.state, labels: { ...this.state.labels, fontSize: value } });
 		});
-		this.physicsSlider(textSection, t("labels.zoom"), 0.1, 2, 0.01, this.state.labels.zoomThreshold, (value) => {
+		this.physicsSlider(textSection, t(this.is3D ? "labels.depth" : "labels.zoom"), 0.1, 2, 0.01, this.state.labels.zoomThreshold, (value) => {
 			this.setState({ ...this.state, labels: { ...this.state.labels, zoomThreshold: value } });
 		});
 		this.physicsSlider(textSection, t("labels.max"), 5, 400, 5, this.state.labels.maxCount, (value) => {
 			this.setState({ ...this.state, labels: { ...this.state.labels, maxCount: value } });
 		});
-		this.checkboxRow(textSection, t("labels.scaleWithZoom"), this.state.labels.scaleWithZoom, (value) => {
-			this.setState({ ...this.state, labels: { ...this.state.labels, scaleWithZoom: value } });
-		});
+		if (!this.is3D || this.modernControls) {
+			this.checkboxRow(textSection, t(this.is3D ? "labels.scaleWithDepth" : "labels.scaleWithZoom"), this.state.labels.scaleWithZoom, (value) => {
+				this.setState({ ...this.state, labels: { ...this.state.labels, scaleWithZoom: value } });
+			});
+		}
+		if (this.modernControls) {
+			this.checkboxRow(textSection, t("labels.hoverOnly"), labelAppearance.hoverOnly, (value) => {
+				this.setState({ ...this.state, labels: { ...this.state.labels, hoverOnly: value } });
+			});
+			this.physicsSlider(textSection, t("labels.hubs"), 0, 64, 1, labelAppearance.hubs, (value) => {
+				this.setState({ ...this.state, labels: { ...this.state.labels, hubs: value } });
+			});
+			this.physicsSlider(textSection, t("labels.fadeMs"), 0, 1000, 25, labelAppearance.fadeMs, (value) => {
+				this.setState({ ...this.state, labels: { ...this.state.labels, fadeMs: value } });
+			});
+			this.channelSelect(
+				textSection,
+				t("labels.rank"),
+				labelAppearance.rank,
+				{
+					degree: t("labels.rank.degree"),
+					pagerank: t("labels.rank.pagerank"),
+				},
+				(value) => this.setState({
+					...this.state,
+					labels: { ...this.state.labels, rank: (value ?? "degree") as LabelOptions["rank"] },
+				}),
+				false
+			);
+		}
 
 		const edgeSection = this.section("links", t("panel.section.links"));
 		this.checkboxRow(edgeSection, t("edges.show"), this.state.edges.show, (value) => {
@@ -246,35 +345,19 @@ export class ControlPanel {
 		this.physicsSlider(edgeSection, t("edges.opacity"), 0.02, 1, 0.01, this.state.edges.opacity, (value) => {
 			this.setState({ ...this.state, edges: { ...this.state.edges, opacity: value } });
 		});
+		if (this.modernControls) {
+			this.physicsSlider(
+				edgeSection,
+				t("edges.curvature"),
+				0,
+				0.6,
+				0.01,
+				this.state.edges.curvature ?? DEFAULT_EDGE_CURVATURE,
+				(value) => this.setState({ ...this.state, edges: { ...this.state.edges, curvature: value } })
+			);
+		}
 
-		const threeD = this.section("threeD", t("panel.section.threeD"));
-		this.checkboxRow(threeD, t("view3d.enabled"), this.state.view3d.enabled, (value) => {
-			this.setState({ ...this.state, view3d: { ...this.state.view3d, enabled: value } });
-		});
-		this.channelSelect(
-			threeD,
-			t("view3d.depth"),
-			this.state.view3d.depthSource,
-			{
-				physics: t("view3d.depth.physics"),
-				cluster: t("view3d.depth.cluster"),
-				age: t("view3d.depth.age"),
-			},
-			(value) => {
-				this.setState({
-					...this.state,
-					view3d: { ...this.state.view3d, depthSource: (value ?? "physics") as View3DOptions["depthSource"] },
-				});
-			},
-			false
-		);
-		this.physicsSlider(threeD, t("view3d.focal"), 300, 2500, 50, this.state.view3d.focal, (value) => {
-			this.setState({ ...this.state, view3d: { ...this.state.view3d, focal: value } });
-		});
-		threeD.createDiv({
-			cls: "graph-insight-panel-hint",
-			text: t("view3d.hint"),
-		});
+		if (this.is3D) this.render3DSettings();
 
 		const layers = this.section("layers", t("panel.section.layers"));
 		layers.createDiv({
@@ -347,7 +430,6 @@ export class ControlPanel {
 			cls: "graph-insight-panel-reset",
 		});
 		physicsResetButton.addEventListener("click", () => this.callbacks.onPhysicsReset());
-		this.layoutRuleSelect(physics);
 		this.physicsSlider(physics, t("physics.repel"), 1, 300, 1, this.state.physics.repel, (value) => {
 			this.setState({ ...this.state, physics: { ...this.state.physics, repel: value } });
 		});
@@ -374,6 +456,35 @@ export class ControlPanel {
 		});
 		const button = physics.createEl("button", { text: t("physics.reheat") });
 		button.addEventListener("click", () => this.callbacks.onReheat());
+		if (this.overlayCounts) this.setOverlayCounts(this.overlayCounts);
+	}
+
+	private render3DSettings(): void {
+		const threeD = this.section("threeD", t("panel.section.threeD"));
+		this.channelSelect(
+			threeD,
+			t("view3d.depth"),
+			this.state.view3d.depthSource,
+			{
+				physics: t("view3d.depth.physics"),
+				cluster: t("view3d.depth.cluster"),
+				age: t("view3d.depth.age"),
+			},
+			(value) => {
+				this.setState({
+					...this.state,
+					view3d: { ...this.state.view3d, depthSource: (value ?? "physics") as View3DOptions["depthSource"] },
+				});
+			},
+			false
+		);
+		this.physicsSlider(threeD, t("view3d.focal"), 300, 2500, 50, this.state.view3d.focal, (value) => {
+			this.setState({ ...this.state, view3d: { ...this.state.view3d, focal: value } });
+		});
+		threeD.createDiv({
+			cls: "graph-insight-panel-hint",
+			text: t("view3d.hint"),
+		});
 	}
 
 	/** Two buttons at the very top: the way out of whichever panel you are in. */
@@ -392,10 +503,19 @@ export class ControlPanel {
 				this.renderBody();
 			});
 		}
+		const dimension = row.createEl("select", { cls: "dropdown", attr: { "aria-label": t("command.toggle3d") } });
+		for (const name of ["2D", "3D"]) dimension.createEl("option", { text: name, value: name });
+		dimension.disabled = this.dimensionLocked;
+		dimension.value = this.is3D ? "3D" : "2D";
+		dimension.addEventListener("change", () => {
+			const enabled = dimension.value === "3D";
+			this.setDisplayMode(enabled, this.modernControls);
+			this.setState({ ...this.state, view3d: { ...this.state.view3d, enabled } });
+			this.body.querySelector<HTMLSelectElement>(".graph-insight-panel-modes select")?.focus();
+		});
 	}
 
-	/** Five controls that cover what most people ever touch. 3D and Explore stay
-	 *  on the toolbar, so this panel deliberately does not repeat them. */
+	/** Frequently used controls shared by both dimensions. */
 	private renderSimpleBody(): void {
 		const body = this.body.createDiv({ cls: "graph-insight-panel-section-body" });
 		// The same canned use cases as the search bar's Tasks… control — the
@@ -514,6 +634,36 @@ export class ControlPanel {
 		checkbox.addEventListener("change", () => onChange(checkbox.checked));
 	}
 
+	private effectiveFolders(): FolderAppearanceOptions {
+		return {
+			...DEFAULT_FOLDER_APPEARANCE,
+			...this.state.folders,
+			overrides: normalizeFolderOverrides(this.state.folders?.overrides),
+		};
+	}
+
+	private folderOverridesRow(parent: HTMLElement, folders: FolderAppearanceOptions): void {
+		const row = parent.createDiv({ cls: "graph-insight-panel-row" });
+		row.createSpan({ cls: "graph-insight-panel-label", text: t("folders.overrides") });
+		const input = row.createEl("input", { type: "text" });
+		input.value = Object.entries(folders.overrides)
+			.map(([folder, color]) => `${folder}=${color}`)
+			.join("; ");
+		input.setAttribute("placeholder", t("folders.overridesHint"));
+		input.addEventListener("change", () => {
+			const parsed: Record<string, string> = {};
+			for (const entry of input.value.split(";")) {
+				const separator = entry.lastIndexOf("=");
+				if (separator < 1) continue;
+				parsed[entry.slice(0, separator).trim()] = entry.slice(separator + 1).trim();
+			}
+			this.setState({
+				...this.state,
+				folders: { ...folders, overrides: normalizeFolderOverrides(parsed) },
+			});
+		});
+	}
+
 	private physicsSlider(
 		parent: HTMLElement,
 		label: string,
@@ -583,6 +733,7 @@ export class ControlPanel {
 	}
 
 	setOverlayCounts(counts: OverlayCounts): void {
+		this.overlayCounts = counts;
 		this.overlayCountEls.get("orphans")?.setText(String(counts.orphans));
 		this.overlayCountEls.get("deadEnds")?.setText(String(counts.deadEnds));
 		this.overlayCountEls.get("broken")?.setText(String(counts.broken));

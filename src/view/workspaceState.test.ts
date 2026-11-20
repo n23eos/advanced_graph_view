@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { normalizeGraphViewState } from "./workspaceState";
+import { createNewGraphViewState, normalizeGraphViewState } from "./workspaceState";
+import { DEFAULT_SETTINGS } from "../settings/schema";
 
 const camera = {
 	viewport: { centerX: 12, centerY: -8, scale: 1.5, referenceScale: 0.75 },
@@ -12,6 +13,24 @@ const camera = {
 };
 
 describe("workspace graph state normalization", () => {
+	test("marks a new graph in an existing vault as modern without changing its values", () => {
+		const panel = { ...DEFAULT_SETTINGS.panel, nodeScale: 2.25 };
+		const state = createNewGraphViewState(panel);
+
+		expect(state.overview).toBe(true);
+		expect(state.appearance).toMatchObject({
+			version: 1,
+			mode: "modern",
+			panel: { nodeScale: 2.25 },
+		});
+	});
+
+	test("preserves explicit overview state while older views keep their saved look", () => {
+		expect(normalizeGraphViewState({ version: 1, overview: true })).toEqual({ version: 1, overview: true });
+		expect(normalizeGraphViewState({ version: 1, overview: false })).toEqual({ version: 1, overview: false });
+		expect(normalizeGraphViewState({ version: 1, overview: "true" })).toEqual({ version: 1 });
+	});
+
 	test("accepts a complete finite camera and a valid committed query", () => {
 		expect(normalizeGraphViewState({ version: 1, camera, hardQuery: "content:needle tag:#work" })).toEqual({
 			version: 1,
@@ -55,5 +74,20 @@ describe("workspace graph state normalization", () => {
 			version: 1,
 			hardQuery: "",
 		});
+	});
+
+	test("normalizes a partial modern appearance without carrying physics into the leaf", () => {
+		const state = normalizeGraphViewState({
+			version: 1,
+			appearance: {
+				version: 1,
+				mode: "modern",
+				panel: { nodeScale: 2, physics: { repel: 999 } },
+			},
+		}, DEFAULT_SETTINGS.panel);
+
+		expect(state?.appearance?.mode).toBe("modern");
+		expect(state?.appearance?.panel.nodeScale).toBe(2);
+		expect(state?.appearance?.panel).not.toHaveProperty("physics");
 	});
 });

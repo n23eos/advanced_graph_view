@@ -7,6 +7,45 @@
 	background: var(--background-primary);
 }
 
+.graph-insight-container.graph-insight-overview {
+	--agv-atmosphere: #5f82ac;
+	--agv-horizon: #b38a61;
+	--agv-sky: #10141f;
+	background:
+		radial-gradient(ellipse at 28% 45%, color-mix(in srgb, var(--agv-atmosphere) 24%, var(--agv-sky)), transparent 64%),
+		radial-gradient(ellipse at 78% 68%, color-mix(in srgb, var(--agv-horizon) 18%, var(--agv-sky)), transparent 57%),
+		var(--agv-sky);
+}
+.theme-light .graph-insight-container.graph-insight-overview { --agv-sky: #f7f8fb; }
+.graph-insight-overview[data-graph-scheme="galaxy"] {
+	--agv-atmosphere: #514acf;
+	--agv-horizon: #3295bc;
+	background:
+		linear-gradient(146deg, transparent 18%, color-mix(in srgb, var(--agv-atmosphere) 14%, transparent) 46%, transparent 73%),
+		radial-gradient(ellipse at 74% 26%, color-mix(in srgb, var(--agv-horizon) 17%, var(--agv-sky)), transparent 61%),
+		var(--agv-sky);
+}
+.graph-insight-overview[data-graph-scheme="nebula"] {
+	background:
+		radial-gradient(ellipse at 16% 72%, color-mix(in srgb, #9a427e 30%, var(--agv-sky)), transparent 58%),
+		radial-gradient(ellipse at 57% 56%, color-mix(in srgb, #bd7059 17%, var(--agv-sky)), transparent 48%),
+		radial-gradient(ellipse at 82% 24%, color-mix(in srgb, #635795 25%, var(--agv-sky)), transparent 64%),
+		var(--agv-sky);
+}
+.graph-insight-overview[data-graph-scheme="neon"] {
+	background:
+		linear-gradient(to top, color-mix(in srgb, #12896b 19%, transparent), transparent 38%),
+		radial-gradient(ellipse at 60% 48%, color-mix(in srgb, #36747d 12%, var(--agv-sky)), var(--agv-sky) 72%);
+}
+.graph-insight-overview[data-graph-scheme="heat"] { --agv-atmosphere: #b03132; --agv-horizon: #e5a13c; }
+.graph-insight-overview[data-graph-scheme="solar"] {
+	background: radial-gradient(ellipse at 14% 102%, color-mix(in srgb, #eaa537 33%, var(--agv-sky)), transparent 58%), var(--agv-sky);
+}
+.graph-insight-overview[data-graph-scheme="mono"] {
+	background: radial-gradient(ellipse at 48% 44%, color-mix(in srgb, #8995a1 14%, var(--agv-sky)), var(--agv-sky) 75%);
+}
+.graph-insight-overview[data-graph-scheme="pastel"] { --agv-atmosphere: #ceafdf; --agv-horizon: #9bdaca; }
+
 .graph-insight-tooltip {
 	position: absolute;
 	z-index: 10;
@@ -16,9 +55,9 @@
 	border: 1px solid var(--background-modifier-border);
 	border-radius: var(--radius-m);
 	box-shadow: var(--shadow-s);
-	padding: 4px 8px;
+	padding: 8px 12px;
 	font-size: var(--font-ui-small);
-	max-width: 360px;
+	max-width: min(34ch, 90%);
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -149,7 +188,12 @@
 }
 
 .graph-insight-tooltip-title {
+	font-family: Georgia, "Times New Roman", serif;
+	font-size: 1.12em;
 	font-weight: 600;
+	line-height: 1.3;
+	white-space: normal;
+	overflow-wrap: anywhere;
 }
 
 .graph-insight-tooltip-meta {
@@ -765,7 +809,9 @@
 	display: none;
 }
 
-.graph-insight-container canvas {
+.graph-insight-container > canvas.graph-insight-scene {
+	position: absolute;
+	inset: 0;
 	display: block;
 	width: 100%;
 	height: 100%;

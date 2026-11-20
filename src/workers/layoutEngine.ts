@@ -145,14 +145,18 @@ const FRAME_INTERVAL_MS = 33;
 const DRAG_INTERVAL_MS = 16;
 // Dragging keeps the real physics running (like Obsidian): the grabbed node is
 // pinned to the pointer, links tow its neighbors, and the tow propagates hop by
-// hop. Forces are left at their settle values (no boost, no centering change),
-// so re-warming returns to the same equilibrium — the graph doesn't contract.
+// hop. Forces stay at their settle values, so drag response does not change the
+// resting layout or add springiness.
 // Only a gentle warmth is added, ramped via alphaTarget, so grabbing a settled
 // graph never jerks it.
 const DRAG_ALPHA_TARGET = 0.3;
 /** Small immediate warmth on grab so the tow responds without waiting for the
  *  alphaTarget ramp — kept low enough to not visibly kick the graph. */
 const DRAG_GRAB_ALPHA = 0.12;
+/** Direct neighbours receive a bounded share of pointer movement once per tick.
+ *  This keeps weak dense graphs legible without changing spring forces. */
+const DRAG_NEIGHBOUR_FOLLOW = 0.2;
+const DRAG_NEIGHBOUR_MAX_STEP = 12;
 // Tuned for compactness: bounded-range repulsion + noticeable centering,
 // otherwise sparse vaults explode into a huge sparse cloud.
 const CENTERING_STRENGTH = 0.04;
@@ -185,6 +189,15 @@ export function createLayoutEngine(
 ): LayoutEngine {
 	let simulation: Simulation3D<SimNode> | null = null;
 	let nodes: SimNode[] = [];
+	let edgePairs: Uint32Array = new Uint32Array();
+	let draggedNodeId: number | null = null;
+	let dragNeighbourIds: number[] = [];
+	let dragPointerX = 0;
+	let dragPointerY = 0;
+	let dragPointerZ = 0;
+	let pendingDragX = 0;
+	let pendingDragY = 0;
+	let pendingDragZ = 0;
 	let params: PhysicsParams = {
 		repel: -CHARGE_STRENGTH,
 		linkDistance: LINK_DISTANCE,
@@ -248,6 +261,58 @@ export function createLayoutEngine(
 		return positions;
 	};
 
+	const clearDragFollow = () => {
+		draggedNodeId = null;
+		dragNeighbourIds = [];
+		pendingDragX = 0;
+		pendingDragY = 0;
+		pendingDragZ = 0;
+	};
+
+	const startDragFollow = (id: number, node: SimNode) => {
+		draggedNodeId = id;
+		dragPointerX = node.x ?? 0;
+		dragPointerY = node.y ?? 0;
+		dragPointerZ = node.z ?? 0;
+		pendingDragX = 0;
+		pendingDragY = 0;
+		pendingDragZ = 0;
+
+		const neighbours = new Set<number>();
+		for (let i = 0; i < edgePairs.length; i += 2) {
+			const source = edgePairs[i];
+			const target = edgePairs[i + 1];
+			if (source === id && target !== id) neighbours.add(target);
+			else if (target === id && source !== id) neighbours.add(source);
+		}
+		dragNeighbourIds = Array.from(neighbours);
+	};
+
+	const applyDragFollow = () => {
+		if (physicsDisabled || draggedNodeId === null) return;
+		const distance = Math.hypot(pendingDragX, pendingDragY, pendingDragZ);
+		if (distance === 0) return;
+
+		const scale = Math.min(
+			DRAG_NEIGHBOUR_FOLLOW,
+			DRAG_NEIGHBOUR_MAX_STEP / distance
+		);
+		const dx = pendingDragX * scale;
+		const dy = pendingDragY * scale;
+		const dz = pendingDragZ * scale;
+		pendingDragX = 0;
+		pendingDragY = 0;
+		pendingDragZ = 0;
+
+		for (const id of dragNeighbourIds) {
+			const node = nodes[id];
+			if (!node || node.fx != null || node.fy != null || node.fz != null) continue;
+			node.x = (node.x ?? 0) + dx;
+			node.y = (node.y ?? 0) + dy;
+			if (node.z !== undefined) node.z += dz;
+		}
+	};
+
 	// Bare setTimeout, not window.setTimeout: this module runs inside a Web
 	// Worker, where `window` does not exist at all — the usual Obsidian advice
 	// about popout windows does not apply here and would break the worker. The
@@ -295,6 +360,7 @@ export function createLayoutEngine(
 		(simulation.force("charge") as ReturnType<typeof forceManyBody>)
 			.theta(repulsionTheta(simulation.alpha()));
 		simulation.tick();
+		applyDragFollow();
 		const positions = snapshotPositions();
 		post({ type: "tick", positions, alpha: simulation.alpha() }, [positions.buffer]);
 		if (simulation.alpha() < ALPHA_MIN) {
@@ -307,6 +373,8 @@ export function createLayoutEngine(
 
 	const init = (message: InitMessage) => {
 		stopTimer();
+		clearDragFollow();
+		edgePairs = message.edges;
 		const dimensions = message.dimensions ?? 2;
 
 		// No carried-over seed? Scatter nodes into a cloud rather than leaving
@@ -442,6 +510,7 @@ export function createLayoutEngine(
 					const wasDisabled = physicsDisabled;
 					physicsDisabled = !!params.disabled;
 					if (physicsDisabled) {
+						clearDragFollow();
 						running = false;
 						stopTimer();
 					} else if (wasDisabled && simulation) {
@@ -488,6 +557,7 @@ export function createLayoutEngine(
 					}
 					break;
 				case "drag-start": {
+					clearDragFollow();
 					const node = nodes[message.id];
 					if (node) {
 						node.fx = node.x ?? 0;
@@ -495,9 +565,9 @@ export function createLayoutEngine(
 						if (node.z !== undefined) node.fz = node.z;
 					}
 					if (physicsDisabled || !simulation) break;
-					// Keep the real sim running: pin the node, add a little warmth
-					// (ramped, so no jerk). Links tow neighbors and the tow spreads
-					// hop by hop. Forces stay at settle values — no contraction.
+					if (node) startDragFollow(message.id, node);
+					// Keep the real sim running: pin the node and add a little warmth.
+					// Link and spring parameters remain exactly at their resting values.
 					simulation.alphaTarget(DRAG_ALPHA_TARGET);
 					if (simulation.alpha() < DRAG_GRAB_ALPHA) simulation.alpha(DRAG_GRAB_ALPHA);
 					// Ease off the friction so the tow reaches past the first hop.
@@ -510,20 +580,34 @@ export function createLayoutEngine(
 				case "drag-move": {
 					const node = nodes[message.id];
 					if (!node) break;
+					if (draggedNodeId === message.id) {
+						const dx = message.x - dragPointerX;
+						const dy = message.y - dragPointerY;
+						const dz = message.z === undefined ? 0 : message.z - dragPointerZ;
+						dragPointerX = message.x;
+						dragPointerY = message.y;
+						if (message.z !== undefined) dragPointerZ = message.z;
+						if (!physicsDisabled && simulation) {
+							pendingDragX += dx;
+							pendingDragY += dy;
+							pendingDragZ += dz;
+						}
+					}
+					node.x = message.x;
+					node.y = message.y;
+					if (message.z !== undefined) node.z = message.z;
 					node.fx = message.x;
 					node.fy = message.y;
 					if (message.z !== undefined) node.fz = message.z;
 					if (physicsDisabled || !simulation) {
 						// No physics: just reposition the grabbed node and repaint.
-						node.x = message.x;
-						node.y = message.y;
-						if (message.z !== undefined) node.z = message.z;
 						const positions = snapshotPositions();
 						post({ type: "tick", positions, alpha: 0 }, [positions.buffer]);
 					}
 					break;
 				}
 				case "drag-end": {
+					clearDragFollow();
 					if (physicsDisabled || !simulation) {
 						const positions = snapshotPositions();
 						post({ type: "end", positions }, [positions.buffer]);

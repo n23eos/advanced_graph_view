@@ -93,4 +93,16 @@ describe("pickNodeAt", () => {
 			})
 		).toBeNull();
 	});
+
+	test("a projected core radius takes precedence over the raw node radius", () => {
+		const options = {
+			...ROW,
+			depthScales: new Float32Array([3, 1, 1]),
+			projectedCoreRadii: new Float32Array([18, 10, 10]),
+			pointerY: 0,
+		};
+
+		expect(pickNodeAt({ ...options, pointerX: 17 })).toBe(0);
+		expect(pickNodeAt({ ...options, pointerX: 19 })).toBeNull();
+	});
 });

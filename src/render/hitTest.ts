@@ -24,6 +24,8 @@ export interface PickOptions {
 	hiddenMask?: Uint8Array | null;
 	/** Per-node depth scale; 0 = behind the camera, so not pickable. */
 	depthScales?: Float32Array | null;
+	/** Projected radii of bright cores, including depth and enlargement. */
+	projectedCoreRadii?: Float32Array | null;
 }
 
 /**
@@ -34,7 +36,7 @@ export interface PickOptions {
  * node drawn on top of it.
  */
 export function pickNodeAt(options: PickOptions): number | null {
-	const { positions, radii, pointerX, pointerY, hitRadius, hiddenMask, depthScales } = options;
+	const { positions, radii, pointerX, pointerY, hitRadius, hiddenMask, depthScales, projectedCoreRadii } = options;
 
 	let best: number | null = null;
 	let bestDistanceSq = Infinity;
@@ -49,7 +51,7 @@ export function pickNodeAt(options: PickOptions): number | null {
 		const dx = positions[i * 2] - pointerX;
 		const dy = positions[i * 2 + 1] - pointerY;
 		const distanceSq = dx * dx + dy * dy;
-		const visualRadius = radii[i] * (depthScales ? depthScales[i] : 1);
+		const visualRadius = projectedCoreRadii?.[i] ?? radii[i] * (depthScales ? depthScales[i] : 1);
 		const reach = Math.max(visualRadius, hitRadius);
 
 		if (distanceSq <= reach * reach && distanceSq < bestDistanceSq) {
