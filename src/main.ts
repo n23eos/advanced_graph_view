@@ -1,4 +1,4 @@
-import { Plugin, TFile, debounce, getLanguage } from "obsidian";
+import { Plugin, TFile, addIcon, debounce, getLanguage } from "obsidian";
 import { GraphInsightView, GRAPH_INSIGHT_VIEW_TYPE } from "./view/GraphView";
 import { findGraphView } from "./view/findGraphView";
 import { LatestWriteQueue } from "./data/latestWriteQueue";
@@ -45,6 +45,23 @@ import type { SearchPreset } from "./ui/SearchBar";
 import type { ViewPreset } from "./view/builtinPresets";
 import type { GraphAppearance } from "./settings/appearance";
 import { createNewGraphViewState } from "./view/workspaceState";
+
+const RIBBON_GRAPH_ICON = "agv-spatial-graph";
+const RIBBON_GRAPH_SVG = `
+	<g fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+		<path d="M28 29 51 17 78 35 74 69 46 85 20 62Z" opacity=".65"/>
+		<path d="M28 29 55 50 78 35M20 62 55 50 74 69M46 85 55 50"/>
+	</g>
+	<g fill="currentColor">
+		<circle cx="51" cy="17" r="6" opacity=".75"/>
+		<circle cx="28" cy="29" r="7" opacity=".82"/>
+		<circle cx="78" cy="35" r="7" opacity=".82"/>
+		<circle cx="20" cy="62" r="8"/>
+		<circle cx="74" cy="69" r="8"/>
+		<circle cx="46" cy="85" r="8"/>
+		<circle cx="55" cy="50" r="11"/>
+	</g>
+`;
 
 const SESSION_TRAIL_CAP = 200;
 const USAGE_SAVE_DEBOUNCE_MS = 30_000;
@@ -127,7 +144,8 @@ export default class GraphInsightPlugin extends Plugin {
 				return true;
 			},
 		});
-		this.addRibbonIcon("git-fork", t("command.ribbon"), () => void this.activateView());
+		addIcon(RIBBON_GRAPH_ICON, RIBBON_GRAPH_SVG);
+		this.addRibbonIcon(RIBBON_GRAPH_ICON, t("command.ribbon"), () => void this.activateView());
 
 		this.addCommand({
 			id: "show-onboarding",

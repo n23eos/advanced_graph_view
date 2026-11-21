@@ -6,6 +6,7 @@
  */
 
 export function setIcon(): void {}
+export function addIcon(): void {}
 
 export class Notice {
 	constructor(public message?: string) {}
