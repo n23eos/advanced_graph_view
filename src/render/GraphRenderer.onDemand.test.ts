@@ -14,6 +14,7 @@ interface RenderHarness {
 	targetPositions3: Float32Array | null;
 	radii: Float32Array | null;
 	sprites: Sprite[];
+	incidentEdges: number[][];
 	world: Container;
 	positionsDirty: boolean;
 	edgesDirty: boolean;
@@ -271,6 +272,37 @@ describe("visual mutation invalidation", () => {
 		change(renderer);
 		state.renderFrame();
 		expect(render).toHaveBeenCalledOnce();
+	});
+
+	test("dims only the background while hovering and restores it after leaving", () => {
+		const { state, settle } = setup();
+		state.model = buildGraphModel(["focus.md", "neighbor.md", "background.md"], {
+			"focus.md": { "neighbor.md": 1 },
+		}, {});
+		state.incidentEdges = [[0], [0], []];
+		state.positions = new Float32Array([10, 20, 30, 20, 50, 20]);
+		state.radii = new Float32Array(3).fill(5);
+		state.sprites = Array.from({ length: 3 }, () => new Sprite(Texture.EMPTY));
+		settle();
+
+		const pick = vi.spyOn(state, "findNodeAt").mockReturnValue(0);
+		const event = { clientX: 10, clientY: 20 } as PointerEvent;
+		state.handlePointerMove(event);
+		now += 80;
+		state.renderFrame();
+		expect(state.sprites[0].alpha).toBe(1);
+		expect(state.sprites[1].alpha).toBe(1);
+		expect(state.sprites[2].alpha).toBeCloseTo(0.84);
+
+		now += 80;
+		state.renderFrame();
+		expect(state.sprites[2].alpha).toBeCloseTo(0.68);
+
+		pick.mockReturnValue(null);
+		state.handlePointerMove(event);
+		now += 160;
+		state.renderFrame();
+		expect(state.sprites[2].alpha).toBe(1);
 	});
 
 	test("changes hover tint and labels without waiting for the safety frame", () => {

@@ -154,19 +154,8 @@ function drawMaterialDetails(
 	const c = NODE_TEXTURE_RADIUS;
 	const width = Math.max(1, radius * (ring ? 0.05 : 0.075));
 	if (skin === "star") {
-		const ray = Math.min(NODE_TEXTURE_RADIUS * 0.94, radius * 2.35);
-		const shortRay = ray * 0.68;
-		g.moveTo(c, c - ray);
-		g.lineTo(c, c + ray);
-		g.moveTo(c - shortRay, c);
-		g.lineTo(c + shortRay, c);
-		g.stroke({
-			color: 0xffffff,
-			alpha: (ring ? 0.78 : 0.88) * detailIntensity,
-			width: Math.max(0.9, radius * 0.055),
-		});
 		g.circle(c, c, radius * 0.42);
-		g.fill({ color: 0xffffff, alpha: 1 });
+		g.fill({ color: 0xffffff, alpha: ring ? 0.5 : 1 });
 	} else if (skin === "nebula") {
 		g.ellipse(c - radius * 0.14, c + radius * 0.08, radius * 1.22, radius * 0.7);
 		g.fill({ color: 0xffffff, alpha: (ring ? 0.08 : 0.1) * detailIntensity });

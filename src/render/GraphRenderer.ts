@@ -60,7 +60,9 @@ const EDGE_ALPHA = 0.25;
 const OVERVIEW_EDGE_ALPHA_FACTOR = 0.36;
 const HOVER_EDGE_LIMIT = 120;
 const HOVER_EDGE_FADE_MS = 180;
-const HOVER_EDGE_WIDTH_PX = 1.35;
+const HOVER_EDGE_WIDTH_PX = 1.85;
+const HOVER_BACKGROUND_EDGE_ALPHA = 0.34;
+const HOVER_FOCUS_FADE_MS = 160;
 const FOLDER_COLORS = [0x508bd7, 0x53bba7, 0xaf79d2, 0xe0a456, 0x72a95d];
 // Text rasterization is expensive; creating many labels in one frame causes
 // visible hitches during panning, so budget creations per frame.
@@ -214,11 +216,14 @@ export class GraphRenderer {
 	private readonly edgePath = createEdgePathView();
 	private hullGraphics = new Graphics();
 	private hoverEdgeGraphics = new Graphics();
+	private hoverNodeGraphics = new Graphics();
 	private edgePulseGraphics = new Graphics();
 	private incidentEdges: number[][] = [];
 	private highlightedEdgeNode: number | null = null;
 	private hoverEdgeOpacity = 0;
 	private hoverEdgeFrameAt = 0;
+	private hoverFocus = 0;
+	private hoverFocusFrameAt = 0;
 	private edgePulseBatch: EdgePulseBatch | null = null;
 	private readonly edgePulseScratch: number[] = [];
 	private trailGraphics = new Graphics();
@@ -438,6 +443,7 @@ export class GraphRenderer {
 			this.hoverEdgeGraphics,
 			this.edgePulseGraphics,
 			this.nodeLayer,
+			this.hoverNodeGraphics,
 			this.pinGraphics,
 			this.labelLayer,
 			this.trailGraphics,
@@ -542,9 +548,9 @@ export class GraphRenderer {
 		this.labelImportance = null;
 		this.rebuildModernLabelOrder();
 		this.incidentEdges = Array.from({ length: model.nodes.length }, () => []);
-		this.highlightedEdgeNode = null;
-		this.hoverEdgeOpacity = 0;
-		this.hoverEdgeGraphics.clear();
+		this.hoveredId = null;
+		this.hoverNeighbors.clear();
+		this.resetHoverFocus();
 		this.clearEdgePulses(false);
 		this.positions3 = new Float32Array(model.nodes.length * 3);
 		this.targetPositions3 = null;
@@ -952,6 +958,7 @@ export class GraphRenderer {
 				factor: this.alphaFactors ? this.alphaFactors[i] : 1,
 				fog: fogged ? fogFactor(this.depthScales![i], this.camera.focal) : 1,
 				hoverActive: this.hoveredId !== null,
+				hoverFocus: this.hoverFocus,
 				isHovered: i === this.hoveredId,
 				isHoverNeighbor: this.hoverNeighbors.has(i),
 			});
@@ -1117,6 +1124,7 @@ export class GraphRenderer {
 		this.invalidate();
 		this.cullDirty = true;
 		const wasExploring = this.explore !== null;
+		if (overlay) this.resetHoverFocus();
 		this.explore = overlay ? { ...overlay, neighbors: [...overlay.neighbors] } : null;
 		// The rest of the vault's links are the loudest thing on screen once
 		// the nodes are dimmed, so fade the whole edge mesh while the mode
@@ -1229,6 +1237,7 @@ export class GraphRenderer {
 
 	setPresentationLinks(emphasis: number | null): void {
 		if (this.presentationLinks === emphasis) return;
+		if (this.presentationLinks === null && emphasis !== null) this.resetHoverFocus();
 		this.presentationLinks = emphasis;
 		this.exploreGraphics.alpha = emphasis ?? 1;
 		this.edgeMesh?.setAlpha(this.effectiveEdgeAlpha());
@@ -1727,11 +1736,13 @@ export class GraphRenderer {
 			this.edgesDirty = false;
 			this.updateEdgeGeometry();
 			this.redrawHoverEdges();
+			this.redrawHoverNodes();
 			this.redrawTrail();
 			this.redrawExplore();
 			this.redrawPath();
 			this.redrawPins();
 		}
+		this.advanceHoverFocus();
 		this.advanceHoverEdges();
 		this.advanceEdgePulses();
 		if (this.cullDirty || force) {
@@ -1970,11 +1981,6 @@ export class GraphRenderer {
 	setOverviewStyle(enabled: boolean): void {
 		if (this.overviewStyle === enabled) return;
 		this.overviewStyle = enabled;
-		if (!enabled && !this.modernAppearance) {
-			this.highlightedEdgeNode = null;
-			this.hoverEdgeOpacity = 0;
-			this.hoverEdgeGraphics.clear();
-		}
 		this.syncOverviewStyle();
 		this.edgeMesh?.setAlpha(this.effectiveEdgeAlpha());
 		this.invalidate();
@@ -1988,10 +1994,12 @@ export class GraphRenderer {
 
 
 	private effectiveEdgeAlpha(): number {
-		return this.edgeOpacity * (this.overviewStyle ? OVERVIEW_EDGE_ALPHA_FACTOR : 1) *
-			(this.presentationLinks === null
-				? this.explore ? EXPLORE_BACKGROUND_EDGE_DIM : 1
-				: 0.42 + (EXPLORE_BACKGROUND_EDGE_DIM - 0.42) * this.presentationLinks);
+		const base = this.edgeOpacity * (this.overviewStyle ? OVERVIEW_EDGE_ALPHA_FACTOR : 1);
+		if (this.presentationLinks !== null) {
+			return base * (0.42 + (EXPLORE_BACKGROUND_EDGE_DIM - 0.42) * this.presentationLinks);
+		}
+		if (this.explore) return base * EXPLORE_BACKGROUND_EDGE_DIM;
+		return base * (1 - (1 - HOVER_BACKGROUND_EDGE_ALPHA) * this.hoverFocus);
 	}
 
 	private effectiveEdgeWidth(): number {
@@ -2218,21 +2226,32 @@ export class GraphRenderer {
 	private updateHoverNeighbors(): void {
 		this.hoverNeighbors.clear();
 		if (this.hoveredId === null || !this.model) return;
-		if (this.modernAppearance) {
-			for (const index of this.incidentEdges[this.hoveredId] ?? []) {
-				const { source, target } = this.model.edges[index];
-				this.hoverNeighbors.add(source === this.hoveredId ? target : source);
-			}
-			return;
-		}
-		for (const edge of this.model.edges) {
-			if (edge.source === this.hoveredId) this.hoverNeighbors.add(edge.target);
-			else if (edge.target === this.hoveredId) this.hoverNeighbors.add(edge.source);
+		for (const index of this.incidentEdges[this.hoveredId] ?? []) {
+			const { source, target } = this.model.edges[index];
+			this.hoverNeighbors.add(source === this.hoveredId ? target : source);
 		}
 	}
 
-	private hoverEdgeAppearanceEnabled(): boolean {
-		return this.modernAppearance || this.overviewStyle;
+	private resetHoverFocus(): void {
+		this.hoverFocus = 0;
+		this.highlightedEdgeNode = null;
+		this.hoverEdgeOpacity = 0;
+		this.hoverEdgeGraphics.clear();
+		this.hoverNodeGraphics.clear();
+	}
+
+	private advanceHoverFocus(): void {
+		const target = this.hoveredId === null || this.explore !== null || this.presentationLinks !== null ? 0 : 1;
+		if (this.hoverFocus === target) return;
+		const now = this.frameNow();
+		const owner = this._ownerWindow;
+		const duration = owner?.matchMedia ? motionMs(HOVER_FOCUS_FADE_MS, owner) : HOVER_FOCUS_FADE_MS;
+		const step = Math.max(1, now - this.hoverFocusFrameAt) / duration;
+		this.hoverFocusFrameAt = now;
+		this.hoverFocus = target === 1 ? Math.min(1, this.hoverFocus + step) : Math.max(0, this.hoverFocus - step);
+		this.applyNodeAlpha();
+		this.edgeMesh?.setAlpha(this.effectiveEdgeAlpha());
+		this.invalidate();
 	}
 
 	private startEdgePulses(origin: number | null, neighbors?: readonly number[]): void {
@@ -2338,7 +2357,7 @@ export class GraphRenderer {
 	}
 
 	private advanceHoverEdges(): void {
-		if (!this.hoverEdgeAppearanceEnabled()) return;
+		if (this.explore !== null || this.presentationLinks !== null) return;
 		const target = this.edgesVisible ? this.hoveredId : null;
 		if (target === this.highlightedEdgeNode &&
 			this.hoverEdgeOpacity === (target === null ? 0 : 1)) return;
@@ -2363,7 +2382,7 @@ export class GraphRenderer {
 		const graphics = this.hoverEdgeGraphics;
 		graphics.clear();
 		const id = this.highlightedEdgeNode;
-		if (!this.hoverEdgeAppearanceEnabled() || !this.edgesVisible || id === null ||
+		if (this.explore !== null || this.presentationLinks !== null || !this.edgesVisible || id === null ||
 			!this.positions || !this.model || !this.colors) return;
 		const incident = this.incidentEdges[id];
 		if (!incident) return;
@@ -2374,10 +2393,41 @@ export class GraphRenderer {
 			if (++count >= HOVER_EDGE_LIMIT) break;
 		}
 		if (count > 0) graphics.stroke({
-			color: this.colors.nodeSelected,
-			alpha: 0.83,
+			color: edgeColor(-1, -1, this.colors.nodeSelected, this.colors.label),
+			alpha: 0.93,
 			width: HOVER_EDGE_WIDTH_PX / Math.max(0.001, this.viewport?.scale ?? 1),
 		});
+	}
+
+	/** Keep the local neighborhood legible even when node textures are tiny. */
+	private redrawHoverNodes(): void {
+		const g = this.hoverNodeGraphics;
+		g.clear();
+		const center = this.hoveredId;
+		if (center === null || this.explore || this.presentationLinks !== null || !this.positions || !this.colors) return;
+		const scale = Math.max(0.001, this.viewport?.scale ?? 1);
+		const halo = this.labelHalo;
+		const accent = edgeColor(-1, -1, this.colors.nodeSelected, this.colors.label);
+		const visible = (id: number) => this.sprites[id]?.visible && this.hiddenMask?.[id] !== 1
+			&& (!this.camera.enabled || this.depthScales?.[id] !== 0);
+
+		let count = 0;
+		for (const id of this.hoverNeighbors) {
+			if (id === center || !visible(id)) continue;
+			const x = this.positions[id * 2], y = this.positions[id * 2 + 1];
+			const radius = Math.max(3.2 / scale, Math.min(7.5 / scale, this.projectedCoreRadii[id] || 0));
+			g.circle(x, y, radius).fill({ color: halo, alpha: 0.92 });
+			g.circle(x, y, radius).stroke({ color: accent, width: 1.45 / scale });
+			g.circle(x, y, 1.65 / scale).fill({ color: this.colors.label });
+			if (++count >= HOVER_EDGE_LIMIT) break;
+		}
+		if (!visible(center)) return;
+		const x = this.positions[center * 2], y = this.positions[center * 2 + 1];
+		const radius = Math.max(8 / scale, (this.projectedCoreRadii[center] || 0) + 3 / scale);
+		g.circle(x, y, radius + 3 / scale).fill({ color: accent, alpha: 0.23 });
+		g.circle(x, y, radius).fill({ color: halo, alpha: 0.90 });
+		g.circle(x, y, radius).stroke({ color: this.colors.label, width: 2 / scale });
+		g.circle(x, y, radius * 0.42).fill({ color: accent });
 	}
 
 	private handlePointerMove = (event: PointerEvent): void => {
@@ -2458,17 +2508,19 @@ export class GraphRenderer {
 			this.callbacks.onNodePreview?.(nodeId, event);
 			return;
 		}
+		if (this.presentationLinks !== null) return;
 		const nodeId = this.findNodeAt(event.clientX, event.clientY);
 		if (nodeId !== this.hoveredId) {
 			this.invalidate();
 			this.cullDirty = true;
 			this.hoveredId = nodeId;
-			this.hoverEdgeFrameAt = this.frameNow();
+			this.hoverEdgeFrameAt = this.hoverFocusFrameAt = this.frameNow();
 			this.updateHoverNeighbors();
 			this.startEdgePulses(nodeId);
 			this.applyNodeTints();
 			this.applyNodeAlpha();
 			this.applyHoverSize();
+			this.redrawHoverNodes();
 		}
 		this.callbacks.onNodeHover(nodeId, event.clientX, event.clientY);
 		this.callbacks.onNodePreview?.(nodeId, event);

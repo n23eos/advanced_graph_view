@@ -1,11 +1,8 @@
-## What's new
+## What's new since beta.3
 
-- **See the structure in dense graphs.** Thinner curved links, distinct glow effects for color schemes, and optional folder colors and labels make groups and connections easier to follow.
-- **Read sharper labels.** Text renders at display resolution even at Standard render quality. The label visibility threshold follows projected size in 3D and zoom in 2D. PNG exports include labels.
-- **Follow active connections.** A brief electric pulse travels along links when you hover over a node or begin dragging it. It respects the system's reduced-motion setting.
-- **Move connected nodes with shorter drags.** Direct neighbors start following sooner. This beta uses the graph's existing physics for the motion after release and replaces the separate trailing effect from beta.2.
-- **Find the right controls.** The settings panel adapts to 2D or 3D. In Expert mode, Layout rules sits just below Color scheme.
+- Hover over a note to see a ring around it, smaller markers on its direct neighbors, and brighter lines connecting them. The rest of the graph fades back until the pointer moves away.
+- Galaxy nodes keep a round glow at every size. This removes the cross-shaped rays visible on dense graphs.
+- Start the fullscreen screensaver from the mode controls to follow the camera between notes and watch their connections light up.
+- Curved links have clearer contrast across zoom levels. The settings panel is more compact, and a spatial graph icon opens the view from the ribbon.
 
-New graph tabs use the updated styling. Restored tabs keep their saved appearance, and saved presets retain their settings.
-
-This desktop beta requires Obsidian 1.13.0 or later. Large graphs can still take time to settle and may drop frames when zooming. Feedback on label readability and drag response in both modes is welcome.
+Requires Obsidian Desktop 1.13.0 or later. On dense graphs, layout and zoom can still drop frames, particularly around 5,000 nodes in 3D or 10,000 in 2D.

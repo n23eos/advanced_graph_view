@@ -115,6 +115,7 @@ const BASE = {
 	factor: 1,
 	fog: 1,
 	hoverActive: false,
+	hoverFocus: 0,
 	isHovered: false,
 	isHoverNeighbor: false,
 };
@@ -148,11 +149,14 @@ describe("nodeAlpha", () => {
 		expect(nodeAlpha({ ...BASE, hoverActive: true, isHoverNeighbor: true })).toBe(1);
 	});
 
-	test("hovering does not dim the rest of the scene", () => {
-		// Regression: whole-scene dimming made every hover flash the graph.
+	test("the background fades smoothly while the direct neighborhood stays legible", () => {
 		const idle = nodeAlpha({ ...BASE, fog: 0.7 });
-		const whileHovering = nodeAlpha({ ...BASE, fog: 0.7, hoverActive: true });
-		expect(whileHovering).toBe(idle);
+		const halfway = nodeAlpha({ ...BASE, fog: 0.7, hoverActive: true, hoverFocus: 0.5 });
+		const full = nodeAlpha({ ...BASE, fog: 0.7, hoverActive: true, hoverFocus: 1 });
+		expect(full).toBeLessThan(halfway);
+		expect(halfway).toBeLessThan(idle);
+		expect(nodeAlpha({ ...BASE, fog: 0.7, hoverFocus: 0.5 })).toBe(halfway);
+		expect(nodeAlpha({ ...BASE, hoverActive: true, hoverFocus: 1, isHoverNeighbor: true })).toBe(1);
 	});
 });
 

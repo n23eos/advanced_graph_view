@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import type { Renderer, Texture } from "pixi.js";
+import { Graphics, type Renderer, type Texture } from "pixi.js";
 import { NodeTextureCache } from "./NodeTexture";
 
 function harness() {
@@ -43,6 +43,19 @@ describe("NodeTextureCache", () => {
 		expect(new Set([galaxy, nebula, neon]).size).toBe(3);
 		expect(cache.get("galaxy", "glow", 1)).toBe(galaxy);
 		expect(generateTexture).toHaveBeenCalledTimes(3);
+	});
+
+	test("Galaxy uses round glow in all styles without radial cross strokes", () => {
+		const { cache } = harness();
+		const line = vi.spyOn(Graphics.prototype, "lineTo");
+		try {
+			cache.get("galaxy", "flat");
+			cache.get("galaxy", "ring");
+			cache.get("galaxy", "glow", 1);
+			expect(line).not.toHaveBeenCalled();
+		} finally {
+			line.mockRestore();
+		}
 	});
 
 	test("invalidates only the requested node style", () => {

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0-beta.4] - 2026-11-21
+
+- Hover over a note to see a ring around it, smaller markers on its direct neighbors, and brighter lines connecting them. The rest of the graph fades back until the pointer moves away.
+- Galaxy nodes keep a round glow at every size. This removes the cross-shaped rays visible on dense graphs.
+- Start the fullscreen screensaver from the mode controls to follow the camera between notes and watch their connections light up.
+- Curved links have clearer contrast across zoom levels. The settings panel is more compact, and a spatial graph icon opens the view from the ribbon.
+
 ## [0.12.0-beta.3] - 2026-11-20
 
 ### Added
@@ -587,7 +594,8 @@ Settings from older versions migrate automatically on the first load.
 Initial release: an interactive 3D graph view for large vaults, with clusters,
 PageRank, metric-driven node encoding and usage tracking.
 
-[Unreleased]: https://github.com/n23eos/advanced_graph_view/compare/0.10.0...HEAD
+[Unreleased]: https://github.com/n23eos/advanced_graph_view/compare/0.12.0-beta.4...HEAD
+[0.12.0-beta.4]: https://github.com/n23eos/advanced_graph_view/compare/0.12.0-beta.3...0.12.0-beta.4
 [0.10.0]: https://github.com/n23eos/advanced_graph_view/compare/0.9.0...0.10.0
 [0.4.0]: https://github.com/n23eos/advanced_graph_view/compare/0.3.0...0.4.0
 [0.3.0]: https://github.com/n23eos/advanced_graph_view/compare/0.2.1...0.3.0

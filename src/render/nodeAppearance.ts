@@ -18,6 +18,7 @@ export const HOVER_SIZE_BOOST = 1.9;
 export const HIGHLIGHT_SIZE_BOOST = 1.45;
 /** Neighbours of the hovered node stay lit at least this much. */
 export const HOVER_NEIGHBOR_ALPHA = 0.9;
+const HOVER_BACKGROUND_NODE_ALPHA = 0.68;
 /** Alpha of nodes excluded by a filter. */
 export const DIM_ALPHA = 0.12;
 /** Nodes dissolve over the last stretch before the near plane (world units). */
@@ -102,23 +103,19 @@ export interface NodeAlphaInput {
 	fog: number;
 	/** Something is hovered right now. */
 	hoverActive: boolean;
+	/** Animated strength of the background fade, including after pointer exit. */
+	hoverFocus: number;
 	isHovered: boolean;
 	isHoverNeighbor: boolean;
 }
 
-/**
- * Final sprite alpha. Hovering lifts the node and its neighbours without
- * dimming the rest of the scene — whole-scene dimming made every hover flash
- * the entire graph.
- */
+/** Final sprite alpha with direct neighbors emphasized during hover. */
 export function nodeAlpha(input: NodeAlphaInput): number {
 	const base = input.dimmed ? input.glow * DIM_ALPHA : input.glow;
-	let alpha = base * input.factor * input.fog;
-	if (input.hoverActive) {
-		if (input.isHovered) alpha = 1;
-		else if (input.isHoverNeighbor) alpha = Math.max(alpha, HOVER_NEIGHBOR_ALPHA);
-	}
-	return alpha;
+	const alpha = base * input.factor * input.fog;
+	if (input.hoverActive && input.isHovered) return 1;
+	if (input.hoverActive && input.isHoverNeighbor) return Math.max(alpha, HOVER_NEIGHBOR_ALPHA);
+	return alpha * (1 - (1 - HOVER_BACKGROUND_NODE_ALPHA) * input.hoverFocus);
 }
 
 /**
