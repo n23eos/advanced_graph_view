@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-21
+
+First stable update since 0.10.1. Highlights include neighborhood highlighting, curved links, sharper labels, a fullscreen graph tour, frontmatter filters and colors, optional attachment and unresolved nodes, and restored per-tab cameras and queries. Large 3D graphs use cheaper early layout steps and share vertices when drawing links. The release also includes the persistence, export, multi-window and idle-rendering fixes listed below.
+
+[Read the full release notes](https://github.com/n23eos/advanced_graph_view/releases/tag/0.12.0).
+
 ## [0.12.0-beta.4] - 2026-11-21
 
 - Hover over a note to see a ring around it, smaller markers on its direct neighbors, and brighter lines connecting them. The rest of the graph fades back until the pointer moves away.
@@ -53,7 +59,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Publish the hardening and optional graph features below as a beta for testing. Native acceptance remains incomplete.
 
-## [0.12.0] - 2026-11-14
+## 0.12.0 development candidate - 2026-11-14
 
 ### Added
 
@@ -594,7 +600,8 @@ Settings from older versions migrate automatically on the first load.
 Initial release: an interactive 3D graph view for large vaults, with clusters,
 PageRank, metric-driven node encoding and usage tracking.
 
-[Unreleased]: https://github.com/n23eos/advanced_graph_view/compare/0.12.0-beta.4...HEAD
+[Unreleased]: https://github.com/n23eos/advanced_graph_view/compare/0.12.0...HEAD
+[0.12.0]: https://github.com/n23eos/advanced_graph_view/compare/0.10.1...0.12.0
 [0.12.0-beta.4]: https://github.com/n23eos/advanced_graph_view/compare/0.12.0-beta.3...0.12.0-beta.4
 [0.10.0]: https://github.com/n23eos/advanced_graph_view/compare/0.9.0...0.10.0
 [0.4.0]: https://github.com/n23eos/advanced_graph_view/compare/0.3.0...0.4.0

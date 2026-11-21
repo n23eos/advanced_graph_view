@@ -12,8 +12,8 @@ describe("edge appearance", () => {
 	test("samples a single rounded strand profile for every part of a curve", () => {
 		const texture = createEdgeTexture();
 		try {
-			const uvs = new Float32Array(24);
-			writeEdgeUVs(uvs, 0, 3, 0x22aa55);
+			const uvs = new Float32Array(16);
+			writeEdgeUVs(uvs, 0, 4, 0x22aa55);
 			const sample = (u: number, v: number) => {
 				const { width, height, resource } = texture.source as BufferImageSource;
 				const at = (Math.floor(v * height) * width + Math.floor(u * width)) * 4;
@@ -21,7 +21,7 @@ describe("edge appearance", () => {
 			};
 			expect(sample((uvs[0] + uvs[2]) / 2, uvs[1])).toEqual([34, 170, 85, 255]);
 			expect(sample(uvs[0], uvs[1])[3]).toBeLessThan(255);
-			expect(Array.from(uvs.slice(0, 8))).toEqual(Array.from(uvs.slice(16, 24)));
+			expect(Array.from(uvs.slice(0, 8))).toEqual(Array.from(uvs.slice(8, 16)));
 		} finally {
 			texture.destroy(true);
 		}

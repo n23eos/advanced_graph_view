@@ -133,7 +133,7 @@ export class EdgeMesh {
 		this.segmentCount = this.curvature === 0 ? 1 : (options.segments ?? 6);
 		this.pointsPerEdge = this.segmentCount + 1;
 		const edgeCount = edgePairs.length / 2;
-		this.vertices = new Float32Array(edgeCount * this.segmentCount * 8);
+		this.vertices = new Float32Array(edgeCount * this.pointsPerEdge * 4);
 		// Straight mode keeps only one reusable path scratch. Its hot update loop
 		// remains one pass and does not allocate a second O(E) centerline buffer.
 		this.pathPoints = new Float32Array(
@@ -169,7 +169,7 @@ export class EdgeMesh {
 			}
 			for (let segment = 0; segment < this.segmentCount; segment++) {
 				const geometrySegment = edge * this.segmentCount + segment;
-				const vertex = geometrySegment * 4;
+				const vertex = (edge * this.pointsPerEdge + segment) * 2;
 				const index = geometrySegment * 6;
 				indices[index] = vertex;
 				indices[index + 1] = vertex + 1;
@@ -206,7 +206,7 @@ export class EdgeMesh {
 		for (let edge = 0; edge < this.pathVisible.length; edge++) {
 			const source = nodeTints?.[this.edgePairs[edge * 2]] ?? -1;
 			const target = nodeTints?.[this.edgePairs[edge * 2 + 1]] ?? -1;
-			writeEdgeUVs(this.uvs, edge * this.segmentCount * 8, this.segmentCount, edgeColor(source, target, accent, foreground));
+			writeEdgeUVs(this.uvs, edge * this.pointsPerEdge * 4, this.pointsPerEdge, edgeColor(source, target, accent, foreground));
 		}
 		this.geometry.getBuffer("aUV").update();
 	}
@@ -235,6 +235,7 @@ export class EdgeMesh {
 		spatial?: EdgeSpatialProjection | null
 	): void {
 		this.lastPositions = nodePositions;
+		if (this.pathVisible.length === 0) return;
 		if (this.segmentCount === 1) {
 			this.updateStraightPathsAndVertices(nodePositions, depthScales ?? null);
 		} else if (spatial) {
@@ -432,26 +433,30 @@ export class EdgeMesh {
 		const world = this.spatialWorldScratch!;
 		const projected = this.spatialProjectedScratch!;
 		const projectedDepth = this.spatialDepthScratch!;
-		const chunkEdgeCount = world.length / 3 / this.pointsPerEdge;
+		// Node endpoints were projected once for the sprite layer. Only the
+		// interior samples need another camera transform in that case.
+		const skip = depthScales ? 1 : 0;
+		const samples = this.pointsPerEdge - 2 * skip;
+		const chunkEdgeCount = Math.floor(world.length / 3 / samples);
 		for (let firstEdge = 0; firstEdge < this.pathVisible.length; firstEdge += chunkEdgeCount) {
 			const count = Math.min(chunkEdgeCount, this.pathVisible.length - firstEdge);
 			for (let localEdge = 0; localEdge < count; localEdge++) {
 				const edge = firstEdge + localEdge;
 				const source = this.edgePairs[edge * 2];
 				const target = this.edgePairs[edge * 2 + 1];
-				this.writeSpatialCurve(localEdge, source, target, spatial);
+				this.writeSpatialCurve(localEdge * samples, source, target, spatial, skip);
 			}
 			spatial.projector.project(world, projected, projectedDepth);
 			for (let localEdge = 0; localEdge < count; localEdge++) {
 				const edge = firstEdge + localEdge;
 				const source = this.edgePairs[edge * 2];
 				const target = this.edgePairs[edge * 2 + 1];
-				const sourceOffset = localEdge * this.pointsPerEdge;
+				const sourceOffset = localEdge * samples;
 				const targetOffset = edge * this.pointsPerEdge;
 				let visible = this.edgeIsVisible(source, target, depthScales);
-				for (let point = 0; point < this.pointsPerEdge; point++) {
+				for (let point = 0; point < samples; point++) {
 					const sourcePoint = sourceOffset + point;
-					const targetPoint = targetOffset + point;
+					const targetPoint = targetOffset + skip + point;
 					const x = projected[sourcePoint * 2];
 					const y = projected[sourcePoint * 2 + 1];
 					const depth = projectedDepth[sourcePoint];
@@ -471,6 +476,9 @@ export class EdgeMesh {
 				if (depthScales) {
 					this.pathDepths![targetOffset] = depthScales[source];
 					this.pathDepths![end] = depthScales[target];
+					visible = visible && Number.isFinite(depthScales[source]) && Number.isFinite(depthScales[target])
+						&& Number.isFinite(nodePositions[source * 2]) && Number.isFinite(nodePositions[source * 2 + 1])
+						&& Number.isFinite(nodePositions[target * 2]) && Number.isFinite(nodePositions[target * 2 + 1]);
 				}
 				this.pathVisible[edge] = visible ? 1 : 0;
 			}
@@ -478,10 +486,11 @@ export class EdgeMesh {
 	}
 
 	private writeSpatialCurve(
-		localEdge: number,
+		pointOffset: number,
 		source: number,
 		target: number,
-		spatial: EdgeSpatialProjection
+		spatial: EdgeSpatialProjection,
+		skip: number
 	): void {
 		const xyz = spatial.positions3d;
 		const x1 = xyz[source * 3];
@@ -509,10 +518,9 @@ export class EdgeMesh {
 		const controlX = (x1 + x2) * 0.5 + perpendicularX * offset;
 		const controlY = (y1 + y2) * 0.5 + perpendicularY * offset;
 		const controlZ = (z1 + z2) * 0.5 + perpendicularZ * offset;
-		const pointOffset = localEdge * this.pointsPerEdge;
-		for (let point = 0; point < this.pointsPerEdge; point++) {
+		for (let point = skip; point < this.pointsPerEdge - skip; point++) {
 			const t = point / this.segmentCount;
-			const offset3 = (pointOffset + point) * 3;
+			const offset3 = (pointOffset + point - skip) * 3;
 			this.spatialWorldScratch![offset3] = quadratic(x1, controlX, x2, t);
 			this.spatialWorldScratch![offset3 + 1] = quadratic(y1, controlY, y2, t);
 			this.spatialWorldScratch![offset3 + 2] = quadratic(z1, controlZ, z2, t);
@@ -521,46 +529,26 @@ export class EdgeMesh {
 
 	private updateVertices(): void {
 		for (let edge = 0; edge < this.pathVisible.length; edge++) {
-			const edgeVertex = edge * this.segmentCount * 8;
+			const pointOffset = edge * this.pointsPerEdge;
 			if (this.pathVisible[edge] === 0) {
-				this.vertices.fill(0, edgeVertex, edgeVertex + this.segmentCount * 8);
+				this.vertices.fill(0, pointOffset * 4, (pointOffset + this.pointsPerEdge) * 4);
 				continue;
 			}
-			const pointOffset = edge * this.pointsPerEdge;
-			let endPx = 0;
-			let endPy = 0;
-			for (let segment = 0; segment < this.segmentCount; segment++) {
-				const point = pointOffset + segment;
-				const x1 = this.pathPoints[point * 2];
-				const y1 = this.pathPoints[point * 2 + 1];
-				const x2 = this.pathPoints[point * 2 + 2];
-				const y2 = this.pathPoints[point * 2 + 3];
-				const following = segment === this.segmentCount - 1 ? point + 1 : point + 2;
-				const endDx = this.pathPoints[following * 2] - this.pathPoints[point * 2];
-				const endDy = this.pathPoints[following * 2 + 1] - this.pathPoints[point * 2 + 1];
-				if (segment === 0) {
-					const dx = x2 - x1;
-					const dy = y2 - y1;
-					const length = Math.sqrt(dx * dx + dy * dy) || 1;
-					const offset = this.width * this.strokeDepth(this.pathDepths![point]) * 0.5 / length;
-					endPx = -dy * offset;
-					endPy = dx * offset;
-				}
-				const startPx = endPx;
-				const startPy = endPy;
-				const endLength = Math.sqrt(endDx * endDx + endDy * endDy) || 1;
-				const endOffset = this.width * this.strokeDepth(this.pathDepths![point + 1]) * 0.5 / endLength;
-				endPx = -endDy * endOffset;
-				endPy = endDx * endOffset;
-				const vertex = edgeVertex + segment * 8;
-				this.vertices[vertex] = x1 + startPx;
-				this.vertices[vertex + 1] = y1 + startPy;
-				this.vertices[vertex + 2] = x1 - startPx;
-				this.vertices[vertex + 3] = y1 - startPy;
-				this.vertices[vertex + 4] = x2 + endPx;
-				this.vertices[vertex + 5] = y2 + endPy;
-				this.vertices[vertex + 6] = x2 - endPx;
-				this.vertices[vertex + 7] = y2 - endPy;
+			// Adjacent quads share both vertices of their common cross-section.
+			for (let local = 0; local < this.pointsPerEdge; local++) {
+				const point = pointOffset + local;
+				const previous = local === 0 ? point : point - 1;
+				const next = local === this.segmentCount ? point : point + 1;
+				const dx = this.pathPoints[next * 2] - this.pathPoints[previous * 2];
+				const dy = this.pathPoints[next * 2 + 1] - this.pathPoints[previous * 2 + 1];
+				const length = Math.sqrt(dx * dx + dy * dy) || 1;
+				const half = this.width * this.strokeDepth(this.pathDepths![point]) * 0.5 / length;
+				const px = -dy * half, py = dx * half;
+				const x = this.pathPoints[point * 2], y = this.pathPoints[point * 2 + 1];
+				this.vertices[point * 4] = x + px;
+				this.vertices[point * 4 + 1] = y + py;
+				this.vertices[point * 4 + 2] = x - px;
+				this.vertices[point * 4 + 3] = y - py;
 			}
 		}
 	}

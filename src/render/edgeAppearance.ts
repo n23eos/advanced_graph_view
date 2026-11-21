@@ -43,16 +43,16 @@ export function createEdgeTexture(): Texture {
 	}) });
 }
 
-export function writeEdgeUVs(uvs: Float32Array, offset: number, segments: number, color: number): void {
+export function writeEdgeUVs(uvs: Float32Array, offset: number, points: number, color: number): void {
 	const slot = ((color >> 12) & 0xf00) | ((color >> 8) & 0xf0) | ((color >> 4) & 0xf);
 	const x = slot % ATLAS_COLUMNS * PROFILE.length;
 	const y = (Math.floor(slot / ATLAS_COLUMNS) + 0.5) / ATLAS_ROWS;
 	const left = (x + 0.5) / ATLAS_WIDTH;
 	const right = (x + PROFILE.length - 0.5) / ATLAS_WIDTH;
-	for (let end = offset + segments * 8; offset < end; offset += 8) {
-		uvs[offset] = uvs[offset + 4] = left;
-		uvs[offset + 2] = uvs[offset + 6] = right;
-		uvs[offset + 1] = uvs[offset + 3] = uvs[offset + 5] = uvs[offset + 7] = y;
+	for (let end = offset + points * 4; offset < end; offset += 4) {
+		uvs[offset] = left;
+		uvs[offset + 2] = right;
+		uvs[offset + 1] = uvs[offset + 3] = y;
 	}
 }
 

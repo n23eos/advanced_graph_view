@@ -105,3 +105,11 @@
 ### Release candidate 0.12.0-beta.4 (2026-11-21)
 
 Lint, typecheck, 1108 tests and the production build passed. Raincoat loaded the release candidate on a 6233-node graph. Hover markers cleared on pointer exit, and both 3D and 2D showed labels, active links and a nonempty PNG export. The 2D check zoomed to a neighborhood before picking a note. Existing large-graph frame-time limits remain open.
+
+### Производительность 3D на 5000 узлах, 2026-11-21
+
+Завершён первый этап: профиль отдельного worker и браузерный прогон до и после правок, проверка зума и наведения в Raincoat. Локальная сборка установлена для сравнения. Результаты и границы замеров записаны в verification.md. Следующий шаг: сравнить ощущения при зуме на устройстве владельца; для повторяющейся просадки снять профиль именно этого жеста.
+
+### Stable release 0.12.0
+
+Release from the tested performance build with English release notes covering all user-facing changes since 0.10.1. Verify CI, the stable GitHub release flag, and the three downloadable assets against the local production build.

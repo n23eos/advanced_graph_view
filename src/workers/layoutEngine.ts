@@ -189,6 +189,7 @@ export function createLayoutEngine(
 ): LayoutEngine {
 	let simulation: Simulation3D<SimNode> | null = null;
 	let nodes: SimNode[] = [];
+	let layoutDimensions: 2 | 3 = 2;
 	let edgePairs: Uint32Array = new Uint32Array();
 	let draggedNodeId: number | null = null;
 	let dragNeighbourIds: number[] = [];
@@ -198,6 +199,7 @@ export function createLayoutEngine(
 	let pendingDragX = 0;
 	let pendingDragY = 0;
 	let pendingDragZ = 0;
+	let preserveInteractiveAccuracy = false;
 	let params: PhysicsParams = {
 		repel: -CHARGE_STRENGTH,
 		linkDistance: LINK_DISTANCE,
@@ -358,13 +360,19 @@ export function createLayoutEngine(
 		// Repulsion accuracy tracks how hot the layout is: cheap while nodes are
 		// still flying, exact by the time they come to rest.
 		(simulation.force("charge") as ReturnType<typeof forceManyBody>)
-			.theta(repulsionTheta(simulation.alpha()));
+			.theta(repulsionTheta(
+				simulation.alpha(),
+				nodes.length,
+				layoutDimensions,
+				preserveInteractiveAccuracy
+			));
 		simulation.tick();
 		applyDragFollow();
 		const positions = snapshotPositions();
 		post({ type: "tick", positions, alpha: simulation.alpha() }, [positions.buffer]);
 		if (simulation.alpha() < ALPHA_MIN) {
 			running = false;
+			preserveInteractiveAccuracy = false;
 			stopTimer();
 			const finalPositions = snapshotPositions();
 			post({ type: "end", positions: finalPositions }, [finalPositions.buffer]);
@@ -374,8 +382,10 @@ export function createLayoutEngine(
 	const init = (message: InitMessage) => {
 		stopTimer();
 		clearDragFollow();
+		preserveInteractiveAccuracy = false;
 		edgePairs = message.edges;
 		const dimensions = message.dimensions ?? 2;
+		layoutDimensions = dimensions;
 
 		// No carried-over seed? Scatter nodes into a cloud rather than leaving
 		// them position-less: d3-force would otherwise seed a phyllotaxis
@@ -565,7 +575,10 @@ export function createLayoutEngine(
 						if (node.z !== undefined) node.fz = node.z;
 					}
 					if (physicsDisabled || !simulation) break;
-					if (node) startDragFollow(message.id, node);
+					if (node) {
+						startDragFollow(message.id, node);
+						preserveInteractiveAccuracy = true;
+					}
 					// Keep the real sim running: pin the node and add a little warmth.
 					// Link and spring parameters remain exactly at their resting values.
 					simulation.alphaTarget(DRAG_ALPHA_TARGET);

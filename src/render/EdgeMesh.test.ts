@@ -28,7 +28,7 @@ function expectRenderedCenterline(mesh: EdgeMesh, edgeIndex: number): void {
 	const vertices = positionBuffer(mesh);
 	const segmentCount = view.pointCount - 1;
 	for (let segment = 0; segment < segmentCount; segment++) {
-		const vertex = (edgeIndex * segmentCount + segment) * 8;
+		const vertex = (edgeIndex * view.pointCount + segment) * 4;
 		expect((vertices[vertex] + vertices[vertex + 2]) / 2).toBeCloseTo(points[segment * 2]);
 		expect((vertices[vertex + 1] + vertices[vertex + 3]) / 2).toBeCloseTo(points[segment * 2 + 1]);
 		expect((vertices[vertex + 4] + vertices[vertex + 6]) / 2).toBeCloseTo(points[segment * 2 + 2]);
@@ -70,7 +70,7 @@ describe("EdgeMesh paths", () => {
 		const view = createEdgePathView();
 		expect(mesh.findEdgePathByKeys("a.md", "b.md", view)).toBe(true);
 		const points = copyPath(view);
-		expect(positionBuffer(mesh)).toHaveLength(segments * 8);
+		expect(positionBuffer(mesh)).toHaveLength((segments + 1) * 4);
 		expect(view.pointCount).toBe(segments + 1);
 		expect(points).toHaveLength((segments + 1) * 2);
 		expect(points[0]).toBeCloseTo(0);
@@ -79,6 +79,28 @@ describe("EdgeMesh paths", () => {
 		expect(points.at(-1)).toBeCloseTo(0);
 		expect(Math.max(...points.filter((_, index) => index % 2 === 1))).toBeGreaterThan(0);
 		expectRenderedCenterline(mesh, 0);
+	});
+
+	test("keeps triangle indices inside each curve when adjacent segments share vertices", () => {
+		const mesh = new EdgeMesh(new Uint32Array([0, 1, 1, 2]), 0xffffff, 1, {
+			curvature: 0.2, segments: 3,
+		});
+		const indices = Array.from(mesh.mesh.geometry.indexBuffer.data as Uint32Array);
+		for (let edge = 0; edge < 2; edge++) {
+			for (let segment = 0; segment < 3; segment++) {
+				const v = edge * 8 + segment * 2;
+				const offset = (edge * 3 + segment) * 6;
+				expect(indices.slice(offset, offset + 6)).toEqual([v, v + 1, v + 2, v + 2, v + 1, v + 3]);
+			}
+		}
+	});
+
+	test("handles a spatial graph containing only isolated nodes", () => {
+		const mesh = new EdgeMesh(new Uint32Array(), 0xffffff, 1, { curvature: 0.2 });
+		mesh.updatePositions(new Float32Array(2), new Float32Array([1]), {
+			positions3d: new Float32Array(3), projector: new Camera3D(),
+		});
+		expect(positionBuffer(mesh)).toHaveLength(0);
 	});
 
 	test("separates reciprocal links and preserves paths across numeric id changes", () => {
@@ -200,7 +222,7 @@ describe("EdgeMesh paths", () => {
 			projector,
 		});
 
-		expect(calls).toBe(3);
+		expect(calls).toBe(2);
 		expect(largestPointCount).toBe(256 * 7);
 	});
 
@@ -226,7 +248,7 @@ describe("EdgeMesh paths", () => {
 			}
 
 			expect(mesh.getEdgePath(0, createEdgePathView())).toBe(false);
-			expect(Array.from(positionBuffer(mesh))).toEqual(new Array(48).fill(0));
+			expect(Array.from(positionBuffer(mesh))).toEqual(new Array(28).fill(0));
 		}
 	);
 });

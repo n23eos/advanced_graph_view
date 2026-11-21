@@ -28,8 +28,24 @@ const HOT_THETA = 1.2;
 const WARM_ALPHA = 0.05;
 const WARM_THETA = 0.9;
 
-export function repulsionTheta(alpha: number): number {
-	if (alpha > HOT_ALPHA) return HOT_THETA;
-	if (alpha > WARM_ALPHA) return WARM_THETA;
+/** Octree traversal dominates large 3D ticks. Use a coarser approximation
+ * while those layouts are moving quickly, then return to the tuned value for
+ * their final cooling steps so the resting force remains unchanged. */
+const LARGE_3D_NODE_COUNT = 5_000;
+const LARGE_3D_HOT_THETA = 1.6;
+const LARGE_3D_WARM_THETA = 1.2;
+const LARGE_3D_COOL_ALPHA = 0.02;
+const LARGE_3D_COOL_THETA = 0.9;
+
+export function repulsionTheta(
+	alpha: number,
+	nodeCount = 0,
+	dimensions: 2 | 3 = 2,
+	interactive = false
+): number {
+	const large3D = !interactive && dimensions === 3 && nodeCount >= LARGE_3D_NODE_COUNT;
+	if (alpha > HOT_ALPHA) return large3D ? LARGE_3D_HOT_THETA : HOT_THETA;
+	if (alpha > WARM_ALPHA) return large3D ? LARGE_3D_WARM_THETA : WARM_THETA;
+	if (large3D && alpha > LARGE_3D_COOL_ALPHA) return LARGE_3D_COOL_THETA;
 	return SETTLED_THETA;
 }

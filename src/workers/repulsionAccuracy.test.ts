@@ -32,4 +32,20 @@ describe("repulsionTheta", () => {
 			expect(theta).toBeLessThanOrEqual(1.2);
 		}
 	});
+
+	test("uses coarser hot repulsion only for large 3D layouts", () => {
+		const baseline = repulsionTheta(1);
+		expect(repulsionTheta(1, 5_000, 3)).toBeGreaterThan(baseline);
+		expect(repulsionTheta(1, 4_999, 3)).toBe(baseline);
+		expect(repulsionTheta(1, 5_000, 2)).toBe(baseline);
+	});
+
+	test("large 3D layouts return to the tuned accuracy before stopping", () => {
+		expect(repulsionTheta(0.01, 5_000, 3)).toBe(SETTLED_THETA);
+		expect(repulsionTheta(0, 5_000, 3)).toBe(SETTLED_THETA);
+	});
+
+	test("dragging keeps the existing repulsion accuracy", () => {
+		expect(repulsionTheta(0.3, 5_000, 3, true)).toBe(repulsionTheta(0.3));
+	});
 });
